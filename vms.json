@@ -10,5 +10,11 @@
     "user": "serveradmin",
     "workspace": "/home/serveradmin/vue-dev",
     "agent_runner": "/home/serveradmin/.local/bin/agent-runner"
+  },
+  "qa": {
+    "ip": "192.168.50.63",
+    "user": "serveradmin",
+    "workspace": "/home/serveradmin/qa-dev",
+    "agent_runner": "/home/serveradmin/.local/bin/agent-runner"
   }
 }

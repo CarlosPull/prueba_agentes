@@ -30,9 +30,11 @@ Para realizar la orquestación, el sistema dispone de 4 herramientas especializa
 | Herramienta | Ruta | Función |
 | :--- | :--- | :--- |
 | **Diagnóstico SSH** | `tools/probar_vms.sh` | Comprueba conectividad SSH con todas las VMs configuradas en `vms.json`. |
+| **Configurador SSH** | `tools/configurar_ssh_vm.sh user@ip` | Copia automáticamente la clave SSH de tu Mac a una nueva VM sin contraseña. |
 | **Inicializador** | `tools/preparar_proyecto.sh` | Crea la carpeta `proyectos/<slug>/` y guarda `SOLICITUD.md`. |
 | **Despachador VM** | `tools/despachar_vm.sh <rol> <dir> <tarea>` | Prepara el prompt con `skills/<rol>/SKILL.md` y lanza `agent-runner` por SSH. |
 | **Compilador de Reportes** | `tools/generar_reporte.sh <dir> <tarea>` | Recopila los logs de salida y genera `AGENT_RUNNER.md`. |
+
 
 ---
 

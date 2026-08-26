@@ -8,10 +8,12 @@ Orquestador local distribuido y ultraliviano (100% modular mediante herramientas
 
 ```bash
 ./tools/probar_vms.sh                          # diagnosticar SSH a VMs
+./tools/configurar_ssh_vm.sh user@ip           # automatizar llave SSH hacia una nueva VM
 ./tools/preparar_proyecto.sh "objetivo"         # inicializar carpeta del proyecto
 ./tools/despachar_vm.sh <rol> <dir> "objetivo"  # despachar a una VM por SSH
 ./tools/generar_reporte.sh <dir> "objetivo"     # consolidar reporte final
 ```
+
 
 ## Estructura clave
 

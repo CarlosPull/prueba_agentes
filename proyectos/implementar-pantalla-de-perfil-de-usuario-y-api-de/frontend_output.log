@@ -1,0 +1,8 @@
+run_id: 20260826T191949Z-b4011953
+manifest: /home/serveradmin/.local/state/agent-runner/runs/20260826T191949Z-b4011953/manifest.json
+[0m
+> build · big-pickle
+[0m
+[0m→ [0mSkill "customize-opencode"
+[0m• [0mExplore codebase structure[90m Explore Agent[0m
+[0m✓ [0mExplore codebase structure[90m Explore Agent[0m
