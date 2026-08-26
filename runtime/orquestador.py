@@ -12,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 import urllib.error
@@ -27,11 +28,136 @@ AGENTS_DIR = ROOT / "agentes"
 PROJECTS_DIR = ROOT / "proyectos"
 ORCHESTRATOR_FILE = ROOT / "orquestador" / "ORQUESTADOR.md"
 CONFIG_FILE = ROOT / ".orquestador" / "config.json"
+AGENT_RUNNER_ROOT = Path(
+    os.getenv("AGENT_RUNNER_ROOT", "/Users/carlos/Documents/GitHub/agent-runner")
+).expanduser()
+DEV_REPOSITORIES = {
+    "backend": Path(
+        os.getenv("ORQUESTADOR_BACKEND_REPO", "/Users/carlos/Documents/GitHub/laravel-dev")
+    ).expanduser(),
+    "frontend": Path(
+        os.getenv("ORQUESTADOR_FRONTEND_REPO", "/Users/carlos/Documents/GitHub/vue-dev")
+    ).expanduser(),
+}
+DEV_REPOSITORIES_VM = {
+    "backend": {
+        "host": os.getenv("ORQUESTADOR_VM_BACKEND_IP", "192.168.50.193"),
+        "user": os.getenv("ORQUESTADOR_VM_USER", "serveradmin"),
+        "workspace": Path(os.getenv("ORQUESTADOR_VM_BACKEND_REPO", "/home/serveradmin/laravel-dev")),
+        "agent_runner": os.getenv("ORQUESTADOR_VM_AGENT_RUNNER_BIN", "/home/serveradmin/.local/bin/agent-runner"),
+    },
+    "frontend": {
+        "host": os.getenv("ORQUESTADOR_VM_FRONTEND_IP", "192.168.50.40"),
+        "user": os.getenv("ORQUESTADOR_VM_USER", "serveradmin"),
+        "workspace": Path(os.getenv("ORQUESTADOR_VM_FRONTEND_REPO", "/home/serveradmin/vue-dev")),
+        "agent_runner": os.getenv("ORQUESTADOR_VM_AGENT_RUNNER_BIN", "/home/serveradmin/.local/bin/agent-runner"),
+    },
+}
 VALID_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 CODEX_CANDIDATES = (
     Path("/Applications/ChatGPT.app/Contents/Resources/codex"),
     Path("/Applications/Codex.app/Contents/Resources/codex"),
 )
+PROMPT_GATE_MODE = "preview"
+PROMPT_GATE_PROJECT: Optional[Path] = None
+PROMPT_GATE_COUNTER = 0
+PROMPT_GATE_LOCK = threading.Lock()
+
+
+class PromptNotApproved(Exception):
+    """La llamada se detuvo antes de contactar al proveedor de IA."""
+
+
+def display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def configure_prompt_gate(mode: str, project: Optional[Path] = None) -> None:
+    global PROMPT_GATE_MODE, PROMPT_GATE_PROJECT, PROMPT_GATE_COUNTER
+    if mode not in {"preview", "confirm"}:
+        raise ValueError("El modo de prompts debe ser 'preview' o 'confirm'.")
+    PROMPT_GATE_MODE = mode
+    PROMPT_GATE_PROJECT = project
+    PROMPT_GATE_COUNTER = 0
+    if project:
+        prompts_dir = project / "PROMPTS"
+        existing_numbers = [
+            int(match.group(1))
+            for path in prompts_dir.glob("*.md")
+            if (match := re.match(r"^(\d+)-", path.name))
+        ]
+        PROMPT_GATE_COUNTER = max(existing_numbers, default=0)
+
+
+def review_prompt(
+    prompt: str,
+    purpose: str,
+    sandbox: str,
+    cwd: Optional[Path],
+) -> None:
+    global PROMPT_GATE_COUNTER
+    with PROMPT_GATE_LOCK:
+        PROMPT_GATE_COUNTER += 1
+        number = PROMPT_GATE_COUNTER
+        prompt_path = None
+        if PROMPT_GATE_PROJECT:
+            prompts_dir = PROMPT_GATE_PROJECT / "PROMPTS"
+            prompts_dir.mkdir(parents=True, exist_ok=True)
+            prompt_path = prompts_dir / f"{number:03d}-{slugify(purpose)}.md"
+            content = (
+                f"# Prompt {number}: {purpose}\n\n"
+                f"- Proveedor: `{os.getenv('ORQUESTADOR_PROVIDER', 'codex')}`\n"
+                f"- Sandbox: `{sandbox}`\n"
+                f"- Directorio: `{cwd or ROOT}`\n"
+                f"- Estado: `pendiente-de-aprobacion`\n\n"
+                "## Contenido exacto enviado por el orquestador\n\n"
+                "```text\n"
+                f"{prompt}\n"
+                "```\n"
+            )
+            prompt_path.write_text(content, encoding="utf-8")
+
+        def mark_status(status: str) -> None:
+            if not prompt_path:
+                return
+            source = prompt_path.read_text(encoding="utf-8")
+            source = re.sub(
+                r"- Estado: `[^`]+`",
+                f"- Estado: `{status}`",
+                source,
+                count=1,
+            )
+            prompt_path.write_text(source, encoding="utf-8")
+
+        print("\n" + "=" * 72)
+        print(f"PROMPT {number} — {purpose}")
+        print(f"Proveedor: {os.getenv('ORQUESTADOR_PROVIDER', 'codex')}")
+        print(f"Sandbox: {sandbox}")
+        print(f"Directorio: {cwd or ROOT}")
+        if prompt_path:
+            print(f"Guardado en: {display_path(prompt_path)}")
+        print("-" * 72)
+        print(prompt)
+        print("=" * 72)
+
+        if PROMPT_GATE_MODE == "preview":
+            mark_status("previsualizado-no-enviado")
+            raise PromptNotApproved(
+                "Modo previsualización: el prompt fue mostrado y NO se envió a la IA."
+            )
+        if not sys.stdin.isatty():
+            mark_status("bloqueado-sin-terminal-interactiva")
+            raise PromptNotApproved(
+                "No hay una terminal interactiva para aprobar el envío; el prompt NO se envió."
+            )
+        answer = input("¿Enviar exactamente este prompt a la IA? [s/N]: ").strip().lower()
+        if answer not in {"s", "si", "sí", "y", "yes"}:
+            mark_status("rechazado-no-enviado")
+            raise PromptNotApproved("Envío rechazado; el prompt NO se envió a la IA.")
+        mark_status("aprobado-para-envio")
 
 
 def load_config() -> dict:
@@ -57,14 +183,36 @@ def slugify(value: str) -> str:
     return (slug[:60].rstrip("-") or "proyecto")
 
 
-def create_project(objective: str, requested_name: Optional[str] = None) -> Path:
+def create_project(
+    objective: str,
+    requested_name: Optional[str] = None,
+    allow_preview_resume: bool = False,
+) -> Path:
     PROJECTS_DIR.mkdir(exist_ok=True)
     if requested_name:
         validate_name(requested_name, "proyecto")
         path = PROJECTS_DIR / requested_name
         if path.exists():
+            request_file = path / "SOLICITUD.md"
+            expected_request = f"# Solicitud original\n\n{objective}\n"
+            has_generated_output = any(
+                candidate.exists()
+                for candidate in (path / "REQUISITOS.md", path / "RESULTADOS.md")
+            ) or any(
+                candidate.is_file()
+                for candidate in (path / "codigo").rglob("*")
+            )
+            can_resume = (
+                allow_preview_resume
+                and request_file.is_file()
+                and request_file.read_text(encoding="utf-8") == expected_request
+                and not has_generated_output
+            )
+            if can_resume:
+                return path
             raise SystemExit(
-                f"El proyecto {requested_name!r} ya existe. Usa otro nombre para evitar sobrescribirlo."
+                f"El proyecto {requested_name!r} ya existe y no es una previsualización "
+                "vacía del mismo objetivo. Usa otro nombre para evitar sobrescribirlo."
             )
     else:
         base = slugify(objective)
@@ -75,6 +223,9 @@ def create_project(objective: str, requested_name: Optional[str] = None) -> Path
             suffix += 1
     (path / "codigo" / "backend").mkdir(parents=True)
     (path / "codigo" / "frontend").mkdir(parents=True)
+    (path / "SOLICITUD.md").write_text(
+        f"# Solicitud original\n\n{objective}\n", encoding="utf-8"
+    )
     return path
 
 
@@ -135,6 +286,30 @@ def save_results(project: Path, results: list[dict]) -> Path:
         for step in result["steps"]:
             lines.extend([f"### {step['subagent']}", "", step["result"], ""])
     path = project / "RESULTADOS.md"
+    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return path
+
+
+def save_agent_runner_results(project: Path, results: list[dict]) -> Path:
+    lines = ["# Ejecución de Agent Runner", ""]
+    for result in results:
+        role = result["role"]
+        lines.extend(
+            [
+                f"## {role}",
+                "",
+                f"- Estado: `{result['status']}`",
+                f"- Workspace: `{result.get('workspace', 'no-aplica')}`",
+            ]
+        )
+        if result.get("requirements"):
+            lines.append(f"- Requisitos: `{', '.join(result['requirements'])}`")
+        if result.get("command"):
+            lines.extend(["", "```text", result["command"], "```"])
+        if result.get("error"):
+            lines.extend(["", result["error"]])
+        lines.append("")
+    path = project / "AGENT_RUNNER.md"
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     return path
 
@@ -548,8 +723,12 @@ def call_openai_api(
 
 
 def call_model(
-    prompt: str, sandbox: str = "read-only", cwd: Optional[Path] = None
+    prompt: str,
+    sandbox: str = "read-only",
+    cwd: Optional[Path] = None,
+    purpose: str = "solicitud-modelo",
 ) -> str:
+    review_prompt(prompt, purpose=purpose, sandbox=sandbox, cwd=cwd)
     provider = os.getenv("ORQUESTADOR_PROVIDER", "codex").lower()
     if provider == "codex":
         return call_codex(prompt, sandbox=sandbox, cwd=cwd)
@@ -596,10 +775,42 @@ def logout() -> None:
     print("Sesión de ChatGPT cerrada.")
 
 
-def test_connection() -> None:
+def test_connection(prompt_mode: str = "preview") -> None:
+    configure_prompt_gate(prompt_mode)
     result = call_model("Responde únicamente con las palabras: conexión correcta")
     provider = os.getenv("ORQUESTADOR_PROVIDER", "codex")
     print(f"Proveedor {provider!r} conectado. Respuesta del modelo: {result}")
+
+
+def test_vms() -> None:
+    print("Comprobando conectividad SSH, repositorios y Agent Runner en VMs distribuidas...")
+    for role, cfg in DEV_REPOSITORIES_VM.items():
+        ip = cfg["host"]
+        user = cfg["user"]
+        repo = str(cfg["workspace"])
+        runner = cfg["agent_runner"]
+        print(f"\n--- Probando ROL: {role.upper()} ({user}@{ip}) ---")
+        
+        ssh_cmd = ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", f"{user}@{ip}", "echo OK"]
+        res = subprocess.run(ssh_cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            print(f"❌ Error SSH a {user}@{ip}: {res.stderr.strip() or 'Sin respuesta'}")
+            continue
+        print(f"✓ Conexión SSH exitosa a {user}@{ip}")
+
+        repo_cmd = ["ssh", f"{user}@{ip}", f"test -d {repo} && echo OK"]
+        res = subprocess.run(repo_cmd, capture_output=True, text=True)
+        if res.returncode == 0 and "OK" in res.stdout:
+            print(f"✓ Repositorio encontrado: {repo}")
+        else:
+            print(f"❌ No se encontró el repositorio: {repo}")
+
+        runner_cmd = ["ssh", f"{user}@{ip}", f"export PATH=$PATH:/home/serveradmin/.nvm/versions/node/v24.19.0/bin:/home/serveradmin/.local/bin; {runner} doctor"]
+        res = subprocess.run(runner_cmd, capture_output=True, text=True)
+        if "supported" in res.stdout or res.returncode == 0:
+            print(f"✓ Agent Runner instalado en VM: {runner}")
+        else:
+            print(f"❌ Agent Runner no responde en VM: {runner}")
 
 
 def parse_json_object(text: str) -> dict:
@@ -682,7 +893,24 @@ def normalize_requirements_plan(raw: dict, objective: str, agents: dict[str, Age
     }
 
 
-def build_requirements_plan(objective: str) -> dict:
+def workspace_context(workspaces: Optional[dict[str, Path]]) -> str:
+    if not workspaces:
+        return "Se crearán workspaces aislados dentro del proyecto del orquestador."
+    return "\n".join(
+        [
+            "Los requisitos se implementarán sobre dos repositorios existentes:",
+            f"- backend: {workspaces['backend']} (Laravel 13, PHP 8.3)",
+            f"- frontend: {workspaces['frontend']} (Vue 3 + Vite, JavaScript actual)",
+            "No están conectados todavía: define explícitamente el contrato HTTP, URL base, "
+            "autenticación, CORS y manejo de errores compartido.",
+            "No asignes al frontend cambios de Laravel ni al backend cambios de Vue.",
+        ]
+    )
+
+
+def build_requirements_plan(
+    objective: str, workspaces: Optional[dict[str, Path]] = None
+) -> dict:
     agents = discover()
     if not agents:
         raise SystemExit("No hay agentes disponibles para planificar el objetivo.")
@@ -698,6 +926,9 @@ OBJETIVO DEL USUARIO:
 
 AGENTES DISPONIBLES:
 {agent_catalog(agents)}
+
+CONTEXTO DE REPOSITORIOS:
+{workspace_context(workspaces)}
 
 Divide el objetivo en requisitos pequeños, independientes y ejecutables. Clasifica cada requisito principalmente como backend o frontend cuando corresponda. Asigna exactamente un agente existente según su misión y skills. El agente `requisitos` solo analiza y no debe recibir implementación. Diseña los requisitos backend y frontend para que puedan ejecutarse en paralelo, compartiendo contratos explícitos cuando sea necesario.
 
@@ -717,7 +948,13 @@ Devuelve exclusivamente JSON válido con esta forma:
   ]
 }}
 """
-    raw = parse_json_object(call_model(prompt, sandbox="read-only"))
+    raw = parse_json_object(
+        call_model(
+            prompt,
+            sandbox="read-only",
+            purpose="analisis-de-requisitos",
+        )
+    )
     return normalize_requirements_plan(raw, objective, agents)
 
 
@@ -786,7 +1023,12 @@ Todo archivo que generes o modifiques debe permanecer dentro de PROYECTO AISLADO
     subagent_results = []
     subagents = ordered_subagents(agent)
     if not subagents:
-        result = call_model(context, sandbox="workspace-write", cwd=workspace)
+        result = call_model(
+            context,
+            sandbox="workspace-write",
+            cwd=workspace,
+            purpose=f"{requirement['id']}-{agent.name}",
+        )
         subagent_results.append({"subagent": agent.name, "result": result})
     else:
         rolling_context = context
@@ -799,23 +1041,398 @@ SKILLS: {', '.join(subagent.skills)}
 
 Entrega un resultado concreto. No declares pruebas que no ejecutaste.
 """
-            result = call_model(prompt, sandbox="workspace-write", cwd=workspace)
+            result = call_model(
+                prompt,
+                sandbox="workspace-write",
+                cwd=workspace,
+                purpose=f"{requirement['id']}-{agent.name}-{subagent.name}",
+            )
             subagent_results.append({"subagent": subagent.name, "result": result})
             rolling_context += f"\n\nRESULTADO DE {subagent.name}:\n{result}"
     return {"requirement": requirement, "agent": agent.name, "steps": subagent_results}
 
 
+def find_agent_runner() -> Path:
+    configured = os.getenv("AGENT_RUNNER_BIN")
+    candidates = [
+        Path(configured).expanduser() if configured else None,
+        AGENT_RUNNER_ROOT / ".venv" / "bin" / "agent-runner",
+        Path(found) if (found := shutil.which("agent-runner")) else None,
+    ]
+    for candidate in candidates:
+        if candidate and candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
+    raise SystemExit(
+        "No se encontró agent-runner. Configura AGENT_RUNNER_BIN o instala "
+        f"el proyecto ubicado en {AGENT_RUNNER_ROOT}."
+    )
+
+
+def prepare_runner_workspace(
+    project: Path,
+    role: str,
+    workspaces: Optional[dict[str, Path]] = None,
+) -> Path:
+    if workspaces:
+        workspace = workspaces[role].expanduser().resolve()
+        if not workspace.is_dir():
+            raise SystemExit(f"El workspace {role} no existe: {workspace}")
+        if not (workspace / ".git").exists():
+            raise SystemExit(f"El workspace {role} no es un repositorio Git: {workspace}")
+        return workspace
+    workspace = project / "codigo" / role
+    workspace.mkdir(parents=True, exist_ok=True)
+    role_directories = {
+        "backend": ("app", "routes", "database", "tests", "config"),
+        "frontend": ("resources/js", "resources/css", "resources/views"),
+    }
+    for relative in role_directories[role]:
+        (workspace / relative).mkdir(parents=True, exist_ok=True)
+    return workspace
+
+
+def runner_task(role: str, requirements: list[dict]) -> str:
+    items = []
+    for requirement in requirements:
+        criteria = "\n".join(
+            f"  - {criterion}" for criterion in requirement["acceptance_criteria"]
+        ) or "  - Cumplir la descripción del requisito."
+        items.append(
+            f"{requirement['id']} — {requirement['title']}\n"
+            f"{requirement['description']}\n"
+            f"Criterios de aceptación:\n{criteria}"
+        )
+    framework = (
+        "PHP 8 y Laravel, con arquitectura modular"
+        if role == "backend"
+        else "Vue 3 con TypeScript y Composition API"
+    )
+    agent_name = "dev-back" if role == "backend" else "dev-front"
+    agent = get_agent(agent_name)
+    subagent_context = "\n".join(
+        f"- {item.name}: {item.mission}" for item in ordered_subagents(agent)
+    ) or "- No hay subagentes configurados."
+    return (
+        f"Actúa como el agente `{agent.name}`.\n"
+        f"MISIÓN: {agent.mission}\n"
+        f"SKILLS: {', '.join(agent.skills)}\n"
+        f"MEMORIA:\n{memory(agent)}\n"
+        f"SUBAGENTES Y RESPONSABILIDADES:\n{subagent_context}\n\n"
+        f"Implementa exclusivamente los requisitos {role} "
+        f"asignados usando {framework}. Trabaja solo dentro del workspace permitido "
+        "por Agent Runner. Inspecciona primero lo existente, evita sobrescribir trabajo "
+        "ajeno y ejecuta las validaciones disponibles.\n\n"
+        + "\n\n".join(items)
+    )
+
+
+def composed_runner_prompt(requirements_path: Path, task: str) -> str:
+    skill = requirements_path.read_text(encoding="utf-8").strip()
+    return f"<skill>\n{skill}\n</skill>\n\n<task>\n{task}\n</task>"
+
+
+def project_toolchain_read_paths() -> list[Path]:
+    paths: list[Path] = []
+    node_root: Optional[Path] = None
+    for name in ("node", "npm", "npx", "php", "composer"):
+        executable = shutil.which(name)
+        if not executable:
+            continue
+        lexical = Path(executable).expanduser()
+        resolved = lexical.resolve()
+        paths.extend((lexical.parent, resolved.parent))
+        if name == "node":
+            node_root = resolved.parent.parent
+    if node_root and node_root.is_dir():
+        paths.append(node_root)
+    return list(dict.fromkeys(path.resolve() for path in paths if path.is_dir()))
+
+
+def run_agent_runner_vm_role(
+    role: str,
+    requirements: list[dict],
+    requirements_path: Path,
+    project: Path,
+) -> dict:
+    vm_cfg = DEV_REPOSITORIES_VM.get(role)
+    if not vm_cfg:
+        return {
+            "role": role,
+            "status": "error",
+            "error": f"No hay configuración de VM registrada para el rol {role}.",
+        }
+
+    host = vm_cfg["host"]
+    user = vm_cfg["user"]
+    workspace = vm_cfg["workspace"]
+    runner_bin = vm_cfg["agent_runner"]
+
+    task = runner_task(role, requirements)
+    prompt = composed_runner_prompt(requirements_path, task)
+
+    try:
+        review_prompt(
+            prompt,
+            purpose=f"agent-runner-vm-{role}",
+            sandbox=f"ssh:{user}@{host}:{role}",
+            cwd=workspace,
+        )
+    except PromptNotApproved as error:
+        return {
+            "role": role,
+            "status": "no-enviado",
+            "workspace": f"{user}@{host}:{workspace}",
+            "requirements": [item["id"] for item in requirements],
+            "command": f"ssh -A {user}@{host} {runner_bin} start ...",
+            "error": str(error),
+        }
+
+    remote_skill_file = f"/tmp/requirements_{project.name}_{role}.md"
+    scp_cmd = [
+        "scp",
+        "-o",
+        "ConnectTimeout=10",
+        str(requirements_path),
+        f"{user}@{host}:{remote_skill_file}",
+    ]
+    try:
+        subprocess.run(scp_cmd, check=True)
+    except subprocess.CalledProcessError as err:
+        return {
+            "role": role,
+            "status": "error",
+            "workspace": f"{user}@{host}:{workspace}",
+            "requirements": [item["id"] for item in requirements],
+            "error": f"Error transfiriendo REQUISITOS.md a la VM: {err}",
+        }
+
+    env_vars = ""
+    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_BASE_URL"):
+        if value := os.getenv(key):
+            env_vars += f"export {key}={shlex.quote(value)}; "
+
+    remote_path = "export PATH=$PATH:/home/serveradmin/.nvm/versions/node/v24.19.0/bin:/home/serveradmin/.local/bin:/usr/local/bin:/usr/bin:/bin;"
+    agent_type = os.getenv("ORQUESTADOR_VM_AGENT", "opencode")
+    remote_cmd = f"{env_vars} {remote_path} {runner_bin} start --agent {agent_type} --role {role} --workspace {workspace} --backend auto --skill {remote_skill_file} --task {shlex.quote(task)}"
+    command = [
+        "ssh",
+        "-A",
+        "-o",
+        "ConnectTimeout=10",
+        f"{user}@{host}",
+        remote_cmd,
+    ]
+    command_text = shlex.join(command)
+    print(f"\nEjecutando Agent Runner remoto en VM ({role} -> {user}@{host}):\n{command_text}\n")
+    try:
+        completed = subprocess.run(command)
+    except OSError as error:
+        return {
+            "role": role,
+            "status": "error",
+            "workspace": f"{user}@{host}:{workspace}",
+            "requirements": [item["id"] for item in requirements],
+            "command": command_text,
+            "error": str(error),
+        }
+    return {
+        "role": role,
+        "status": "completado" if completed.returncode == 0 else "error",
+        "workspace": f"{user}@{host}:{workspace}",
+        "requirements": [item["id"] for item in requirements],
+        "command": command_text,
+        "error": "" if completed.returncode == 0 else f"Agent Runner remoto en VM terminó con código {completed.returncode}.",
+    }
+
+
+def run_agent_runner_role(
+    role: str,
+    requirements: list[dict],
+    requirements_path: Path,
+    project: Path,
+    workspaces: Optional[dict[str, Path]] = None,
+    use_vms: bool = False,
+) -> dict:
+    if use_vms:
+        return run_agent_runner_vm_role(
+            role, requirements, requirements_path, project
+        )
+    executable = find_agent_runner()
+    workspace = prepare_runner_workspace(project, role, workspaces)
+    task = runner_task(role, requirements)
+    prompt = composed_runner_prompt(requirements_path, task)
+    command = [
+        str(executable),
+        "start",
+        "--agent",
+        "codex",
+        "--role",
+        role,
+        "--workspace",
+        str(workspace),
+        "--backend",
+        "auto",
+        "--skill",
+        str(requirements_path),
+        "--task",
+        task,
+    ]
+    command_text = shlex.join(command)
+    try:
+        review_prompt(
+            prompt,
+            purpose=f"agent-runner-{role}",
+            sandbox=f"agent-runner:{role}/auto",
+            cwd=workspace,
+        )
+    except PromptNotApproved as error:
+        return {
+            "role": role,
+            "status": "no-enviado",
+            "workspace": str(workspace),
+            "requirements": [item["id"] for item in requirements],
+            "command": command_text,
+            "error": str(error),
+        }
+
+    environment = os.environ.copy()
+    codex = find_codex()
+    if codex:
+        environment["PATH"] = os.pathsep.join(
+            [str(codex.parent), environment.get("PATH", "")]
+        )
+    environment["AGENT_RUNNER_RUNS_DIR"] = str(project / "AGENT_RUNNER_RUNS")
+    tool_paths = project_toolchain_read_paths()
+    if tool_paths:
+        environment["AGENT_RUNNER_TOOL_READ_PATHS"] = os.pathsep.join(
+            str(path) for path in tool_paths
+        )
+    print(f"\nEjecutando Agent Runner ({role}):\n{command_text}\n")
+    try:
+        completed = subprocess.run(command, cwd=AGENT_RUNNER_ROOT, env=environment)
+    except OSError as error:
+        return {
+            "role": role,
+            "status": "error",
+            "workspace": str(workspace),
+            "requirements": [item["id"] for item in requirements],
+            "command": command_text,
+            "error": str(error),
+        }
+    return {
+        "role": role,
+        "status": "completado" if completed.returncode == 0 else "error",
+        "workspace": str(workspace),
+        "requirements": [item["id"] for item in requirements],
+        "command": command_text,
+        "error": "" if completed.returncode == 0 else f"Agent Runner terminó con código {completed.returncode}.",
+    }
+
+
+def dispatch_to_agent_runner(
+    requirements_plan: dict,
+    requirements_path: Path,
+    project: Path,
+    workspaces: Optional[dict[str, Path]] = None,
+    use_vms: bool = False,
+) -> list[dict]:
+    grouped = {
+        role: [
+            item
+            for item in requirements_plan["requirements"]
+            if item["category"] == role
+        ]
+        for role in ("backend", "frontend")
+    }
+    assignments = {role: items for role, items in grouped.items() if items}
+    results: list[dict] = []
+    if assignments:
+        print(
+            f"\nDespachando requisitos a Agent Runner en {len(assignments)} "
+            "roles paralelos..."
+        )
+        with ThreadPoolExecutor(max_workers=len(assignments)) as executor:
+            futures = {
+                executor.submit(
+                    run_agent_runner_role,
+                    role,
+                    items,
+                    requirements_path,
+                    project,
+                    workspaces,
+                    use_vms,
+                ): role
+                for role, items in assignments.items()
+            }
+            for future in as_completed(futures):
+                role = futures[future]
+                try:
+                    results.append(future.result())
+                except (Exception, SystemExit) as error:
+                    results.append(
+                        {
+                            "role": role,
+                            "status": "error",
+                            "requirements": [
+                                item["id"] for item in assignments[role]
+                            ],
+                            "error": str(error),
+                        }
+                    )
+    unsupported = [
+        item
+        for item in requirements_plan["requirements"]
+        if item["category"] not in {"backend", "frontend"}
+    ]
+    if unsupported:
+        results.append(
+            {
+                "role": "sin-runner",
+                "status": "omitido",
+                "requirements": [item["id"] for item in unsupported],
+                "error": "Agent Runner solo tiene políticas backend y frontend.",
+            }
+        )
+    return results
+
+
 def orchestrate(
     objective: str,
-    execute_tasks: bool = True,
+    execute_tasks: bool = False,
+    use_agent_runner: bool = False,
+    runner_workspaces: Optional[dict[str, Path]] = None,
+    use_vms: bool = False,
     project_name: Optional[str] = None,
+    prompt_mode: str = "preview",
 ) -> dict:
-    requirements_plan = build_requirements_plan(objective)
-    project = create_project(objective, requested_name=project_name)
+    project = create_project(
+        objective,
+        requested_name=project_name,
+        allow_preview_resume=prompt_mode == "confirm" and project_name is not None,
+    )
+    configure_prompt_gate(prompt_mode, project=project)
+    try:
+        vm_workspaces = {k: v["workspace"] for k, v in DEV_REPOSITORIES_VM.items()} if use_vms else None
+        requirements_plan = build_requirements_plan(objective, runner_workspaces or vm_workspaces)
+    except PromptNotApproved as error:
+        print(f"\n{error}")
+        print(f"Revisión disponible en: {display_path(project / 'PROMPTS')}")
+        return {"project": project, "plan": None, "results": []}
     requirements_path = save_requirements(project, requirements_plan)
     print_requirements_plan(requirements_plan)
-    print(f"\nProyecto creado: {project.relative_to(ROOT)}")
-    print(f"Requisitos guardados: {requirements_path.relative_to(ROOT)}")
+    print(f"\nProyecto creado: {display_path(project)}")
+    print(f"Requisitos guardados: {display_path(requirements_path)}")
+    if use_agent_runner or use_vms:
+        runner_results = dispatch_to_agent_runner(
+            requirements_plan, requirements_path, project, runner_workspaces, use_vms=use_vms
+        )
+        runner_report = save_agent_runner_results(project, runner_results)
+        print(f"\nReporte de Agent Runner: {display_path(runner_report)}")
+        return {
+            "project": project,
+            "plan": requirements_plan,
+            "results": runner_results,
+        }
     if not execute_tasks:
         return {"project": project, "plan": requirements_plan, "results": []}
 
@@ -866,11 +1483,11 @@ def orchestrate(
         for step in result["steps"]:
             print(f"\n#### {step['subagent']}\n{step['result']}")
     results_path = save_results(project, results)
-    print(f"\nResultados guardados: {results_path.relative_to(ROOT)}")
+    print(f"\nResultados guardados: {display_path(results_path)}")
     return {"project": project, "plan": requirements_plan, "results": results}
 
 
-def execute(agent: Agent, task: str) -> None:
+def execute(agent: Agent, task: str, prompt_mode: str = "preview") -> None:
     category = {"dev-back": "backend", "dev-front": "frontend", "qa": "qa"}.get(
         agent.name, "general"
     )
@@ -889,11 +1506,17 @@ def execute(agent: Agent, task: str) -> None:
         "requirements": [requirement],
     }
     project = create_project(task)
+    configure_prompt_gate(prompt_mode, project=project)
     save_requirements(project, requirements_plan)
-    result = run_requirement(agent, requirement, requirements_plan, project)
+    try:
+        result = run_requirement(agent, requirement, requirements_plan, project)
+    except PromptNotApproved as error:
+        print(f"\n{error}")
+        print(f"Revisión disponible en: {display_path(project / 'PROMPTS')}")
+        return
     save_results(project, [result])
     print(f"Ejecución coordinada para {agent.name}: {task}\n")
-    print(f"Proyecto: {project.relative_to(ROOT)}")
+    print(f"Proyecto: {display_path(project)}")
     for step in result["steps"]:
         print(f"\n### {step['subagent']}\n{step['result']}")
 
@@ -909,8 +1532,13 @@ CONSOLE_HELP = """Comandos disponibles:
   /create-agent <nombre>         Crear un agente mediante preguntas
   /create-subagent <agente> <nombre>
                                  Crear un subagente mediante preguntas
-  /requirements <objetivo>       Dividir, categorizar y asignar sin ejecutar
-  /orchestrate <objetivo>        Planificar y ejecutar agentes en paralelo
+  /preview <objetivo>             Mostrar el prompt transformado sin enviarlo
+  /requirements <objetivo>       Aprobar análisis; no ejecutar código
+  /orchestrate <objetivo>        Generar requisitos y despachar a Agent Runner
+  /orchestrate-dev <objetivo>    Trabajar sobre laravel-dev y vue-dev locales
+  /orchestrate-vms <objetivo>    Despachar ejecuciones a VM5 y VM6
+  /probar-vms                    Diagnosticar SSH y Agent Runner en VM5 y VM6
+  /build <objetivo>              Usar los agentes internos heredados
   /plan <agente> <objetivo>      Mostrar el plan de ejecución
   /run <agente> <objetivo>       Ejecutar el flujo de subagentes
   /help                          Mostrar esta ayuda
@@ -992,14 +1620,51 @@ def console() -> None:
                     continue
                 path = create_subagent(arguments[0], arguments[1], mission, prompt_skills())
                 print(f"Subagente creado: {path.relative_to(ROOT)}")
+            elif command == "/preview" and arguments:
+                orchestrate(
+                    " ".join(arguments), execute_tasks=False, prompt_mode="preview"
+                )
             elif command == "/requirements" and arguments:
-                orchestrate(" ".join(arguments), execute_tasks=False)
+                orchestrate(
+                    " ".join(arguments), execute_tasks=False, prompt_mode="confirm"
+                )
             elif command == "/orchestrate" and arguments:
-                orchestrate(" ".join(arguments), execute_tasks=True)
+                orchestrate(
+                    " ".join(arguments),
+                    execute_tasks=False,
+                    use_agent_runner=True,
+                    prompt_mode="confirm",
+                )
+            elif command == "/orchestrate-dev" and arguments:
+                orchestrate(
+                    " ".join(arguments),
+                    execute_tasks=False,
+                    use_agent_runner=True,
+                    runner_workspaces=DEV_REPOSITORIES,
+                    prompt_mode="confirm",
+                )
+            elif command == "/orchestrate-vms" and arguments:
+                orchestrate(
+                    " ".join(arguments),
+                    execute_tasks=False,
+                    use_agent_runner=True,
+                    use_vms=True,
+                    prompt_mode="confirm",
+                )
+            elif command == "/probar-vms":
+                test_vms()
+            elif command == "/build" and arguments:
+                orchestrate(
+                    " ".join(arguments), execute_tasks=True, prompt_mode="confirm"
+                )
             elif command == "/plan" and len(arguments) >= 2:
                 print_plan(plan(get_agent(arguments[0]), " ".join(arguments[1:])))
             elif command == "/run" and len(arguments) >= 2:
-                execute(get_agent(arguments[0]), " ".join(arguments[1:]))
+                execute(
+                    get_agent(arguments[0]),
+                    " ".join(arguments[1:]),
+                    prompt_mode="confirm",
+                )
             else:
                 print("Comando o argumentos inválidos. Escribe /help.")
         except SystemExit as error:
@@ -1016,11 +1681,34 @@ def main() -> int:
         "orquestar", help="Divide requisitos, asigna agentes y ejecuta en paralelo"
     )
     orchestrate_command.add_argument("objective")
-    orchestrate_command.add_argument(
-        "--solo-plan", action="store_true", help="No ejecuta agentes; solo muestra requisitos y asignaciones"
+    execution_mode = orchestrate_command.add_mutually_exclusive_group()
+    execution_mode.add_argument(
+        "--solo-plan",
+        action="store_true",
+        help="Detiene el flujo después de generar REQUISITOS.md; no llama a Agent Runner",
+    )
+    execution_mode.add_argument(
+        "--ejecutar",
+        action="store_true",
+        help="Usa los agentes internos heredados en vez de Agent Runner",
     )
     orchestrate_command.add_argument(
         "--proyecto", help="Nombre de carpeta dentro de proyectos/ (minúsculas y guiones)"
+    )
+    orchestrate_command.add_argument(
+        "--confirmar",
+        action="store_true",
+        help="Muestra cada prompt y solicita aprobación antes de enviarlo",
+    )
+    orchestrate_command.add_argument(
+        "--repos-dev",
+        action="store_true",
+        help="Ejecuta backend en laravel-dev y frontend en vue-dev locales",
+    )
+    orchestrate_command.add_argument(
+        "--vms",
+        action="store_true",
+        help="Despacha ejecuciones a las VMs (VM5: Backend laravel-dev, VM6: Frontend vue-dev)",
     )
 
     auth = commands.add_parser("auth", help="Gestiona la sesión de ChatGPT")
@@ -1056,10 +1744,15 @@ def main() -> int:
     create_subagent_command.add_argument("--mision", required=True)
     create_subagent_command.add_argument("--skill", action="append", default=[])
 
+    commands.add_parser("probar-vms", help="Comprueba SSH, repositorios y Agent Runner en VM5 y VM6")
+
     # Comandos originales conservados para no romper scripts existentes.
     commands.add_parser("listar")
     commands.add_parser("autenticar", help="Inicia o comprueba la sesión de ChatGPT mediante Codex")
-    commands.add_parser("probar-conexion", help="Comprueba credenciales, red y modelo configurado")
+    test_connection_command = commands.add_parser(
+        "probar-conexion", help="Comprueba credenciales, red y modelo configurado"
+    )
+    test_connection_command.add_argument("--confirmar", action="store_true")
     new_agent = commands.add_parser("crear-agente", help="Crea un agente, su memoria y carpeta de subagentes")
     new_agent.add_argument("name")
     new_agent.add_argument("--mision", required=True)
@@ -1071,18 +1764,29 @@ def main() -> int:
     new_subagent.add_argument("--skill", action="append", default=[])
     inspect = commands.add_parser("inspeccionar"); inspect.add_argument("agent")
     make_plan = commands.add_parser("plan"); make_plan.add_argument("agent"); make_plan.add_argument("task")
-    run = commands.add_parser("ejecutar"); run.add_argument("agent"); run.add_argument("task")
+    run = commands.add_parser("ejecutar"); run.add_argument("agent"); run.add_argument("task"); run.add_argument("--confirmar", action="store_true")
     remember = commands.add_parser("recordar"); remember.add_argument("agent"); remember.add_argument("note")
     show_memory = commands.add_parser("memoria"); show_memory.add_argument("agent")
     args = parser.parse_args()
     if args.command == "consola":
         console()
     elif args.command == "orquestar":
+        if (args.repos_dev or args.vms) and args.ejecutar:
+            raise SystemExit(
+                "--repos-dev / --vms usa Agent Runner y no puede combinarse con "
+                "--ejecutar (motor interno heredado)."
+            )
         orchestrate(
             args.objective,
-            execute_tasks=not args.solo_plan,
+            execute_tasks=args.ejecutar,
+            use_agent_runner=not args.solo_plan and not args.ejecutar,
+            runner_workspaces=DEV_REPOSITORIES if args.repos_dev else None,
+            use_vms=args.vms,
             project_name=args.proyecto,
+            prompt_mode="confirm" if args.confirmar else "preview",
         )
+    elif args.command == "probar-vms":
+        test_vms()
     elif args.command == "auth":
         if args.auth_command == "login": authenticate()
         elif args.auth_command == "logout": logout()
@@ -1109,7 +1813,7 @@ def main() -> int:
     elif args.command == "autenticar":
         authenticate()
     elif args.command == "probar-conexion":
-        test_connection()
+        test_connection(prompt_mode="confirm" if args.confirmar else "preview")
     elif args.command == "crear-agente":
         path = create_agent(args.name, args.mision, args.skill)
         print(f"Agente creado: {path.relative_to(ROOT)}")
@@ -1119,7 +1823,12 @@ def main() -> int:
     elif args.command == "inspeccionar":
         agent = get_agent(args.agent); print(f"{agent.name}: {agent.mission}\nSkills: {', '.join(agent.skills)}\nSubagentes: {', '.join(s.name for s in agent.subagents)}")
     elif args.command == "plan": print_plan(plan(get_agent(args.agent), args.task))
-    elif args.command == "ejecutar": execute(get_agent(args.agent), args.task)
+    elif args.command == "ejecutar":
+        execute(
+            get_agent(args.agent),
+            args.task,
+            prompt_mode="confirm" if args.confirmar else "preview",
+        )
     elif args.command == "memoria": print(memory(get_agent(args.agent)))
     elif args.command == "recordar":
         agent = get_agent(args.agent)

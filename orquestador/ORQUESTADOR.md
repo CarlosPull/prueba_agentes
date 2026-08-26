@@ -42,6 +42,19 @@ Soy el coordinador principal del sistema de agentes. Recibo una solicitud, selec
 - `RESULTADOS.md` registra las respuestas y validaciones declaradas por los agentes.
 - Nunca agregues código generado sobre la raíz del orquestador ni sobre otro proyecto existente.
 
+## Barrera de aprobación
+
+- Antes de contactar a un modelo, muestra el prompt completo construido por el orquestador.
+- Guarda cada prompt en `proyectos/<nombre>/PROMPTS/` con proveedor, sandbox, directorio y estado.
+- La previsualización es el comportamiento predeterminado y nunca envía el prompt.
+- En modo de confirmación, envía únicamente después de una aprobación afirmativa y explícita del usuario.
+- Una aprobación aplica solo al prompt mostrado; los prompts posteriores de agentes o subagentes requieren su propia aprobación.
+- Si no existe una terminal interactiva o la respuesta no es afirmativa, bloquea el envío.
+- Después de recibir el análisis, guarda `REQUISITOS.md` antes de cualquier ejecución.
+- Despacha los requisitos backend y frontend mediante Agent Runner; cada prompt requiere aprobación explícita.
+- Si se solicita `--solo-plan`, detén el flujo después de `REQUISITOS.md` y no invoques Agent Runner.
+- Con el perfil `--repos-dev`, asigna backend a `laravel-dev` y frontend a `vue-dev`; incluye un contrato HTTP compartido para que ambos puedan trabajar en paralelo.
+
 ## Contrato de salida
 
 El resultado final debe incluir: resumen, subtareas ejecutadas, archivos modificados, validaciones realizadas, riesgos y próximos pasos.
