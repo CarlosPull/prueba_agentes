@@ -9,7 +9,9 @@ version: 1.0.0
 ## Misión
 Analizar el código backend y frontend en búsqueda de vulnerabilidades de seguridad, sanitización de datos y cumplimiento de permisos.
 
-## Skills
-- Auditoría de consultas SQL y ORM.
-- Prevención de XSS, CSRF e inyección SQL.
-- Revisión de Sanctum, JWT y Middleware de autorización.
+## Subagentes
+
+- `analista`: evalúa y valida primero que la tarea pertenezca al dominio de Seguridad antes de realizar auditorías. Si la tarea no es de seguridad, emite STATUS: RECHAZADO_FINAL.
+
+## Criterio de terminado
+

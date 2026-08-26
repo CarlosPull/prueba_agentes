@@ -2,53 +2,55 @@
 
 ## Qué es este repo
 
-Orquestador local distribuido y ultraliviano (100% modular mediante herramientas en `tools/`, sin Python ni wrappers bin). Coordina agentes especializados definidos en Markdown dentro de la carpeta `skills/`.
+Orquestador local distribuido (shell scripts puros, sin Python). Coordina agentes especializados definidos en Markdown dentro de `skills/`. Ejecuta `agent-runner` sobre VMs remotas vía SSH.
 
-## Comandos esenciales (Herramientas en `tools/`)
+## Comandos esenciales (`tools/`)
+
+Secuencia obligatoria para ejecutar una tarea:
 
 ```bash
-./tools/probar_vms.sh                          # diagnosticar SSH a VMs
-./tools/configurar_ssh_vm.sh user@ip           # automatizar llave SSH hacia una nueva VM
-./tools/preparar_proyecto.sh "objetivo"         # inicializar carpeta del proyecto
-./tools/despachar_vm.sh <rol> <dir> "objetivo"  # despachar a una VM por SSH
-./tools/generar_reporte.sh <dir> "objetivo"     # consolidar reporte final
+./tools/probar_vms.sh                                # 1. diagnosticar SSH a VMs
+./tools/preparar_proyecto.sh "objetivo"               # 2. crear carpeta proyecto + SOLICITUD.md
+./tools/validar_y_despachar.sh <rol> <dir> "tarea"    # 3. despacho con bloqueo físico de re-despacho
+./tools/generar_reporte.sh <dir> "tarea"              # 4. consolidar reporte en AGENT_RUNNER.md
 ```
 
+Utilidades auxiliares:
+
+```bash
+./tools/configurar_ssh_vm.sh user@ip                  # copiar llave SSH a VM nueva
+./tools/despachar_vm.sh <rol> <dir> "tarea"           # despacho directo (sin lock; usar validar_y_despachar en su lugar)
+```
 
 ## Estructura clave
 
 ```
-skills/                        # Carpeta ÚNICA con TODAS las habilidades y agentes
-├── orquestador/SKILL.md       # Reglas del Orquestador principal
-├── dev-back/SKILL.md          # Especialista Backend Laravel
-├── dev-front/SKILL.md         # Especialista Frontend Vue 3
-├── dev-security/SKILL.md      # Auditoría de Seguridad
-└── qa/SKILL.md                # Aseguramiento de Calidad
+skills/                        # Agentes y sus instrucciones
+├── orquestador/SKILL.md       # Coordinador principal
+├── requisitos/SKILL.md        # Análisis y categorización de requisitos
+├── dev-back/SKILL.md          # Backend Laravel
+├── dev-front/SKILL.md         # Frontend Vue 3
+├── dev-security/SKILL.md      # Auditoría de seguridad
+└── qa/SKILL.md                # QA / pruebas automatizadas
 
-opencode.json                  # Configuración nativa de OpenCode y permisos
-vms.json                       # IPs, usuarios, workspaces y rutas del agent-runner
-proyectos/<nombre>/            # salida: SOLICITUD.md, AGENT_RUNNER.md, logs
-tools/                         # directorio de las 4 herramientas modulares ejecutables
+opencode.json                  # Permisos de directorios externos para OpenCode
+vms.json                       # IPs, usuarios, workspaces y rutas de agent-runner
+proyectos/<slug>/              # salida: SOLICITUD.md, AGENT_RUNNER.md, *_output.log
+tools/                         # 6 herramientas bash ejecutables
 ```
-
-## Agentes disponibles en `skills/`
-
-| Agente / Skill | Rol | Tecnologías |
-| :--- | :--- | :--- |
-| `orquestador` | Coordinador principal del flujo de trabajo | Bash, SSH, tools/ |
-| `dev-back` | Backend con subagentes | PHP 8, Laravel 13 |
-| `dev-front` | Frontend con subagentes | Vue 3, TypeScript, Vite |
-| `dev-security` | Auditoría de vulnerabilidades y seguridad | OWASP, Sanctum, SQL |
-| `qa` | Genera tests sobre código generado | PHPUnit, Vitest |
 
 ## Convenciones importantes
 
 - **Todo el contenido es en español** (archivos Markdown, outputs, mensajes de CLI).
-- **Todos los agentes se definen dentro de `skills/<nombre>/SKILL.md`** con encabezado YAML Frontmatter.
-- `tools/despachar_vm.sh` inyecta automáticamente la `OPENAI_API_KEY` o `ANTHROPIC_API_KEY` en la sesión SSH remota.
+- **Agentes se definen en `skills/<nombre>/SKILL.md`** con YAML Frontmatter (`name`, `description`, `version`, `tools`).
+- Cada agente tiene un subagente `analista` que valida dominio antes de ejecutar; si emite `RECHAZADO_FINAL`, el flujo se detiene.
+- `despachar_vm.sh` inyecta `OPENAI_API_KEY` y `ANTHROPIC_API_KEY` en la sesión SSH remota si están disponibles en el entorno local.
+- `validar_y_despachar.sh` crea un `.ejecucion_lock` en la carpeta del proyecto; un segundo despacho al mismo proyecto falla con error explícito.
+- La configuración de VMs se lee de `vms.json` (roles: `backend`, `frontend`, `qa`).
+- `opencode.json` permite acceso a directorios externos: `/home/serveradmin/laravel-dev/**`, `/home/serveradmin/vue-dev/**`, `~/.local/state/agent-runner/runs/**`.
 
 ## Externalidades
 
-- **Agent Runner** se ubica en `/home/serveradmin/.local/bin/agent-runner` dentro de las VMs.
-- **VMs de desarrollo**: configuradas dinámicamente en `vms.json`.
-- **Repos de trabajo**: `laravel-dev` y `vue-dev` en las VMs.
+- **Agent Runner** se ejecuta en VMs vía SSH; la ruta por defecto es `/home/serveradmin/.local/bin/agent-runner`.
+- **VMs de desarrollo**: backend en `192.168.50.193`, frontend en `192.168.50.40`, QA en `192.168.50.63` (todas como `serveradmin`).
+- **Repos de trabajo en VMs**: `laravel-dev` y `vue-dev`.

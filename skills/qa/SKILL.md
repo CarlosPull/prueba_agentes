@@ -9,7 +9,9 @@ version: 1.0.0
 ## Misión
 Diseñar y ejecutar pruebas automatizadas (unitarias, integración y API) sobre el código generado por los desarrolladores backend y frontend.
 
-## Skills
-- PHPUnit / Pest en Laravel.
-- Vitest en Vue 3.
-- Cobertura de código y aserciones de API REST.
+## Subagentes
+
+- `analista`: evalúa y valida primero que la tarea pertenezca al dominio QA/Pruebas antes de ejecutar cualquier aserción. Si la tarea no es de QA, emite STATUS: RECHAZADO_FINAL.
+
+## Criterio de terminado
+
