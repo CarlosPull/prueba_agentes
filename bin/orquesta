@@ -1,3 +1,4 @@
 #!/bin/sh
+# Wrapper ejecutable directo hacia orquestar_vms.sh (100% libre de Python)
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec python3 "$SCRIPT_DIR/../runtime/orquestador.py" "$@"
+exec "$SCRIPT_DIR/orquestar_vms.sh" "$@"

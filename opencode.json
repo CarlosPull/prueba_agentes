@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "dev-back",
+  "permission": {
+    "external_directory": {
+      "/home/serveradmin/laravel-dev/**": "allow",
+      "/home/serveradmin/vue-dev/**": "allow",
+      "~/.local/state/agent-runner/runs/**": "allow"
+    }
+  }
+}
