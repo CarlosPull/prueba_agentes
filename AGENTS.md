@@ -16,26 +16,33 @@ Orquestador local distribuido y ultraliviano (100% modular mediante herramientas
 ## Estructura clave
 
 ```
-skills/<nombre>/SKILL.md      # reglas, misión y habilidades del agente (ej: dev-back, dev-front, qa)
-opencode.json                 # configuración nativa de OpenCode y permisos
-vms.json                      # IPs, usuarios, workspaces y rutas del agent-runner
-orquestador/ORQUESTADOR.md    # flujo de orquestación e instrucciones de invocación de herramientas
-proyectos/<nombre>/           # salida: SOLICITUD.md, AGENT_RUNNER.md, logs
-tools/                        # directorio de las 4 herramientas modulares ejecutables
+skills/                        # Carpeta ÚNICA con TODAS las habilidades y agentes
+├── orquestador/SKILL.md       # Reglas del Orquestador principal
+├── dev-back/SKILL.md          # Especialista Backend Laravel
+├── dev-front/SKILL.md         # Especialista Frontend Vue 3
+├── dev-security/SKILL.md      # Auditoría de Seguridad
+└── qa/SKILL.md                # Aseguramiento de Calidad
+
+opencode.json                  # Configuración nativa de OpenCode y permisos
+vms.json                       # IPs, usuarios, workspaces y rutas del agent-runner
+proyectos/<nombre>/            # salida: SOLICITUD.md, AGENT_RUNNER.md, logs
+tools/                         # directorio de las 4 herramientas modulares ejecutables
 ```
 
-## Agentes disponibles
+## Agentes disponibles en `skills/`
 
-| Agente | Rol | Tecnologías |
-|--------|-----|-------------|
-| `dev-back` | Backend con subagentes (generador-codigo, qa, documentador) | PHP 8, Laravel |
-| `dev-front` | Frontend con subagente (generador-ui) | Vue 3, TypeScript, Vite |
-| `qa` | Genera tests sobre código generado | Unitarias, integración, APIs |
+| Agente / Skill | Rol | Tecnologías |
+| :--- | :--- | :--- |
+| `orquestador` | Coordinador principal del flujo de trabajo | Bash, SSH, tools/ |
+| `dev-back` | Backend con subagentes | PHP 8, Laravel 13 |
+| `dev-front` | Frontend con subagentes | Vue 3, TypeScript, Vite |
+| `dev-security` | Auditoría de vulnerabilidades y seguridad | OWASP, Sanctum, SQL |
+| `qa` | Genera tests sobre código generado | PHPUnit, Vitest |
 
 ## Convenciones importantes
 
 - **Todo el contenido es en español** (archivos Markdown, outputs, mensajes de CLI).
-- **Los agentes se definen en Markdown** dentro de `skills/<nombre>/SKILL.md`.
+- **Todos los agentes se definen dentro de `skills/<nombre>/SKILL.md`** con encabezado YAML Frontmatter.
 - `tools/despachar_vm.sh` inyecta automáticamente la `OPENAI_API_KEY` o `ANTHROPIC_API_KEY` en la sesión SSH remota.
 
 ## Externalidades

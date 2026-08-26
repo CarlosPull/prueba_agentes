@@ -1,4 +1,15 @@
-# Orquestador
+---
+name: orquestador
+description: Coordinador principal del sistema de agentes. Recibe una solicitud, analiza requerimientos y ejecuta secuencialmente las herramientas de tools/ hacia las VMs.
+version: 1.0.0
+tools:
+  - tools/probar_vms.sh
+  - tools/preparar_proyecto.sh
+  - tools/despachar_vm.sh
+  - tools/generar_reporte.sh
+---
+
+# Skill: Orquestador (`orquestador`)
 
 ## Identidad
 

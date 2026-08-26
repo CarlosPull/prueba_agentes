@@ -58,10 +58,14 @@ LOG_FILE="$PROJECT_DIR/${ROLE}_output.log"
 SSH_OPTS="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
 [ -f "$HOME/.ssh/id_ed25519" ] && SSH_OPTS="$SSH_OPTS -i $HOME/.ssh/id_ed25519"
 
-echo "▶️ Despachando a la VM '$ROLE' ($user@$ip)..." >&2
+echo "▶️ Despachando a la VM '$ROLE' ($user@$ip) vía STDIN..." >&2
+
 ssh $SSH_OPTS "$user@$ip" \
-  "$ENV_EXPORTS $runner_bin start --agent opencode --role $ROLE --workspace $workspace --backend auto --task '$PROMPT_ROLE'" \
-  > "$LOG_FILE" 2>&1
+  "$ENV_EXPORTS $runner_bin start --agent opencode --role $ROLE --workspace $workspace --backend auto --task -" \
+  <<EOF > "$LOG_FILE" 2>&1
+$PROMPT_ROLE
+EOF
+
 
 
 echo "$LOG_FILE"
