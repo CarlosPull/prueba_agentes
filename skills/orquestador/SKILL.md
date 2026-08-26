@@ -67,14 +67,20 @@ graph TD
    - Si el subagente `analista` emite `STATUS: RECHAZADO_FINAL`, la ejecución en esa VM **SE DETIENE DE INMEDIATO**.
    - El Orquestador leerá ese rechazo terminal, concluirá el reporte en `AGENT_RUNNER.md` y **ESTÁ TERMINANTEMENTE PROHIBIDO INVOCAR A CUALQUIER OTRO AGENTE O HERRAMIENTA**.
 
+3. **PROHIBICIÓN ABSOLUTA DE SUGERIR O PREGUNTAR POR RE-DESPACHO**:
+   - Si una tarea enviada a un agente (ej: `dev-front`) viola su dominio (es de backend), el Orquestador **NUNCA DEBE PREGUNTAR AL USUARIO** *"¿Quieres que la despache a dev-back en su lugar?"* ni sugerir comandos alternativos.
+   - El Orquestador responderá únicamente con una declaración directa de rechazo:
+     `"TAREA RECHAZADA: La tarea enviada al rol 'frontend' pertenece exclusivamente al dominio de Backend. No es posible ejecutarla con el agente asignado. Fin de la operación."`
+
 
 ## Reglas de Aislamiento y Seguridad
 
 1. **Aislamiento Estricto por Rol**:
    - `backend` (dev-back): Prohibido crear archivos `.vue`, HTML/CSS, o scaffolds de Vite/Tailwind en Laravel.
    - `frontend` (dev-front): Prohibido crear migraciones SQL, controladores PHP o código Laravel en Vue.
-2. **Rechazo Activo Definitivo**: Si un agente responde `"RECHAZADO_ROL_INCORRECTO"`, el flujo concluye de inmediato. No se modifica ningún archivo en la VM ni se ejecutan herramientas adicionales para otros roles.
+2. **Rechazo Activo Definitivo**: Si un agente o script responde `"RECHAZADO_ROL_INCORRECTO"`, el flujo concluye de inmediato sin preguntas adicionales. No se modifica ningún archivo en la VM ni se ejecutan herramientas para otros roles.
 3. **Persistencia de Habilidades**: Todas las habilidades e instrucciones de roles se leen desde `skills/<rol>/SKILL.md`.
+
 
 
 
