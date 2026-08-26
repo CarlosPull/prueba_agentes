@@ -240,3 +240,35 @@ opencode-ai
 [0m$ [0mls /home/serveradmin/vue-dev/node_modules/ 2>/dev/null | head -20
 (no output)
 [0m
+[0m$ [0mls -la /home/serveradmin/.nvm/versions/node/v24.19.0/lib/node_modules/corepack/ 2>/dev/null; /home/serveradmin/.nvm/versions/node/v24.19.0/bin/node -e "try{require('corepack').enable();console.log('ok')}catch(e){console.log(e.message)}"
+Cannot find module 'corepack'
+Require stack:
+- /home/serveradmin/vue-dev/[eval]
+[0m
+[0m$ [0m/home/serveradmin/.nvm/versions/node/v24.19.0/bin/node -e "
+const https = require('https');
+const fs = require('fs');
+const { execSync } = require('child_process');
+
+// Download npm directly
+const url = 'https://registry.npmjs.org/npm/-/npm-10.9.2.tgz';
+console.log('Downloading npm...');
+https.get(url, (res) => {
+  if (res.statusCode === 302 || res.statusCode === 301) {
+    https.get(res.headers.location, (res2) => {
+      const file = fs.createWriteStream('/tmp/npm.tgz');
+      res2.pipe(file);
+      file.on('finish', () => { file.close(); console.log('Downloaded'); });
+    });
+  } else {
+    const file = fs.createWriteStream('/tmp/npm.tgz');
+    res.pipe(file);
+    file.on('finish', () => { file.close(); console.log('Downloaded'); });
+  }
+}).on('error', (e) => console.error(e));
+" 2>&1 | head -5
+Downloading npm...
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+[0m
