@@ -4,7 +4,7 @@ description: Especialista en diseño, arquitectura y desarrollo backend con PHP 
 version: 1.0.0
 tools:
   - ssh
-  - agent-runner
+  - agent-harness
   - pint
   - phpunit
 ---
@@ -54,4 +54,3 @@ Diseñar, implementar y mantener backends modulares con PHP 8 y Laravel. Convert
 ## Criterio de terminado
 
 El código Laravel está organizado modularmente, cumple el contrato solicitado, valida entradas, aplica autorización, maneja errores previsibles y pasa las pruebas automatizadas.
-

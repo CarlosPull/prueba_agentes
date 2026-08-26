@@ -1,20 +1,48 @@
 {
   "backend": {
+    "enabled": true,
     "ip": "192.168.50.193",
     "user": "serveradmin",
     "workspace": "/home/serveradmin/laravel-dev",
-    "agent_runner": "/home/serveradmin/.local/bin/agent-runner"
+    "harness_bin": "/home/serveradmin/.local/bin/agent-harness",
+    "engine_bin_dir": "/home/serveradmin/.nvm/versions/node/v24.19.0/bin",
+    "engine": "opencode",
+    "agent": "build",
+    "skill": "dev-back",
+    "policy_role": "backend",
+    "sandbox": "bwrap",
+    "credentials": "auto",
+    "output": "jsonl"
   },
   "frontend": {
+    "enabled": true,
     "ip": "192.168.50.40",
     "user": "serveradmin",
     "workspace": "/home/serveradmin/vue-dev",
-    "agent_runner": "/home/serveradmin/.local/bin/agent-runner"
+    "harness_bin": "/home/serveradmin/.local/bin/agent-harness",
+    "engine_bin_dir": "/home/serveradmin/.nvm/versions/node/v24.19.0/bin",
+    "engine": "opencode",
+    "agent": "build",
+    "skill": "dev-front",
+    "policy_role": "frontend",
+    "sandbox": "bwrap",
+    "credentials": "auto",
+    "output": "jsonl"
   },
   "qa": {
+    "enabled": false,
+    "disabled_reason": "agent-harness todavía no incorpora policies/qa.json",
     "ip": "192.168.50.63",
     "user": "serveradmin",
     "workspace": "/home/serveradmin/qa-dev",
-    "agent_runner": "/home/serveradmin/.local/bin/agent-runner"
+    "harness_bin": "/home/serveradmin/.local/bin/agent-harness",
+    "engine_bin_dir": "/home/serveradmin/.nvm/versions/node/v24.19.0/bin",
+    "engine": "opencode",
+    "agent": "build",
+    "skill": "qa",
+    "policy_role": "qa",
+    "sandbox": "bwrap",
+    "credentials": "auto",
+    "output": "jsonl"
   }
 }

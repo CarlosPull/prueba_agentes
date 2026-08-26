@@ -35,10 +35,10 @@ echo "🚀 Configurando la conexión SSH hacia $TARGET..."
 
 # 2. Copiar la clave pública hacia la VM remota
 if command -v ssh-copy-id >/dev/null 2>&1; then
-  ssh-copy-id -i "$PUB_KEY_FILE" -o StrictHostKeyChecking=no "$TARGET"
+  ssh-copy-id -i "$PUB_KEY_FILE" -o StrictHostKeyChecking=accept-new "$TARGET"
 else
   PUB_KEY=$(cat "$PUB_KEY_FILE")
-  ssh -o StrictHostKeyChecking=no "$TARGET" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$PUB_KEY' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+  ssh -o StrictHostKeyChecking=accept-new "$TARGET" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$PUB_KEY' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 fi
 
 # 3. Probar la conexión sin contraseña

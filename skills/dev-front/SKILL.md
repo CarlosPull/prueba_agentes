@@ -4,7 +4,7 @@ description: Especialista en desarrollo frontend con Vue 3, Composition API, Typ
 version: 1.0.0
 tools:
   - ssh
-  - agent-runner
+  - agent-harness
   - vitest
   - vue-tsc
 ---
@@ -51,4 +51,3 @@ Diseñar, construir e integrar interfaces de usuario reactivas y modulares con V
 ## Criterio de terminado
 
 Los componentes Vue 3 están tipados con TypeScript, responden a las APIs backend, pasan los tests de Vitest y no generan errores de compilación `vue-tsc`.
-

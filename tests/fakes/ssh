@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Sustituto de SSH usado exclusivamente por las pruebas locales.
+set -euo pipefail
+
+all_arguments="$*"
+if [[ "$all_arguments" == *"agent-harness doctor"* ]]; then
+  printf '%s\n' '{"selected_sandbox":"bwrap","selected_engine":"opencode","ready":true}'
+  exit 0
+fi
+
+if [[ "$all_arguments" == *"CLAVE_PRUEBA_NO_DEBE_IR_EN_ARGV"* ]]; then
+  echo "La clave apareció en argv de SSH" >&2
+  exit 90
+fi
+
+IFS= read -r openai_key
+IFS= read -r anthropic_key
+prompt=$(cat)
+
+if [[ "$prompt" != *"VALIDACIÓN DE DOMINIO OBLIGATORIA"* ]]; then
+  echo "El prompt no contiene la validación del analista" >&2
+  exit 91
+fi
+
+role="backend"
+[[ "$all_arguments" == *"--role frontend"* ]] && role="frontend"
+run_id="prueba-$role"
+
+printf '{"schema":"agent-harness.event/v1","type":"run.started","role":"%s","run_id":"%s","seq":1}\n' "$role" "$run_id"
+printf '{"schema":"agent-harness.event/v1","type":"agent.output","role":"%s","run_id":"%s","seq":2,"data":"Ejecución simulada correcta"}\n' "$role" "$run_id"
+printf '{"schema":"agent-harness.event/v1","type":"run.finished","role":"%s","run_id":"%s","seq":3,"status":"completed","exit_code":0}\n' "$role" "$run_id"
+
+# Evita avisos por variables leídas pero no usadas y comprueba que llegaron por STDIN.
+test "$openai_key" = "${OPENAI_API_KEY:-}"
+test "$anthropic_key" = "${ANTHROPIC_API_KEY:-}"

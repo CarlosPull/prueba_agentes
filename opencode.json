@@ -5,7 +5,7 @@
     "external_directory": {
       "/home/serveradmin/laravel-dev/**": "allow",
       "/home/serveradmin/vue-dev/**": "allow",
-      "~/.local/state/agent-runner/runs/**": "allow"
+      "~/.local/state/agent-harness/runs/**": "allow"
     }
   }
 }
