@@ -2,25 +2,26 @@
 
 ## Qué es este repo
 
-Orquestador local distribuido y ultraliviano (100% Shell/Bash, sin Python). Coordina agentes especializados definidos en Markdown dentro de la carpeta `skills/`.
+Orquestador local distribuido y ultraliviano (100% modular mediante herramientas en `tools/`, sin Python ni wrappers bin). Coordina agentes especializados definidos en Markdown dentro de la carpeta `skills/`.
 
-## Comandos esenciales
+## Comandos esenciales (Herramientas en `tools/`)
 
 ```bash
-./bin/orquesta probar-vms                       # diagnosticar SSH a VMs
-./bin/orquesta "Descripción del objetivo"        # orquestación distribuida en paralelo
+./tools/probar_vms.sh                          # diagnosticar SSH a VMs
+./tools/preparar_proyecto.sh "objetivo"         # inicializar carpeta del proyecto
+./tools/despachar_vm.sh <rol> <dir> "objetivo"  # despachar a una VM por SSH
+./tools/generar_reporte.sh <dir> "objetivo"     # consolidar reporte final
 ```
-
-El ejecutable `bin/orquesta` es un wrapper directo que enruta todo a `bin/orquestar_vms.sh`.
 
 ## Estructura clave
 
 ```
 skills/<nombre>/SKILL.md      # reglas, misión y habilidades del agente (ej: dev-back, dev-front, qa)
 opencode.json                 # configuración nativa de OpenCode y permisos
+vms.json                      # IPs, usuarios, workspaces y rutas del agent-runner
+orquestador/ORQUESTADOR.md    # flujo de orquestación e instrucciones de invocación de herramientas
 proyectos/<nombre>/           # salida: SOLICITUD.md, AGENT_RUNNER.md, logs
-bin/orquesta                  # ejecutable principal
-bin/orquestar_vms.sh          # script de despacho SSH paralelo a las VMs
+tools/                        # directorio de las 4 herramientas modulares ejecutables
 ```
 
 ## Agentes disponibles
@@ -35,10 +36,10 @@ bin/orquestar_vms.sh          # script de despacho SSH paralelo a las VMs
 
 - **Todo el contenido es en español** (archivos Markdown, outputs, mensajes de CLI).
 - **Los agentes se definen en Markdown** dentro de `skills/<nombre>/SKILL.md`.
-- `bin/orquestar_vms.sh` inyecta automáticamente la `OPENAI_API_KEY` o `ANTHROPIC_API_KEY` en la sesión SSH remota.
+- `tools/despachar_vm.sh` inyecta automáticamente la `OPENAI_API_KEY` o `ANTHROPIC_API_KEY` en la sesión SSH remota.
 
 ## Externalidades
 
 - **Agent Runner** se ubica en `/home/serveradmin/.local/bin/agent-runner` dentro de las VMs.
-- **VMs de desarrollo**: backend en `192.168.50.193`, frontend en `192.168.50.40`.
+- **VMs de desarrollo**: configuradas dinámicamente en `vms.json`.
 - **Repos de trabajo**: `laravel-dev` y `vue-dev` en las VMs.

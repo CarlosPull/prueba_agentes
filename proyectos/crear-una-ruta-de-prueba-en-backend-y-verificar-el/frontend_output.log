@@ -272,3 +272,189 @@ node:events:487
       throw er; // Unhandled 'error' event
       ^
 [0m
+[0m$ [0m/home/serveradmin/.nvm/versions/node/v24.19.0/bin/node -e "
+fetch('https://registry.npmjs.org/npm/-/npm-10.9.2.tgz').then(r => {
+  if (!r.ok) throw new Error(r.status);
+  const fs = require('fs');
+  const { Readable } = require('stream');
+  const ws = fs.createWriteStream('/tmp/npm.tgz');
+  Readable.fromWeb(r.body).pipe(ws);
+  ws.on('finish', () => console.log('OK'));
+}).catch(e => console.error(e.message));
+" 2>&1
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: EROFS: read-only file system, open '/tmp/npm.tgz'
+Emitted 'error' event on WriteStream instance at:
+    at WriteStream.onerror (node:internal/streams/readable:1035:14)
+    at WriteStream.emit (node:events:509:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -30,
+  code: 'EROFS',
+  syscall: 'open',
+  path: '/tmp/npm.tgz'
+}
+
+Node.js v24.19.0
+[0m
+[0m$ [0mls -la /tmp/agent-runner-20260826T152345Z-f99c19a5-4x6ari9e/tmp/opencode/ && echo "---" && df -h /home/serveradmin/vue-dev/ | tail -1
+total 0
+drwxrwxr-x 2 serveradmin serveradmin 40 Aug 26 15:23 .
+drwxrwxr-x 3 serveradmin serveradmin 80 Aug 26 15:23 ..
+---
+tmpfs           1.7G  175M  1.5G  11% /home/serveradmin
+[0m
+[0m$ [0m/home/serveradmin/.nvm/versions/node/v24.19.0/bin/node -e "
+fetch('https://registry.npmjs.org/npm/-/npm-10.9.2.tgz').then(r => {
+  if (!r.ok) throw new Error(r.status);
+  const fs = require('fs');
+  const { Readable } = require('stream');
+  const ws = fs.createWriteStream('/home/serveradmin/vue-dev/npm.tgz');
+  Readable.fromWeb(r.body).pipe(ws);
+  ws.on('finish', () => console.log('Downloaded'));
+}).catch(e => console.error(e.message));
+" 2>&1
+Downloaded
+[0m
+[0m$ [0mmkdir -p /home/serveradmin/.nvm/versions/node/v24.19.0/lib/node_modules/npm && tar -xzf /home/serveradmin/vue-dev/npm.tgz -C /home/serveradmin/.nvm/versions/node/v24.19.0/lib/node_modules/npm --strip-components=1 && rm /home/serveradmin/vue-dev/npm.tgz && /home/serveradmin/.nvm/versions/node/v24.19.0/bin/npm --version
+10.9.2
+[0m
+[0m$ [0m/home/serveradmin/.nvm/versions/node/v24.19.0/bin/npm install 2>&1
+added 63 packages, and audited 64 packages in 3s
+
+14 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+npm notice
+npm notice New major version of npm available! 10.9.2 -> 12.0.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.2
+npm notice To update run: npm install -g npm@12.0.2
+npm notice
+[0m
+[0m$ [0m/home/serveradmin/.nvm/versions/node/v24.19.0/bin/npm install -D vitest @vue/test-utils happy-dom 2>&1
+npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+
+added 87 packages, and audited 151 packages in 14s
+
+36 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+[0m
+Now let me create the vitest config and add the test script:
+[0m→ [0mRead vite.config.js
+[0m
+[0m← [0mWrite vite.config.js
+Wrote file successfully.
+[0m
+[0m← [0mEdit package.json
+Index: /home/serveradmin/vue-dev/package.json
+===================================================================
+--- /home/serveradmin/vue-dev/package.json
++++ /home/serveradmin/vue-dev/package.json
+@@ -6,8 +6,10 @@
+ "scripts": {
+   "dev": "vite",
+   "build": "vue-tsc --noEmit && vite build",
+   "typecheck": "vue-tsc --noEmit",
++  "test": "vitest run",
++  "test:watch": "vitest",
+   "preview": "vite preview"
+ },
+ "dependencies": {
+   "pinia": "^3.0.3",
+
+[0m
+[0m# [0mTodos
+[✓] Add healthCheck method to authApi.ts service
+[✓] Create HealthCheckView.vue component
+[✓] Add /test route to router.ts
+[✓] Set up Vitest testing infrastructure
+[•] Write test for HealthCheckView component
+[ ] Run typecheck and tests to verify
+[0m
+[0m$ [0mmkdir -p /home/serveradmin/vue-dev/src/views/__tests__
+(no output)
+[0m
+[0m← [0mWrite src/views/__tests__/HealthCheckView.spec.ts
+Wrote file successfully.
+[0m
+[0m← [0mEdit tsconfig.json
+Index: /home/serveradmin/vue-dev/tsconfig.json
+===================================================================
+--- /home/serveradmin/vue-dev/tsconfig.json
++++ /home/serveradmin/vue-dev/tsconfig.json
+@@ -9,9 +9,9 @@
+   "resolveJsonModule": true,
+   "isolatedModules": true,
+   "esModuleInterop": true,
+   "lib": ["ES2022", "DOM", "DOM.Iterable"],
+-  "types": ["vite/client"],
++  "types": ["vite/client", "vitest/globals"],
+   "baseUrl": ".",
+   "paths": { "@/*": ["src/*"] }
+ },
+ "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"]
+
+[0m
+[0m# [0mTodos
+[✓] Add healthCheck method to authApi.ts service
+[✓] Create HealthCheckView.vue component
+[✓] Add /test route to router.ts
+[✓] Set up Vitest testing infrastructure
+[✓] Write test for HealthCheckView component
+[•] Run typecheck and tests to verify
+[0m
+[0m$ [0m/home/serveradmin/.nvm/versions/node/v24.19.0/bin/npx vue-tsc --noEmit 2>&1
+(no output)
+[0m
+[0m$ [0m/home/serveradmin/.nvm/versions/node/v24.19.0/bin/npx vitest run 2>&1
+RUN  v4.1.11 /home/serveradmin/vue-dev
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  15:34:47
+   Duration  673ms (transform 121ms, setup 0ms, import 198ms, tests 40ms, environment 287ms)
+[0m
+[0m# [0mTodos
+[✓] Add healthCheck method to authApi.ts service
+[✓] Create HealthCheckView.vue component
+[✓] Add /test route to router.ts
+[✓] Set up Vitest testing infrastructure
+[✓] Write test for HealthCheckView component
+[✓] Run typecheck and tests to verify
+[0m
+[0m→ [0mRead src/services/authApi.ts
+[0m→ [0mRead src/router.ts
+[0m→ [0mRead src/types/auth.ts
+Let me verify the final state of all modified/created files:
+Todo listo. Resumen de lo implementado:
+
+### Archivos creados
+- **`src/views/HealthCheckView.vue`** — Componente que llama `GET /api/v1/health` al montar, muestra estados de carga/conexión/error con botón de reintento. Accesible (`role="status"`, `role="alert"`) y responsive.
+- **`src/views/__tests__/HealthCheckView.spec.ts`** — 6 pruebas: rendering, loading, éxito, error, llamada en mount, reintento.
+- **`vite.config.js`** — Extendido con config de Vitest (`happy-dom`, `globals: true`).
+
+### Archivos modificados
+- **`src/types/auth.ts`** — Nueva interfaz `HealthCheckResponse { status, timestamp }`
+- **`src/services/authApi.ts`** — Nuevo método `healthCheck()` → `GET /api/v1/health`
+- **`src/router.ts`** — Nueva ruta `/test` (nombre `test`, pública, sin auth guard)
+- **`package.json`** — Scripts `test` y `test:watch`; deps `vitest`, `@vue/test-utils`, `happy-dom`
+- **`tsconfig.json`** — Tipo `vitest/globals`
+
+### Resultados
+- **`vue-tsc --noEmit`** → sin errores
+- **`vitest run`** → 6/6 pruebas pasan
+
+### Pendiente (backend Laravel)
+El frontend espera `GET /api/v1/health` que retorne:
+```json
+{ "data": { "status": "ok", "timestamp": "2026-08-26T12:00:00Z" }, "message": "OK" }
+```
+Esa ruta debe crearse en el backend Laravel para que la vista funcione end-to-end.

@@ -1,0 +1,50 @@
+run_id: 20260826T165236Z-52951657
+manifest: /home/serveradmin/.local/state/agent-runner/runs/20260826T165236Z-52951657/manifest.json
+[0m
+> build · big-pickle
+[0m
+[0m• [0mExplore Laravel route structure[90m Explore Agent[0m
+[0m✓ [0mExplore Laravel route structure[90m Explore Agent[0m
+[0m→ [0mRead app/Http/Controllers/Api/V1/Test/TestController.php
+[0m→ [0mRead routes/api.php
+Now I have a clear picture. Here's the plan:
+
+---
+
+## Plan: Add `GET /api/health` endpoint
+
+### Context
+
+The project is a **Laravel 13** API-first application. Routes live in `routes/api.php` with a `v1/` prefix group. There's already a similar endpoint at `GET /api/v1/test/ping` (`app/Http/Controllers/Api/V1/Test/TestController.php:10`) that returns `{ status, timestamp, message }`. The new `/api/health` endpoint sits **outside** the versioned group and returns only `{ status, timestamp }`.
+
+### Changes (2 files)
+
+**1. `routes/api.php`** — Add a new `Route::get('health', ...)` closure **before** the `v1` prefix group (line 11), so it resolves to `GET /api/health`:
+
+```php
+Route::get('health', fn () => response()->json([
+    'status' => 'ok',
+    'timestamp' => now()->toIso8601String(),
+]));
+```
+
+**No controller needed.** This is a single-expression endpoint; a closure keeps it simple and follows Laravel conventions for trivial health checks. If a controller is preferred for consistency, I can extract it instead.
+
+### Verification
+
+```bash
+php artisan route:list --path=health
+curl http://localhost:8000/api/health
+```
+
+Expected response:
+```json
+{
+    "status": "ok",
+    "timestamp": "2026-08-26T12:00:00+00:00"
+}
+```
+
+---
+
+Shall I proceed with the implementation?
