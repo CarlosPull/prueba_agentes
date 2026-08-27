@@ -21,12 +21,11 @@ Utilidades auxiliares:
 
 ```bash
 ./tools/configurar_ssh_vm.sh user@ip                  # copiar llave SSH a VM nueva
+./tools/sincronizar_agente.sh <rol>                   # publicar la versión actual del agente en su VM
 ./tools/despachar_vm.sh <rol> <dir> "tarea"           # despacho directo (sin lock; usar validar_y_despachar en su lugar)
 ```
 
-> **Importante**: `despachar_vm.sh` busca skill files en este orden:
-> `skills/dev-<rol>/SKILL.md` → `skills/<rol>/SKILL.md` → `skills/<rol>/AGENTE.md`.
-> El contenido del SKILL.md se inyecta como prompt del agente remoto.
+> **Importante**: `despachar_vm.sh` invoca primero `sincronizar_agente.sh`. Cada rol declara en `vms.json` su `local_agent` y `remote_agent`. La VM construye el prompt leyendo `remote_agent/actual/SKILL.md` y los recursos Markdown asociados; el contenido del agente ya no se carga desde la Mac durante la ejecución.
 
 ## Estructura clave
 
@@ -42,7 +41,8 @@ skills/                        # Agentes y sus instrucciones
 opencode.json                  # Permisos de directorios externos + default_agent: dev-back
 vms.json                       # IPs, usuarios, workspaces y rutas de agent-runner
 proyectos/<slug>/              # salida: SOLICITUD.md, AGENT_RUNNER.md, *_output.log
-tools/                         # 6 herramientas bash ejecutables
+tests/                         # pruebas aisladas con dobles de SSH, rsync y agent-runner
+tools/                         # 7 herramientas bash ejecutables
 ```
 
 ## Convenciones importantes
@@ -52,16 +52,18 @@ tools/                         # 6 herramientas bash ejecutables
 - **Subagente `analista`**: cada agente tiene un `subagentes/analista.md` que valida dominio antes de ejecutar. Si emite `STATUS: RECHAZADO_FINAL`, el flujo se detiene.
 - **Doble barrera de dominio**: `validar_y_despachar.sh` valida por regex en el script (capa determinista), y el `analista` del agente valida por interpretación (capa semántica).
 - `despachar_vm.sh` inyecta `OPENAI_API_KEY` y `ANTHROPIC_API_KEY` en la sesión SSH remota si están disponibles en el entorno local.
+- `sincronizar_agente.sh` calcula una huella SHA-256, publica en `remote_agent/.versiones/<huella>` y activa `remote_agent/actual` mediante sustitución atómica de enlace simbólico.
+- Si la sincronización o su validación falla, `agent-runner` no se ejecuta. No se reutiliza silenciosamente una versión anterior.
 - `validar_y_despachar.sh` crea un `.ejecucion_lock` en la carpeta del proyecto; un segundo despacho al mismo proyecto falla con error explícito.
 - La configuración de VMs se lee de `vms.json` (roles: `backend`, `frontend`, `qa`).
-- `opencode.json` permite acceso a directorios externos: `/home/serveradmin/laravel-dev/**`, `/home/serveradmin/vue-dev/**`, `~/.local/state/agent-runner/runs/**`.
+- `opencode.json` permite acceso a directorios externos: `/home/serveradmin/laravel-dev/**`, `/home/serveradmin/vue-dev/**`, `/home/serveradmin/agentes/**`, `~/.local/state/agent-runner/runs/**`.
 - **Solo `backend` y `frontend` se despachan vía tools/**. Los agentes `qa` y `dev-security` no tienen despacho automatizado; se definen pero no se invocan desde las herramientas actuales.
 
 ## Externalidades
 
 - **Agent Runner** se ejecuta en VMs vía SSH; la ruta por defecto es `/home/serveradmin/.local/bin/agent-runner`.
 - **VMs de desarrollo** (todas como `serveradmin`):
-  - Backend: `192.168.50.193` → `/home/serveradmin/laravel-dev`
-  - Frontend: `192.168.50.40` → `/home/serveradmin/vue-dev`
+  - Backend: `192.168.50.193` → workspace `/home/serveradmin/laravel-dev`, agente `/home/serveradmin/agentes/backend`
+  - Frontend: `192.168.50.40` → workspace `/home/serveradmin/vue-dev`, agente `/home/serveradmin/agentes/frontend`
   - QA: `192.168.50.63` → `/home/serveradmin/qa-dev`
-- **Node en VMs**: `despachar_vm.sh` inyecta `PATH` con `/home/serveradmin/.nvm/versions/node/v24.19.0/bin`. Si la versión de Node cambia, actualizar la línea `ENV_EXPORTS` en `tools/despachar_vm.sh`.
+- **Node en VMs**: `despachar_vm.sh` inyecta `PATH` con `/home/serveradmin/.nvm/versions/node/v24.19.0/bin`. Si la versión de Node cambia, actualizar la construcción de `REMOTE_CMD` en `tools/despachar_vm.sh`.

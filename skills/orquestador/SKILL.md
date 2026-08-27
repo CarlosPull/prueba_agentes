@@ -5,6 +5,7 @@ version: 1.0.0
 tools:
   - tools/probar_vms.sh
   - tools/preparar_proyecto.sh
+  - tools/sincronizar_agente.sh
   - tools/despachar_vm.sh
   - tools/generar_reporte.sh
 ---
@@ -25,13 +26,14 @@ Soy el coordinador principal del sistema de agentes. Recibo una solicitud, selec
 
 ## Mapa de Herramientas del Sistema (`tools/`)
 
-Para realizar la orquestación, el sistema dispone de 4 herramientas especializadas de responsabilidad única:
+Para realizar la orquestación, el sistema dispone de herramientas especializadas de responsabilidad única:
 
 | Herramienta | Ruta | Función |
 | :--- | :--- | :--- |
 | **Diagnóstico SSH** | `tools/probar_vms.sh` | Comprueba conectividad SSH con todas las VMs configuradas en `vms.json`. |
 | **Configurador SSH** | `tools/configurar_ssh_vm.sh user@ip` | Copia automáticamente la clave SSH de tu Mac a una nueva VM sin contraseña. |
 | **Inicializador** | `tools/preparar_proyecto.sh` | Crea la carpeta `proyectos/<slug>/` y guarda `SOLICITUD.md`. |
+| **Sincronizador** | `tools/sincronizar_agente.sh <rol>` | Publica únicamente el agente del rol en su VM, versionado por huella y con activación atómica. |
 | **Despachador Seguro** | `tools/validar_y_despachar.sh <rol> <dir> <tarea>` | Lanza `agent-runner` por SSH y BLOQUEA FÍSICAMENTE cualquier segundo despacho. |
 | **Compilador de Reportes** | `tools/generar_reporte.sh <dir> <tarea>` | Recopila los logs de salida y genera `AGENT_RUNNER.md`. |
 
@@ -51,7 +53,7 @@ graph TD
 
 1. **Fase de Verificación**: Invocar `tools/probar_vms.sh` para asegurar que las VMs están alcanzables.
 2. **Fase de Inicialización**: Invocar `tools/preparar_proyecto.sh "$TAREA"` para obtener la ruta del proyecto.
-3. **Fase de Despacho Seguro**: Invocar `tools/validar_y_despachar.sh <rol> "$DIR" "$TAREA"`.
+3. **Fase de Despacho Seguro**: Invocar `tools/validar_y_despachar.sh <rol> "$DIR" "$TAREA"`. El despachador sincroniza automáticamente el agente correspondiente antes de ejecutarlo.
 4. **Fase de Consolidación**: Invocar `tools/generar_reporte.sh` para publicar el reporte consolidado `proyectos/<slug>/AGENT_RUNNER.md`.
 
 
@@ -79,8 +81,6 @@ graph TD
    - `backend` (dev-back): Prohibido crear archivos `.vue`, HTML/CSS, o scaffolds de Vite/Tailwind en Laravel.
    - `frontend` (dev-front): Prohibido crear migraciones SQL, controladores PHP o código Laravel en Vue.
 2. **Rechazo Activo Definitivo**: Si un agente o script responde `"RECHAZADO_ROL_INCORRECTO"`, el flujo concluye de inmediato sin preguntas adicionales. No se modifica ningún archivo en la VM ni se ejecutan herramientas para otros roles.
-3. **Persistencia de Habilidades**: Todas las habilidades e instrucciones de roles se leen desde `skills/<rol>/SKILL.md`.
-
-
-
+3. **Persistencia de Habilidades**: El repositorio es la fuente de verdad. Antes de cada despacho se sincroniza únicamente el directorio configurado como `local_agent` hacia `remote_agent`; durante la ejecución, la VM construye el prompt leyendo `remote_agent/actual/SKILL.md` y los recursos Markdown asociados.
+4. **Fallo Cerrado de Sincronización**: Si la publicación o la comprobación de la huella falla, no se ejecuta `agent-runner` ni se reutiliza silenciosamente una versión anterior.
 

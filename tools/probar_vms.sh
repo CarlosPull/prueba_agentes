@@ -5,9 +5,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VMS_CONF="$ROOT/vms.json"
 
+command -v jq >/dev/null 2>&1 || {
+  echo "Error: jq es obligatorio para leer vms.json." >&2
+  exit 1
+}
+
 GET_ROLES() {
   if [ -f "$VMS_CONF" ]; then
-    python3 -c "import json; print(' '.join(json.load(open('$VMS_CONF')).keys()))" 2>/dev/null || echo "backend frontend"
+    jq -r 'keys[]' "$VMS_CONF" 2>/dev/null || echo "backend frontend"
   else
     echo "backend frontend"
   fi
@@ -16,7 +21,7 @@ GET_ROLES() {
 GET_VM_FIELD() {
   local role="$1"
   local field="$2"
-  python3 -c "import json; print(json.load(open('$VMS_CONF'))['$role']['$field'])" 2>/dev/null || echo ""
+  jq -er --arg role "$role" --arg field "$field" '.[$role][$field]' "$VMS_CONF" 2>/dev/null || true
 }
 
 SSH_OPTS="-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes"

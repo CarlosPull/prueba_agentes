@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${1:-}" = "-Tf" ]; then
+  shift
+  /bin/mv -f "$@"
+else
+  /bin/mv "$@"
+fi

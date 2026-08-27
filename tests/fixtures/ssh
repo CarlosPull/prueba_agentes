@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o|-i)
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+# El host se conserva únicamente para reproducir la interfaz de ssh.
+host="$1"
+shift
+: "$host"
+
+mapear_ruta() {
+  printf '%s' "$1" | sed "s|/home/serveradmin|$FAKE_REMOTE_ROOT/home/serveradmin|g"
+}
+
+if [ "${1:-}" = "bash" ] && [ "${2:-}" = "-s" ]; then
+  shift 3
+  argumentos=()
+  for argumento in "$@"; do
+    argumentos+=("$(mapear_ruta "$argumento")")
+  done
+  bash -s -- "${argumentos[@]}"
+  exit 0
+fi
+
+comando="$*"
+comando="$(mapear_ruta "$comando")"
+bash -c "$comando"
