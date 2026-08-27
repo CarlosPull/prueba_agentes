@@ -71,15 +71,19 @@ if [ -f "$HOME/.ssh/id_ed25519" ]; then
 fi
 
 q_agent_dir="$(SHELL_QUOTE "$remote_agent/actual")"
+q_agent_base="$(SHELL_QUOTE "$remote_agent")"
 q_workspace="$(SHELL_QUOTE "$workspace")"
 q_runner="$(SHELL_QUOTE "$runner_bin")"
 q_role="$(SHELL_QUOTE "$ROLE")"
 
 REMOTE_CMD="set -eu;
 AGENT_DIR=$q_agent_dir;
+AGENT_BASE=$q_agent_base;
 WORKSPACE=$q_workspace;
 RUNNER_BIN=$q_runner;
 ROLE=$q_role;
+exec 8>\"\$AGENT_BASE/.actualizacion.lock\";
+flock -s 8;
 test -s \"\$AGENT_DIR/SKILL.md\";
 VERSION=\$(cat \"\$AGENT_DIR/.agent-version\");
 TAREA=\$(cat);

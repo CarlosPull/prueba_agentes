@@ -3,6 +3,10 @@ set -euo pipefail
 
 if [ "${1:-}" = "-Tf" ]; then
   shift
+  destino="${@: -1}"
+  if [ -L "$destino" ] || [ -f "$destino" ]; then
+    /bin/rm "$destino"
+  fi
   /bin/mv -f "$@"
 else
   /bin/mv "$@"

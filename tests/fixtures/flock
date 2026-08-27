@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Doble local: las pruebas son monoproceso; basta con aceptar el bloqueo solicitado.
+exit 0

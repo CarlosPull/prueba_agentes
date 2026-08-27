@@ -43,12 +43,15 @@ REPORT="$PROJECT_DIR/AGENT_RUNNER.md"
     ip=$(GET_VM_FIELD "$role" "ip")
     workspace=$(GET_VM_FIELD "$role" "workspace")
     remote_agent=$(GET_VM_FIELD "$role" "remote_agent")
+    git_branch=$(GET_VM_FIELD "$role" "git_branch")
+    git_agent_path=$(GET_VM_FIELD "$role" "git_agent_path")
     log_file="$PROJECT_DIR/${role}_output.log"
     
     echo "## Rol: $role (VM: $ip)"
     echo "- Workspace: \`$workspace\`"
     if [ -n "$remote_agent" ]; then
       echo "- Agente remoto: \`$remote_agent/actual\`"
+      echo "- Fuente Git: \`$git_branch:$git_agent_path\`"
     else
       echo "- Agente remoto: sin despacho automatizado"
     fi

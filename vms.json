@@ -5,7 +5,10 @@
     "workspace": "/home/serveradmin/laravel-dev",
     "agent_runner": "/home/serveradmin/.local/bin/agent-runner",
     "local_agent": "skills/dev-back",
-    "remote_agent": "/home/serveradmin/agentes/backend"
+    "remote_agent": "/home/serveradmin/agentes/backend",
+    "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
+    "git_branch": "sincronizacion_agentes_ssh",
+    "git_agent_path": "skills/dev-back"
   },
   "frontend": {
     "ip": "192.168.50.40",
@@ -13,7 +16,10 @@
     "workspace": "/home/serveradmin/vue-dev",
     "agent_runner": "/home/serveradmin/.local/bin/agent-runner",
     "local_agent": "skills/dev-front",
-    "remote_agent": "/home/serveradmin/agentes/frontend"
+    "remote_agent": "/home/serveradmin/agentes/frontend",
+    "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
+    "git_branch": "sincronizacion_agentes_ssh",
+    "git_agent_path": "skills/dev-front"
   },
   "qa": {
     "ip": "192.168.50.63",

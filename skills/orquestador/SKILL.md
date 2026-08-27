@@ -5,6 +5,7 @@ version: 1.0.0
 tools:
   - tools/probar_vms.sh
   - tools/preparar_proyecto.sh
+  - tools/instalar_actualizacion_git.sh
   - tools/sincronizar_agente.sh
   - tools/despachar_vm.sh
   - tools/generar_reporte.sh
@@ -33,7 +34,8 @@ Para realizar la orquestación, el sistema dispone de herramientas especializada
 | **Diagnóstico SSH** | `tools/probar_vms.sh` | Comprueba conectividad SSH con todas las VMs configuradas en `vms.json`. |
 | **Configurador SSH** | `tools/configurar_ssh_vm.sh user@ip` | Copia automáticamente la clave SSH de tu Mac a una nueva VM sin contraseña. |
 | **Inicializador** | `tools/preparar_proyecto.sh` | Crea la carpeta `proyectos/<slug>/` y guarda `SOLICITUD.md`. |
-| **Sincronizador** | `tools/sincronizar_agente.sh <rol>` | Publica únicamente el agente del rol en su VM, versionado por huella y con activación atómica. |
+| **Instalador Git** | `tools/instalar_actualizacion_git.sh <rol>` | Instala un cron que consulta Git cada minuto y activa únicamente el agente del rol. |
+| **Sincronizador** | `tools/sincronizar_agente.sh <rol>` | Solicita un pull Git inmediato en la VM, sin copiar archivos desde el orquestador. |
 | **Despachador Seguro** | `tools/validar_y_despachar.sh <rol> <dir> <tarea>` | Lanza `agent-runner` por SSH y BLOQUEA FÍSICAMENTE cualquier segundo despacho. |
 | **Compilador de Reportes** | `tools/generar_reporte.sh <dir> <tarea>` | Recopila los logs de salida y genera `AGENT_RUNNER.md`. |
 
@@ -81,6 +83,5 @@ graph TD
    - `backend` (dev-back): Prohibido crear archivos `.vue`, HTML/CSS, o scaffolds de Vite/Tailwind en Laravel.
    - `frontend` (dev-front): Prohibido crear migraciones SQL, controladores PHP o código Laravel en Vue.
 2. **Rechazo Activo Definitivo**: Si un agente o script responde `"RECHAZADO_ROL_INCORRECTO"`, el flujo concluye de inmediato sin preguntas adicionales. No se modifica ningún archivo en la VM ni se ejecutan herramientas para otros roles.
-3. **Persistencia de Habilidades**: El repositorio es la fuente de verdad. Antes de cada despacho se sincroniza únicamente el directorio configurado como `local_agent` hacia `remote_agent`; durante la ejecución, la VM construye el prompt leyendo `remote_agent/actual/SKILL.md` y los recursos Markdown asociados.
-4. **Fallo Cerrado de Sincronización**: Si la publicación o la comprobación de la huella falla, no se ejecuta `agent-runner` ni se reutiliza silenciosamente una versión anterior.
-
+3. **Persistencia de Habilidades**: Git es la fuente de verdad publicada. Cada VM consulta automáticamente `git_branch`, extrae únicamente `git_agent_path` y activa una versión validada bajo `remote_agent/actual`. Durante la ejecución, la VM construye el prompt leyendo el `SKILL.md` y los recursos Markdown de esa versión.
+4. **Fallo Cerrado de Sincronización**: Si el fetch, la extracción o la validación falla, no se ejecuta `agent-runner` ni se sustituye silenciosamente la versión ya activa.
