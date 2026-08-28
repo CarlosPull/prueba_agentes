@@ -75,6 +75,7 @@ if [ -s "$BASE/actual/.agent-version" ]; then
 fi
 
 if [ "$version_actual" = "$version" ]; then
+  printf '%s\n' "$commit" > "$BASE/actual/.git-commit"
   LOG "✓ Agente '$ROLE' ya está actualizado desde Git ($version, commit $commit)."
   exit 0
 fi

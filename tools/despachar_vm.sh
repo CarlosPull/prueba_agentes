@@ -86,9 +86,21 @@ exec 8>\"\$AGENT_BASE/.actualizacion.lock\";
 flock -s 8;
 test -s \"\$AGENT_DIR/SKILL.md\";
 VERSION=\$(cat \"\$AGENT_DIR/.agent-version\");
+AGENT_RESOLVED=\$(readlink -f \"\$AGENT_DIR\");
+GIT_COMMIT=\$(cat \"\$AGENT_DIR/.git-commit\" 2>/dev/null || true);
+SKILL_SHA256=\$(sha256sum \"\$AGENT_DIR/SKILL.md\" | awk '{print \$1}');
 TAREA=\$(cat);
+export PATH=\"\$PATH:/home/serveradmin/.nvm/versions/node/v24.19.0/bin:/home/serveradmin/.local/bin\";
+OPENCODE_BIN=\$(command -v opencode || true);
+OPENCODE_VERSION=\$(opencode --version 2>/dev/null | head -n 1 || true);
+printf 'AGENTE_RESUELTO: %s\\n' \"\$AGENT_RESOLVED\" >&2;
 printf 'VERSION_AGENTE: %s\\n' \"\$VERSION\" >&2;
-export PATH=\"\$PATH:/home/serveradmin/.nvm/versions/node/v24.19.0/bin:/home/serveradmin/.local/bin\";"
+printf 'COMMIT_AGENTE: %s\\n' \"\$GIT_COMMIT\" >&2;
+printf 'SHA256_SKILL: %s\\n' \"\$SKILL_SHA256\" >&2;
+printf 'WORKSPACE_REMOTO: %s\\n' \"\$WORKSPACE\" >&2;
+printf 'AGENT_RUNNER_REMOTO: %s\\n' \"\$RUNNER_BIN\" >&2;
+printf 'OPENCODE_BIN: %s\\n' \"\$OPENCODE_BIN\" >&2;
+printf 'OPENCODE_VERSION: %s\\n' \"\$OPENCODE_VERSION\" >&2;"
 
 if [ -n "${OPENAI_API_KEY:-}" ]; then
   REMOTE_CMD="OPENAI_API_KEY=$(SHELL_QUOTE "$OPENAI_API_KEY"); export OPENAI_API_KEY; $REMOTE_CMD"
@@ -121,5 +133,7 @@ echo "▶️ Ejecutando el agente remoto '$ROLE' ($user@$ip)..." >&2
   echo "ROL: $ROLE"
   ssh "${SSH_OPTS[@]}" "$user@$ip" "$REMOTE_CMD" <<< "$TAREA"
 } > "$LOG_FILE" 2>&1
+
+"$TOOLS_DIR/generar_evidencia_agente.sh" "$ROLE" "$PROJECT_DIR" >/dev/null
 
 echo "$LOG_FILE"

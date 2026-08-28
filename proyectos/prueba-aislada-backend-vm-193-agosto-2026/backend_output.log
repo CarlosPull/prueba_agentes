@@ -1,0 +1,515 @@
+AGENTE_REMOTO: /home/serveradmin/agentes/backend/actual
+ROL: backend
+VERSION_AGENTE: 63e99aa9b987d7269de585e640273c7ea3a1aa26
+run_id: 20260827T211105Z-7e3c597f
+manifest: /home/serveradmin/.local/state/agent-runner/runs/20260827T211105Z-7e3c597f/manifest.json
+[0m
+> build · big-pickle
+[0m
+[0m$ [0mcd /home/serveradmin/laravel-dev && ls -la && cat composer.json 2>/dev/null | head -50
+total 372
+drwx------ 12 serveradmin serveradmin    420 Aug 27 21:11 .
+drwxrwxr-x  5 serveradmin serveradmin    100 Aug 27 21:11 ..
+-rw-r--r--  1 serveradmin serveradmin    275 Aug 25 19:17 .editorconfig
+-rw-r--r--  1 serveradmin serveradmin   1356 Aug 25 20:10 .env.example
+drwxr-xr-x  7 serveradmin serveradmin   4096 Aug 27 21:10 .git
+-rw-r--r--  1 serveradmin serveradmin    186 Aug 25 19:17 .gitattributes
+-rw-r--r--  1 serveradmin serveradmin    341 Aug 25 19:17 .gitignore
+-rw-r--r--  1 serveradmin serveradmin   3700 Aug 25 19:17 README.md
+drwxr-xr-x  6 serveradmin serveradmin   4096 Aug 26 13:49 app
+-rwxr-xr-x  1 serveradmin serveradmin    425 Aug 25 19:17 artisan
+drwxr-xr-x  3 serveradmin serveradmin   4096 Aug 25 19:17 bootstrap
+-rw-r--r--  1 serveradmin serveradmin   2713 Aug 25 20:13 composer.json
+-rw-r--r--  1 serveradmin serveradmin 309646 Aug 25 20:13 composer.lock
+drwxr-xr-x  2 serveradmin serveradmin   4096 Aug 25 20:09 config
+drwxr-xr-x  5 serveradmin serveradmin   4096 Aug 26 21:02 database
+drwxr-xr-x  2 serveradmin serveradmin   4096 Aug 25 20:10 docs
+-rw-r--r--  1 serveradmin serveradmin   1322 Aug 25 19:17 phpunit.xml
+drwxr-xr-x  2 serveradmin serveradmin   4096 Aug 25 20:11 routes
+drwx------  4 serveradmin serveradmin     80 Aug 27 21:11 storage
+drwxr-xr-x  4 serveradmin serveradmin   4096 Aug 25 19:17 tests
+drwxrwxr-x 38 serveradmin serveradmin   4096 Aug 25 23:23 vendor
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "laravel/laravel",
+    "type": "project",
+    "description": "The skeleton application for the Laravel framework.",
+    "keywords": ["laravel", "framework"],
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "laravel/framework": "^13.17",
+        "laravel/sanctum": "^4.3",
+        "laravel/tinker": "^3.0"
+    },
+    "require-dev": {
+        "fakerphp/faker": "^1.23",
+        "laravel/pail": "^1.2.5",
+        "laravel/pao": "^1.0.6",
+        "laravel/pint": "^1.27",
+        "mockery/mockery": "^1.6",
+        "nunomaduro/collision": "^8.6",
+        "phpunit/phpunit": "^12.5.12"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "setup": [
+            "composer install",
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
+            "@php artisan key:generate",
+            "@php artisan migrate --force",
+            "npm install --ignore-scripts",
+            "npm run build"
+        ],
+        "dev": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php artisan dev"
+        ],
+        "test": [
+            "@php artisan config:clear --ansi @no_additional_args",
+            "@php artisan test"
+[0m
+I'll start by exploring the Laravel project structure to understand the conventions before implementing.
+[0m→ [0mSkill "customize-opencode"
+The skill loaded is for customizing opencode config, which isn't what I need here. This is a backend task on the Laravel repo itself. Let me explore the relevant existing structure for the test endpoint and routes.
+
+Let me look at the existing route structure, an existing controller, and test conventions. Note the `Test/TestController.php` exists already.
+[0m
+[0m$ [0mcd /home/serveradmin/laravel-dev && cat routes/api.php && echo "=== CONTROLLERS ===" && ls -R app/Http/Controllers/Api && echo "=== TEST CONTROLLER ===" && cat app/Http/Controllers/Api/V1/Test/TestController.php && echo "=== TESTS DIR ===" && find tests -type f -name "*.php" | head -50
+<?php
+
+use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
+use App\Http\Controllers\Api\V1\Auth\PasswordController;
+use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
+use App\Http\Controllers\Api\V1\Auth\RegisterController;
+use App\Http\Controllers\Api\V1\Auth\SessionController;
+use App\Http\Controllers\Api\V1\Test\TestController;
+use App\Http\Controllers\Api\V1\Producto\ProductoController;
+use App\Http\Controllers\Api\V1\User\UserController;
+use Illuminate\Support\Facades\Route;
+
+Route::prefix('v1/test')->group(function (): void {
+    Route::get('ping', [TestController::class, 'ping'])->middleware('throttle:60,1');
+});
+
+Route::prefix('v1/users')->middleware('auth:sanctum')->group(function (): void {
+    Route::get('/', [UserController::class, 'index'])->middleware('throttle:60,1');
+    Route::post('/', [UserController::class, 'store'])->middleware('throttle:30,1');
+    Route::get('/{user}', [UserController::class, 'show'])->middleware('throttle:60,1');
+    Route::put('/{user}', [UserController::class, 'update'])->middleware('throttle:30,1');
+    Route::delete('/{user}', [UserController::class, 'destroy'])->middleware('throttle:20,1');
+});
+
+Route::prefix('v1/productos')->middleware('auth:sanctum')->group(function (): void {
+    Route::get('/', [ProductoController::class, 'index'])->middleware('throttle:60,1');
+    Route::post('/', [ProductoController::class, 'store'])->middleware('throttle:30,1');
+    Route::get('/{producto}', [ProductoController::class, 'show'])->middleware('throttle:60,1');
+    Route::put('/{producto}', [ProductoController::class, 'update'])->middleware('throttle:30,1');
+    Route::delete('/{producto}', [ProductoController::class, 'destroy'])->middleware('throttle:20,1');
+});
+
+Route::prefix('v1/auth')->group(function (): void {
+    Route::post('register', RegisterController::class)->middleware('throttle:6,1');
+    Route::post('login', [SessionController::class, 'store'])->middleware('throttle:5,1');
+    Route::post('forgot-password', [PasswordResetController::class, 'requestLink'])->middleware('throttle:5,1');
+    Route::post('reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:5,1');
+
+    Route::middleware('auth:sanctum')->group(function (): void {
+        Route::get('me', [SessionController::class, 'show'])->middleware('throttle:60,1');
+        Route::post('logout', [SessionController::class, 'destroy'])->middleware('throttle:20,1');
+        Route::put('password', [PasswordController::class, 'update'])->middleware('throttle:10,1');
+        Route::post('email/verification-notification', [EmailVerificationController::class, 'send'])->middleware('throttle:6,1');
+        Route::get('email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+            ->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
+    });
+});
+=== CONTROLLERS ===
+app/Http/Controllers/Api:
+V1
+
+app/Http/Controllers/Api/V1:
+Auth
+Producto
+Test
+User
+
+app/Http/Controllers/Api/V1/Auth:
+EmailVerificationController.php
+PasswordController.php
+PasswordResetController.php
+RegisterController.php
+SessionController.php
+
+app/Http/Controllers/Api/V1/Producto:
+ProductoController.php
+
+app/Http/Controllers/Api/V1/Test:
+TestController.php
+
+app/Http/Controllers/Api/V1/User:
+UserController.php
+=== TEST CONTROLLER ===
+<?php
+
+namespace App\Http\Controllers\Api\V1\Test;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
+
+class TestController extends Controller
+{
+    public function ping(): JsonResponse
+    {
+        return response()->json([
+            'status' => 'ok',
+            'timestamp' => now()->toIso8601String(),
+            'message' => 'Backend funcionando correctamente.',
+        ]);
+    }
+}
+=== TESTS DIR ===
+tests/Unit/ExampleTest.php
+tests/Feature/TestPingTest.php
+tests/Feature/Auth/AuthenticationTest.php
+tests/Feature/ExampleTest.php
+tests/TestCase.php
+[0m
+Now let me look at the existing test for the ping endpoint to mirror the style, and check how routes are tested.
+[0m$ [0mcd /home/serveradmin/laravel-dev && cat tests/Feature/TestPingTest.php && echo "=== phpunit.xml ===" && cat phpunit.xml
+<?php
+
+namespace Tests\Feature;
+
+use Tests\TestCase;
+
+class TestPingTest extends TestCase
+{
+    public function test_ping_returns_ok_status(): void
+    {
+        $response = $this->getJson('/api/v1/test/ping');
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'status',
+                'timestamp',
+                'message',
+            ])
+            ->assertJson(['status' => 'ok']);
+    }
+}
+=== phpunit.xml ===
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="DB_URL" value=""/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="NIGHTWATCH_ENABLED" value="false"/>
+    </php>
+</phpunit>
+[0m
+The task specifies the endpoint URL is `/api/prueba-orquestador` (not under v1 prefix). The task says "implementa un endpoint GET /api/prueba-orquestador que responda JSON con status ok, servicio backend y mensaje COMUNICACION_BACKEND_OK". 
+
+So the route path is `/api/prueba-orquestador`. Let me verify how `/api` prefix is wired. Laravel's default `bootstrap/app.php` typically applies `api` prefix to routes/api.php. Let me check.
+
+Let me check the bootstrap/app.php routing config.
+[0m$ [0mcd /home/serveradmin/laravel-dev && cat bootstrap/app.php
+<?php
+
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Session\TokenMismatchException;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->statefulApi();
+    })
+    ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->shouldRenderJsonWhen(
+            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
+        );
+
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => 'No autenticado.'], 401);
+            }
+        });
+        $exceptions->render(function (AuthorizationException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => 'Acceso no autorizado.'], 403);
+            }
+        });
+        $exceptions->render(function (TokenMismatchException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => 'La sesión o el token CSRF ha expirado.'], 419);
+            }
+        });
+        $exceptions->render(function (ValidationException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => $e->status === 401 ? 'Las credenciales proporcionadas no son válidas.' : 'Los datos proporcionados no son válidos.', 'errors' => $e->errors()], $e->status);
+            }
+        });
+        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => 'Recurso no encontrado.'], 404);
+            }
+        });
+        $exceptions->render(function (HttpExceptionInterface $e, Request $request) {
+            if ($request->is('api/*') && $e->getStatusCode() === 429) {
+                return response()->json(['message' => 'Demasiadas solicitudes. Inténtalo nuevamente más tarde.'], 429, $e->getHeaders());
+            }
+            if ($request->is('api/*') && $e->getStatusCode() === 403) {
+                return response()->json(['message' => 'Acceso no autorizado.'], 403, $e->getHeaders());
+            }
+        });
+    })->create();
+[0m
+The `api` prefix is applied via `withRouting(api: ...)`, which means all routes in `routes/api.php` get the `/api` prefix automatically. So defining `Route::get('prueba-orquestador', ...)` in `api.php` will produce `/api/prueba-orquestador`.
+
+Now I have all I need. Let me set up my plan and implement:
+
+1. Create a new controller (isolated, new files only) - I'll create `app/Http/Controllers/Api/V1/Test/PruebaOrquestadorController.php` following the existing Test pattern.
+2. Add minimal route line to routes/api.php.
+3. Create a new Feature test.
+4. Run test + pint.
+
+Let me create the new files.
+[0m← [0mWrite app/Http/Controllers/Api/V1/Test/PruebaOrquestadorController.php
+Wrote file successfully.
+[0m
+Now add the import and the route line to routes/api.php.
+[0m← [0mEdit routes/api.php
+Index: /home/serveradmin/laravel-dev/routes/api.php
+===================================================================
+--- /home/serveradmin/laravel-dev/routes/api.php
++++ /home/serveradmin/laravel-dev/routes/api.php
+@@ -5,8 +5,9 @@
+ use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
+ use App\Http\Controllers\Api\V1\Auth\RegisterController;
+ use App\Http\Controllers\Api\V1\Auth\SessionController;
+ use App\Http\Controllers\Api\V1\Test\TestController;
++use App\Http\Controllers\Api\V1\Test\PruebaOrquestadorController;
+ use App\Http\Controllers\Api\V1\Producto\ProductoController;
+ use App\Http\Controllers\Api\V1\User\UserController;
+ use Illuminate\Support\Facades\Route;
+ 
+
+[0m
+[0m← [0mEdit routes/api.php
+Index: /home/serveradmin/laravel-dev/routes/api.php
+===================================================================
+--- /home/serveradmin/laravel-dev/routes/api.php
++++ /home/serveradmin/laravel-dev/routes/api.php
+@@ -14,8 +14,10 @@
+ Route::prefix('v1/test')->group(function (): void {
+     Route::get('ping', [TestController::class, 'ping'])->middleware('throttle:60,1');
+ });
+ 
++Route::get('prueba-orquestador', PruebaOrquestadorController::class);
++
+ Route::prefix('v1/users')->middleware('auth:sanctum')->group(function (): void {
+     Route::get('/', [UserController::class, 'index'])->middleware('throttle:60,1');
+     Route::post('/', [UserController::class, 'store'])->middleware('throttle:30,1');
+     Route::get('/{user}', [UserController::class, 'show'])->middleware('throttle:60,1');
+
+[0m
+Now create the feature test.
+[0m← [0mWrite tests/Feature/PruebaOrquestadorTest.php
+Wrote file successfully.
+[0m
+[0m$ [0mcd /home/serveradmin/laravel-dev && ./vendor/bin/phpunit tests/Feature/PruebaOrquestadorTest.php 2>&1
+{"tool":"phpunit","result":"passed","tests":1,"passed":1,"assertions":5,"duration_ms":114}
+[0m
+Now run the new test and pint in parallel.
+[0m$ [0mcd /home/serveradmin/laravel-dev && ./vendor/bin/pint --test app/Http/Controllers/Api/V1/Test/PruebaOrquestadorController.php tests/Feature/PruebaOrquestadorTest.php routes/api.php 2>&1
+{"tool":"pint","result":"fail","files":[{"path":"routes\/api.php","fixers":["ordered_imports"]}]}
+[0m
+Pint flags an import ordering issue in routes/api.php. Let me fix the import order (alphabetical). The `PruebaOrquestadorController` should be after `ProductoController`? Let me check the ordering. The current imports: EmailVerification, Password, PasswordReset, Register, Session, Test, PruebaOrquestador, Producto, User.
+
+Alphabetically: Email... Password... PasswordReset... PruebaOrquestador... Producto... Session... Test... User. Wait, "Prueba" vs "Producto" vs "Session": P < S, and within P: "Prueba" vs "Producto" — compare "Pr" vs "P," → "Pr" then "ru" vs "ro": "ro" (Producto) < "ru" (Prueba). So Producto before Prueba. Also Session comes after Producto.
+
+Let me let pint fix it directly rather than hand-order.
+[0m$ [0mcd /home/serveradmin/laravel-dev && ./vendor/bin/pint routes/api.php 2>&1
+{"tool":"pint","result":"fixed","files":[{"path":"routes\/api.php","fixers":["ordered_imports"]}]}
+[0m
+[0m$ [0mcd /home/serveradmin/laravel-dev && grep -n "Controller" routes/api.php | head -30
+3:use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
+4:use App\Http\Controllers\Api\V1\Auth\PasswordController;
+5:use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
+6:use App\Http\Controllers\Api\V1\Auth\RegisterController;
+7:use App\Http\Controllers\Api\V1\Auth\SessionController;
+8:use App\Http\Controllers\Api\V1\Producto\ProductoController;
+9:use App\Http\Controllers\Api\V1\Test\PruebaOrquestadorController;
+10:use App\Http\Controllers\Api\V1\Test\TestController;
+11:use App\Http\Controllers\Api\V1\User\UserController;
+15:    Route::get('ping', [TestController::class, 'ping'])->middleware('throttle:60,1');
+18:Route::get('prueba-orquestador', PruebaOrquestadorController::class);
+21:    Route::get('/', [UserController::class, 'index'])->middleware('throttle:60,1');
+22:    Route::post('/', [UserController::class, 'store'])->middleware('throttle:30,1');
+23:    Route::get('/{user}', [UserController::class, 'show'])->middleware('throttle:60,1');
+24:    Route::put('/{user}', [UserController::class, 'update'])->middleware('throttle:30,1');
+25:    Route::delete('/{user}', [UserController::class, 'destroy'])->middleware('throttle:20,1');
+29:    Route::get('/', [ProductoController::class, 'index'])->middleware('throttle:60,1');
+30:    Route::post('/', [ProductoController::class, 'store'])->middleware('throttle:30,1');
+31:    Route::get('/{producto}', [ProductoController::class, 'show'])->middleware('throttle:60,1');
+32:    Route::put('/{producto}', [ProductoController::class, 'update'])->middleware('throttle:30,1');
+33:    Route::delete('/{producto}', [ProductoController::class, 'destroy'])->middleware('throttle:20,1');
+37:    Route::post('register', RegisterController::class)->middleware('throttle:6,1');
+38:    Route::post('login', [SessionController::class, 'store'])->middleware('throttle:5,1');
+39:    Route::post('forgot-password', [PasswordResetController::class, 'requestLink'])->middleware('throttle:5,1');
+40:    Route::post('reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:5,1');
+43:        Route::get('me', [SessionController::class, 'show'])->middleware('throttle:60,1');
+44:        Route::post('logout', [SessionController::class, 'destroy'])->middleware('throttle:20,1');
+45:        Route::put('password', [PasswordController::class, 'update'])->middleware('throttle:10,1');
+46:        Route::post('email/verification-notification', [EmailVerificationController::class, 'send'])->middleware('throttle:6,1');
+47:        Route::get('email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+[0m
+[0m$ [0mcd /home/serveradmin/laravel-dev && ./vendor/bin/pint --test app/Http/Controllers/Api/V1/Test/PruebaOrquestadorController.php tests/Feature/PruebaOrquestadorTest.php routes/api.php 2>&1
+{"tool":"pint","result":"passed"}
+[0m
+Now pint passes. Let me run pint test on all files and re-run the test to confirm, plus run the full test suite to verify no regressions.
+[0m$ [0mcd /home/serveradmin/laravel-dev && ./vendor/bin/phpunit 2>&1 | tail -20
+{"tool":"phpunit","result":"failed","tests":17,"passed":13,"assertions":42,"duration_ms":546,"failed":3,"failures":[{"test":"Tests\\Feature\\Auth\\AuthenticationTest::test_registration_normalizes_email_starts_session_and_sends_verification","file":"/home/serveradmin/laravel-dev/tests/Feature/Auth/AuthenticationTest.php","line":17,"message":"Expected response status code [201] but received 500.\nFailed asserting that 500 is identical to 201.\n\nThe following exception occurred during the last request:\n\nRuntimeException: Session store not set on request. in /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Request.php:626\nStack trace:\n#0 /home/serveradmin/laravel-dev/app/Domain/Auth/Actions/RegisterUser.php(20): Illuminate\\Http\\Request->session()\n#1 /home/serveradmin/laravel-dev/app/Http/Controllers/Api/V1/Auth/RegisterController.php(15): App\\Domain\\Auth\\Actions\\RegisterUser->execute()\n#2 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/ControllerDispatcher.php(46): App\\Http\\Controllers\\Api\\V1\\Auth\\RegisterController->__invoke()\n#3 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Route.php(276): Illuminate\\Routing\\ControllerDispatcher->dispatch()\n#4 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Route.php(216): Illuminate\\Routing\\Route->runController()\n#5 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(822): Illuminate\\Routing\\Route->run()\n#6 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\\Routing\\Router->{closure:Illuminate\\Routing\\Router::runRouteWithinStack():821}()\n#7 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Middleware/SubstituteBindings.php(52): Illuminate\\Pipeline\\Pipeline->{closure:Illuminate\\Pipeline\\Pipeline::prepareDestination():178}()\n#8 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Routing\\Middleware\\SubstituteBindings->handle()\n#9 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(168): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#10 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(93): Illuminate\\Routing\\Middleware\\ThrottleRequests->handleRequest()\n#11 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Routing\\Middleware\\ThrottleRequests->handle()\n#12 /home/serveradmin/laravel-dev/vendor/laravel/sanctum/src/Http/Middleware/EnsureFrontendRequestsAreStateful.php(26): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#13 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful->{closure:Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful::handle():25}()\n#14 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\\Pipeline\\Pipeline->{closure:Illuminate\\Pipeline\\Pipeline::prepareDestination():178}()\n#15 /home/serveradmin/laravel-dev/vendor/laravel/sanctum/src/Http/Middleware/EnsureFrontendRequestsAreStateful.php(25): Illuminate\\Pipeline\\Pipeline->then()\n#16 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful->handle()\n#17 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#18 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\\Pipeline\\Pipeline->then()\n#19 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(800): Illuminate\\Routing\\Router->runRouteWithinStack()\n#20 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(764): Illuminate\\Routing\\Router->runRoute()\n#21 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(753): Illuminate\\Routing\\Router->dispatchToRoute()\n#22 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(200): Illuminate\\Routing\\Router->dispatch()\n#23 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\\Foundation\\Http\\Kernel->{closure:Illuminate\\Foundation\\Http\\Kernel::dispatchToRouter():197}()\n#24 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\\Pipeline\\Pipeline->{closure:Illuminate\\Pipeline\\Pipeline::prepareDestination():178}()\n#25 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest->handle()\n#26 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\ConvertEmptyStringsToNull->handle()\n#27 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#28 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest->handle()\n#29 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\TrimStrings->handle()\n#30 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#31 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\ValidatePostSize->handle()\n#32 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(110): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#33 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\PreventRequestsDuringMaintenance->handle()\n#34 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(74): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#35 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\HandleCors->handle()\n#36 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#37 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\TrustProxies->handle()\n#38 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#39 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\InvokeDeferredCallbacks->handle()\n#40 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePathEncoding.php(28): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#41 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\ValidatePathEncoding->handle()\n#42 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#43 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(175): Illuminate\\Pipeline\\Pipeline->then()\n#44 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(144): Illuminate\\Foundation\\Http\\Kernel->sendRequestThroughRouter()\n#45 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(638): Illuminate\\Foundation\\Http\\Kernel->handle()\n#46 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(604): Illuminate\\Foundation\\Testing\\TestCase->call()\n#47 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(411): Illuminate\\Foundation\\Testing\\TestCase->json()\n#48 /home/serveradmin/laravel-dev/tests/Feature/Auth/AuthenticationTest.php(21): Illuminate\\Foundation\\Testing\\TestCase->postJson()\n#49 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(1318): Tests\\Feature\\Auth\\AuthenticationTest->test_registration_normalizes_email_starts_session_and_sends_verification()\n#50 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(1355): PHPUnit\\Framework\\TestCase->invokeTestMethod()\n#51 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(521): PHPUnit\\Framework\\TestCase->runTest()\n#52 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(99): PHPUnit\\Framework\\TestCase->runBare()\n#53 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(361): PHPUnit\\Framework\\TestRunner->run()\n#54 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\\Framework\\TestCase->run()\n#55 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\\Framework\\TestSuite->run()\n#56 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\\Framework\\TestSuite->run()\n#57 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\\Framework\\TestSuite->run()\n#58 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/TextUI/Application.php(229): PHPUnit\\TextUI\\TestRunner->run()\n#59 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/phpunit(104): PHPUnit\\TextUI\\Application->run()\n#60 /home/serveradmin/laravel-dev/vendor/bin/phpunit(122): include('...')\n#61 {main}\n\n----------------------------------------------------------------------------------\n\nSession store not set on request."},{"test":"Tests\\Feature\\Auth\\AuthenticationTest::test_registration_never_exposes_password","file":"/home/serveradmin/laravel-dev/tests/Feature/Auth/AuthenticationTest.php","line":115,"message":"Expected response status code [201] but received 500.\nFailed asserting that 500 is identical to 201.\n\nThe following exception occurred during the last request:\n\nRuntimeException: Session store not set on request. in /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Request.php:626\nStack trace:\n#0 /home/serveradmin/laravel-dev/app/Domain/Auth/Actions/RegisterUser.php(20): Illuminate\\Http\\Request->session()\n#1 /home/serveradmin/laravel-dev/app/Http/Controllers/Api/V1/Auth/RegisterController.php(15): App\\Domain\\Auth\\Actions\\RegisterUser->execute()\n#2 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/ControllerDispatcher.php(46): App\\Http\\Controllers\\Api\\V1\\Auth\\RegisterController->__invoke()\n#3 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Route.php(276): Illuminate\\Routing\\ControllerDispatcher->dispatch()\n#4 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Route.php(216): Illuminate\\Routing\\Route->runController()\n#5 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(822): Illuminate\\Routing\\Route->run()\n#6 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\\Routing\\Router->{closure:Illuminate\\Routing\\Router::runRouteWithinStack():821}()\n#7 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Middleware/SubstituteBindings.php(52): Illuminate\\Pipeline\\Pipeline->{closure:Illuminate\\Pipeline\\Pipeline::prepareDestination():178}()\n#8 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Routing\\Middleware\\SubstituteBindings->handle()\n#9 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(168): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#10 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(93): Illuminate\\Routing\\Middleware\\ThrottleRequests->handleRequest()\n#11 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Routing\\Middleware\\ThrottleRequests->handle()\n#12 /home/serveradmin/laravel-dev/vendor/laravel/sanctum/src/Http/Middleware/EnsureFrontendRequestsAreStateful.php(26): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#13 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful->{closure:Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful::handle():25}()\n#14 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\\Pipeline\\Pipeline->{closure:Illuminate\\Pipeline\\Pipeline::prepareDestination():178}()\n#15 /home/serveradmin/laravel-dev/vendor/laravel/sanctum/src/Http/Middleware/EnsureFrontendRequestsAreStateful.php(25): Illuminate\\Pipeline\\Pipeline->then()\n#16 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful->handle()\n#17 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#18 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\\Pipeline\\Pipeline->then()\n#19 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(800): Illuminate\\Routing\\Router->runRouteWithinStack()\n#20 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(764): Illuminate\\Routing\\Router->runRoute()\n#21 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(753): Illuminate\\Routing\\Router->dispatchToRoute()\n#22 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(200): Illuminate\\Routing\\Router->dispatch()\n#23 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\\Foundation\\Http\\Kernel->{closure:Illuminate\\Foundation\\Http\\Kernel::dispatchToRouter():197}()\n#24 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\\Pipeline\\Pipeline->{closure:Illuminate\\Pipeline\\Pipeline::prepareDestination():178}()\n#25 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest->handle()\n#26 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\ConvertEmptyStringsToNull->handle()\n#27 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#28 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest->handle()\n#29 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\TrimStrings->handle()\n#30 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#31 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\ValidatePostSize->handle()\n#32 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(110): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#33 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\PreventRequestsDuringMaintenance->handle()\n#34 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(74): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#35 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\HandleCors->handle()\n#36 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#37 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\TrustProxies->handle()\n#38 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#39 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\InvokeDeferredCallbacks->handle()\n#40 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePathEncoding.php(28): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#41 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\ValidatePathEncoding->handle()\n#42 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#43 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(175): Illuminate\\Pipeline\\Pipeline->then()\n#44 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(144): Illuminate\\Foundation\\Http\\Kernel->sendRequestThroughRouter()\n#45 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(638): Illuminate\\Foundation\\Http\\Kernel->handle()\n#46 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(604): Illuminate\\Foundation\\Testing\\TestCase->call()\n#47 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(411): Illuminate\\Foundation\\Testing\\TestCase->json()\n#48 /home/serveradmin/laravel-dev/tests/Feature/Auth/AuthenticationTest.php(119): Illuminate\\Foundation\\Testing\\TestCase->postJson()\n#49 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(1318): Tests\\Feature\\Auth\\AuthenticationTest->test_registration_never_exposes_password()\n#50 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(1355): PHPUnit\\Framework\\TestCase->invokeTestMethod()\n#51 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(521): PHPUnit\\Framework\\TestCase->runTest()\n#52 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(99): PHPUnit\\Framework\\TestCase->runBare()\n#53 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(361): PHPUnit\\Framework\\TestRunner->run()\n#54 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\\Framework\\TestCase->run()\n#55 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\\Framework\\TestSuite->run()\n#56 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\\Framework\\TestSuite->run()\n#57 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\\Framework\\TestSuite->run()\n#58 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/TextUI/Application.php(229): PHPUnit\\TextUI\\TestRunner->run()\n#59 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/phpunit(104): PHPUnit\\TextUI\\Application->run()\n#60 /home/serveradmin/laravel-dev/vendor/bin/phpunit(122): include('...')\n#61 {main}\n\n----------------------------------------------------------------------------------\n\nSession store not set on request."},{"test":"Tests\\Feature\\Auth\\AuthenticationTest::test_login_me_and_logout_use_the_session","file":"/home/serveradmin/laravel-dev/tests/Feature/Auth/AuthenticationTest.php","line":130,"message":"Expected response status code [200] but received 500.\nFailed asserting that 500 is identical to 200.\n\nThe following exception occurred during the last request:\n\nRuntimeException: Session store not set on request. in /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Request.php:626\nStack trace:\n#0 /home/serveradmin/laravel-dev/app/Domain/Auth/Actions/AttemptLogin.php(17): Illuminate\\Http\\Request->session()\n#1 /home/serveradmin/laravel-dev/app/Http/Controllers/Api/V1/Auth/SessionController.php(18): App\\Domain\\Auth\\Actions\\AttemptLogin->execute()\n#2 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/ControllerDispatcher.php(46): App\\Http\\Controllers\\Api\\V1\\Auth\\SessionController->store()\n#3 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Route.php(276): Illuminate\\Routing\\ControllerDispatcher->dispatch()\n#4 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Route.php(216): Illuminate\\Routing\\Route->runController()\n#5 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(822): Illuminate\\Routing\\Route->run()\n#6 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\\Routing\\Router->{closure:Illuminate\\Routing\\Router::runRouteWithinStack():821}()\n#7 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Middleware/SubstituteBindings.php(52): Illuminate\\Pipeline\\Pipeline->{closure:Illuminate\\Pipeline\\Pipeline::prepareDestination():178}()\n#8 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Routing\\Middleware\\SubstituteBindings->handle()\n#9 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(168): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#10 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(93): Illuminate\\Routing\\Middleware\\ThrottleRequests->handleRequest()\n#11 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Routing\\Middleware\\ThrottleRequests->handle()\n#12 /home/serveradmin/laravel-dev/vendor/laravel/sanctum/src/Http/Middleware/EnsureFrontendRequestsAreStateful.php(26): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#13 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful->{closure:Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful::handle():25}()\n#14 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\\Pipeline\\Pipeline->{closure:Illuminate\\Pipeline\\Pipeline::prepareDestination():178}()\n#15 /home/serveradmin/laravel-dev/vendor/laravel/sanctum/src/Http/Middleware/EnsureFrontendRequestsAreStateful.php(25): Illuminate\\Pipeline\\Pipeline->then()\n#16 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful->handle()\n#17 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#18 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(821): Illuminate\\Pipeline\\Pipeline->then()\n#19 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(800): Illuminate\\Routing\\Router->runRouteWithinStack()\n#20 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(764): Illuminate\\Routing\\Router->runRoute()\n#21 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Routing/Router.php(753): Illuminate\\Routing\\Router->dispatchToRoute()\n#22 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(200): Illuminate\\Routing\\Router->dispatch()\n#23 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(180): Illuminate\\Foundation\\Http\\Kernel->{closure:Illuminate\\Foundation\\Http\\Kernel::dispatchToRouter():197}()\n#24 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\\Pipeline\\Pipeline->{closure:Illuminate\\Pipeline\\Pipeline::prepareDestination():178}()\n#25 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest->handle()\n#26 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\ConvertEmptyStringsToNull->handle()\n#27 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#28 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest->handle()\n#29 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\TrimStrings->handle()\n#30 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#31 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\ValidatePostSize->handle()\n#32 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(110): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#33 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\PreventRequestsDuringMaintenance->handle()\n#34 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(74): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#35 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\HandleCors->handle()\n#36 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#37 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\TrustProxies->handle()\n#38 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#39 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Foundation\\Http\\Middleware\\InvokeDeferredCallbacks->handle()\n#40 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePathEncoding.php(28): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#41 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(219): Illuminate\\Http\\Middleware\\ValidatePathEncoding->handle()\n#42 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(137): Illuminate\\Pipeline\\Pipeline->{closure:{closure:Illuminate\\Pipeline\\Pipeline::carry():194}:195}()\n#43 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(175): Illuminate\\Pipeline\\Pipeline->then()\n#44 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(144): Illuminate\\Foundation\\Http\\Kernel->sendRequestThroughRouter()\n#45 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(638): Illuminate\\Foundation\\Http\\Kernel->handle()\n#46 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(604): Illuminate\\Foundation\\Testing\\TestCase->call()\n#47 /home/serveradmin/laravel-dev/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(411): Illuminate\\Foundation\\Testing\\TestCase->json()\n#48 /home/serveradmin/laravel-dev/tests/Feature/Auth/AuthenticationTest.php(134): Illuminate\\Foundation\\Testing\\TestCase->postJson()\n#49 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(1318): Tests\\Feature\\Auth\\AuthenticationTest->test_login_me_and_logout_use_the_session()\n#50 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(1355): PHPUnit\\Framework\\TestCase->invokeTestMethod()\n#51 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(521): PHPUnit\\Framework\\TestCase->runTest()\n#52 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(99): PHPUnit\\Framework\\TestCase->runBare()\n#53 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestCase.php(361): PHPUnit\\Framework\\TestRunner->run()\n#54 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\\Framework\\TestCase->run()\n#55 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\\Framework\\TestSuite->run()\n#56 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/Framework/TestSuite.php(374): PHPUnit\\Framework\\TestSuite->run()\n#57 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\\Framework\\TestSuite->run()\n#58 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/src/TextUI/Application.php(229): PHPUnit\\TextUI\\TestRunner->run()\n#59 /home/serveradmin/laravel-dev/vendor/phpunit/phpunit/phpunit(104): PHPUnit\\TextUI\\Application->run()\n#60 /home/serveradmin/laravel-dev/vendor/bin/phpunit(122): include('...')\n#61 {main}\n\n----------------------------------------------------------------------------------\n\nSession store not set on request."}],"errors":1,"error_details":[{"test":"Tests\\Feature\\ExampleTest::test_the_application_returns_a_successful_response","file":"/home/serveradmin/laravel-dev/tests/Feature/ExampleTest.php","line":13,"message":"No application encryption key has been specified."}]}
+[0m
+My new test passes (1 test, 5 assertions passed). The other failures are pre-existing issues unrelated to my change — they occur in `Auth/AuthenticationTest`, `ExampleTest`, and involve session/store issues in pre-existing auth code (not touched by me). My endpoint test ran green and pint passes on my files.
+
+Let me verify these failures are pre-existing and unrelated by confirming my test passes in isolation (it did) and that the failures are in files I didn't touch. The failures are in `tests/Feature/Auth/AuthenticationTest.php` and `tests/Feature/ExampleTest.php` — entirely unrelated to my change.
+
+Let me confirm my new test passes cleanly and run pint on the whole repo to ensure I didn't introduce anything.
+[0m$ [0mcd /home/serveradmin/laravel-dev && ./vendor/bin/phpunit tests/Feature/PruebaOrquestadorTest.php 2>&1 && echo "---PINT---" && ./vendor/bin/pint --test 2>&1 | tail -20
+{"tool":"phpunit","result":"passed","tests":1,"passed":1,"assertions":5,"duration_ms":119}
+---PINT---
+{"tool":"pint","result":"fail","files":[{"path":"bootstrap\/app.php","fixers":["ordered_imports"]},{"path":"config\/sanctum.php","fixers":["fully_qualified_strict_types","ordered_imports"]},{"path":"app\/Models\/User.php","fixers":["ordered_imports"]},{"path":"app\/Domain\/Auth\/Actions\/AttemptLogin.php","fixers":["unary_operator_spaces","not_operator_with_successor_space","blank_line_before_statement"]},{"path":"app\/Http\/Requests\/Auth\/ResetPasswordRequest.php","fixers":["class_attributes_separation","braces_position","statement_indentation"]},{"path":"app\/Http\/Requests\/Auth\/UpdatePasswordRequest.php","fixers":["class_attributes_separation","braces_position","statement_indentation"]},{"path":"app\/Http\/Requests\/Auth\/ForgotPasswordRequest.php","fixers":["class_attributes_separation","braces_position","statement_indentation"]},{"path":"app\/Http\/Requests\/Auth\/RegisterRequest.php","fixers":["braces_position","statement_indentation"]},{"path":"app\/Http\/Requests\/Auth\/LoginRequest.php","fixers":["class_attributes_separation","braces_position","statement_indentation"]},{"path":"app\/Http\/Controllers\/Api\/V1\/Auth\/SessionController.php","fixers":["blank_line_before_statement"]},{"path":"app\/Http\/Controllers\/Api\/V1\/Auth\/RegisterController.php","fixers":["blank_line_before_statement"]},{"path":"app\/Http\/Controllers\/Api\/V1\/Auth\/PasswordResetController.php","fixers":["blank_line_before_statement"]},{"path":"app\/Http\/Controllers\/Api\/V1\/Auth\/PasswordController.php","fixers":["blank_line_before_statement"]},{"path":"app\/Http\/Controllers\/Api\/V1\/Auth\/EmailVerificationController.php","fixers":["unary_operator_spaces","not_operator_with_successor_space","blank_line_before_statement"]}]}
+[0m
+The full-repo pint failures are all in pre-existing files I did not touch (auth controllers, bootstrap, config, models, requests). My files (`routes/api.php`, the new controller, and the new test) pass pint, as confirmed earlier with `--test` on just those files.
+
+The task's scope is isolated: I should not modify pre-existing files' formatting. My changes are clean. Let me confirm git status to report exactly what I created/modified.
+[0m$ [0mcd /home/serveradmin/laravel-dev && git status --short && echo "---DIFF routes---" && git diff routes/api.php
+M .env.example
+ D .npmrc
+ M app/Models/User.php
+ M app/Providers/AppServiceProvider.php
+ M bootstrap/app.php
+ M composer.json
+ M composer.lock
+ M config/app.php
+ M config/session.php
+ M database/seeders/DatabaseSeeder.php
+ D package.json
+ D public/.htaccess
+ D public/favicon.ico
+ D public/index.php
+ D public/robots.txt
+ D resources/css/app.css
+ D resources/js/app.js
+ D resources/views/welcome.blade.php
+ D storage/app/.gitignore
+ D storage/app/private/.gitignore
+ D storage/app/public/.gitignore
+ D vite.config.js
+?? app/Domain/
+?? app/Http/Controllers/Api/
+?? app/Http/Requests/
+?? app/Http/Resources/
+?? app/Models/Producto.php
+?? config/cors.php
+?? config/sanctum.php
+?? database/factories/ProductoFactory.php
+?? database/migrations/2026_08_26_210000_create_productos_table.php
+?? database/migrations/2026_08_26_223701_create_orders_table.php
+?? database/seeders/ProductoSeeder.php
+?? docs/
+?? routes/api.php
+?? tests/Feature/Auth/
+?? tests/Feature/PruebaOrquestadorTest.php
+?? tests/Feature/TestPingTest.php
+---DIFF routes---
+[0m
+Interesting — `routes/api.php` shows as untracked (`??`), meaning it's a pre-existing new file not yet committed (it existed before my change, as "work ajeno"). I preserved it and only added my minimal route. My git diff shows nothing for it because it's untracked, but my edits are in place as verified earlier (import at line 9, route at line 18).
+
+Let me verify the git status of just my specific artifacts:
+
+- `routes/api.php` is pre-existing untracked work — I preserved it and only added my route (verified at lines 9 and 18).
+- `app/Http/Controllers/Api/` — my controller is inside this tree, but the whole `Api/` dir is untracked (pre-existing work, e.g. Test/Producto/User controllers). My file: `app/Http/Controllers/Api/V1/Test/PruebaOrquestadorController.php` (new).
+- `tests/Feature/PruebaOrquestadorTest.php` (new).
+
+All my changes are new files or minimal additions to existing untracked work. I did not commit or push, as required.
+
+The change is complete and verified. Here's my report.
+
+## Reporte
+
+**Endpoint implementado:** `GET /api/prueba-orquestador` → responde `200` con JSON:
+
+```json
+{
+  "status": "ok",
+  "servicio": "backend",
+  "message": "COMUNICACION_BACKEND_OK"
+}
+```
+
+### Archivos
+- **Nuevo (aplicación):** `app/Http/Controllers/Api/V1/Test/PruebaOrquestadorController.php` — invokable, patrón consistente con `TestController`.
+- **Nuevo (test):** `tests/Feature/PruebaOrquestadorTest.php` — test específico del endpoint.
+- **Modificado (mínimo):** `routes/api.php` — solo agregué el import y una línea de ruta mínima (`Route::get('prueba-orquestador', PruebaOrquestadorController::class);`). El prefijo `/api` lo aplica `withRouting(api:...)` en `bootstrap/app.php`, por eso el path queda en `/api/prueba-orquestador`. No reorganicé ni sobrescribí el resto del archivo.
+
+### Resultados de validación
+- **Test del endpoint:** `PASSED` (1 test, 5 assertions) — `./vendor/bin/phpunit tests/Feature/PruebaOrquestadorTest.php`.
+- **Pint** en mis archivos (routes/api.php, controller, test): `PASSED`.
+
+### Notas
+- El suite completo muestra 3 fallos y 1 error, pero **todos son preexistentes y fuera de mi alcance** (`tests/Feature/Auth/AuthenticationTest.php` — error de sesión en el código de auth existente; `tests/Feature/ExampleTest.php` — falta APP_KEY). No los toqué, y no hay regresión inducida por esta modificación.
+- Pint de todo el repo también marca archivos preexistentes (auth, bootstrap, config, etc.); ninguno es mío.
+- No hice commit ni push; se preservan todos los cambios locales existentes.

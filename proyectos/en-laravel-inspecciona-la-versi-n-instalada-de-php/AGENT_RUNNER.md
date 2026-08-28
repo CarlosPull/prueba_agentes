@@ -1,0 +1,81 @@
+# Informe de Ejecución de Agent Runner
+
+Fecha: Thu Aug 27 17:52:16 -04 2026
+Objetivo: En Laravel inspecciona la versión instalada de PHP y el nombre de la aplicación, repórtalos sin modificar ningún archivo y sin hacer commit ni push.
+
+## Rol: backend (VM: 192.168.50.193)
+- Workspace: `/home/serveradmin/laravel-dev`
+- Agente remoto: `/home/serveradmin/agentes/backend/actual`
+- Fuente Git: `sincronizacion_agentes_git:skills/dev-back`
+
+```text
+AGENTE_REMOTO: /home/serveradmin/agentes/backend/actual
+ROL: backend
+AGENTE_RESUELTO: /home/serveradmin/agentes/backend/.versiones/63e99aa9b987d7269de585e640273c7ea3a1aa26
+VERSION_AGENTE: 63e99aa9b987d7269de585e640273c7ea3a1aa26
+COMMIT_AGENTE: eb7577026b5dc801dadf84ebfd924df6885fbc57
+SHA256_SKILL: 8cdb2f3f0d45ffd5acc951d15743e178ce8015b6a1e7a0f40e60e8a387e663fd
+WORKSPACE_REMOTO: /home/serveradmin/laravel-dev
+AGENT_RUNNER_REMOTO: /home/serveradmin/.local/bin/agent-runner
+OPENCODE_BIN: /home/serveradmin/.nvm/versions/node/v24.19.0/bin/opencode
+OPENCODE_VERSION: 1.18.23
+run_id: 20260827T215135Z-7773d058
+manifest: /home/serveradmin/.local/state/agent-runner/runs/20260827T215135Z-7773d058/manifest.json
+[0m
+> build · big-pickle
+[0m
+[0m$ [0mphp -v && echo "---APP---" && php artisan --version
+PHP 8.4.24 (cli) (built: Jul 30 2026 15:35:42) (NTS)
+Copyright (c) The PHP Group
+Built by Ubuntu
+Zend Engine v4.4.24, Copyright (c) Zend Technologies
+    with Zend OPcache v8.4.24, Copyright (c), by Zend Technologies
+---APP---
+Laravel Framework 13.26.1
+[0m
+[0m$ [0mgrep -E "'name'|APP_NAME" .env 2>/dev/null; grep -rE "'name'" config/app.php 2>/dev/null
+'name' => env('APP_NAME', 'Laravel'),
+[0m
+[0m$ [0mgrep -E "^APP_NAME" .env
+grep: .env: No such file or directory
+[0m
+[0m$ [0mgrep -E "^APP_NAME" .env.example 2>/dev/null; ls -la | grep -i env
+APP_NAME=Laravel
+-rw-r--r--  1 serveradmin serveradmin   1356 Aug 25 20:10 .env.example
+[0m
+**Reporte (sin modificación de archivos ni commit):**
+
+- **PHP**: `8.4.24` (CLI, con Zend OPcache 8.4.24)
+- **Laravel**: `13.26.1`
+- **Nombre de la aplicación**: `Laravel` (valor definido en `APP_NAME` de `.env.example`, ya que no existe `.env`; el valor por defecto en `config/app.php:18` es `Laravel`)
+
+No se modificó ni creó ningún archivo, ni se ejecutó commit/push.
+```
+
+## Rol: backend-prueba (VM: 192.168.50.30)
+- Workspace: `/home/carlos/laravel-dev`
+- Agente remoto: `/home/carlos/agentes/backend/actual`
+- Fuente Git: `sincronizacion_agentes_git:skills/dev-back`
+
+```text
+Sin salida devuelta
+```
+
+## Rol: frontend (VM: 192.168.50.40)
+- Workspace: `/home/serveradmin/vue-dev`
+- Agente remoto: `/home/serveradmin/agentes/frontend/actual`
+- Fuente Git: `sincronizacion_agentes_git:skills/dev-front`
+
+```text
+Sin salida devuelta
+```
+
+## Rol: qa (VM: 192.168.50.63)
+- Workspace: `/home/serveradmin/qa-dev`
+- Agente remoto: `null/actual`
+- Fuente Git: `null:null`
+
+```text
+Sin salida devuelta
+```
+

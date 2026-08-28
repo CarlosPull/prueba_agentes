@@ -4,9 +4,15 @@ description: Coordinador principal del sistema de agentes. Recibe una solicitud,
 version: 1.0.0
 tools:
   - tools/probar_vms.sh
+  - tools/orquestar.sh
+  - tools/clasificar_tarea.sh
+  - tools/generar_evidencia_agente.sh
   - tools/preparar_proyecto.sh
+  - tools/provisionar_vm.sh
   - tools/instalar_actualizacion_git.sh
   - tools/sincronizar_agente.sh
+  - tools/sincronizar_agente_local.sh
+  - tools/instalar_monitor_local.sh
   - tools/despachar_vm.sh
   - tools/generar_reporte.sh
 ---
@@ -32,10 +38,16 @@ Para realizar la orquestación, el sistema dispone de herramientas especializada
 | Herramienta | Ruta | Función |
 | :--- | :--- | :--- |
 | **Diagnóstico SSH** | `tools/probar_vms.sh` | Comprueba conectividad SSH con todas las VMs configuradas en `vms.json`. |
+| **Entrada automática** | `tools/orquestar.sh "tarea"` | Clasifica el prompt, elige rol y VM, ejecuta el flujo seguro y genera el reporte. |
+| **Clasificador** | `tools/clasificar_tarea.sh "tarea"` | Devuelve `backend`, `frontend`, `fullstack`, `qa` o `security` sin ejecutar agentes. |
+| **Evidencia remota** | `tools/generar_evidencia_agente.sh <rol> <dir>` | Registra en `EVIDENCIA_AGENTES.md` la VM, agente resuelto, versión, commit, OpenCode, workspace y run remoto utilizados. |
 | **Configurador SSH** | `tools/configurar_ssh_vm.sh user@ip` | Copia automáticamente la clave SSH de tu Mac a una nueva VM sin contraseña. |
+| **Provisionador de VM** | `tools/provisionar_vm.sh <rol>` | Instala y verifica runtimes, repositorios, `agent-runner`, agente y actualización Git en una VM nueva. |
 | **Inicializador** | `tools/preparar_proyecto.sh` | Crea la carpeta `proyectos/<slug>/` y guarda `SOLICITUD.md`. |
-| **Instalador Git** | `tools/instalar_actualizacion_git.sh <rol>` | Instala un cron que consulta Git cada minuto y activa únicamente el agente del rol. |
+| **Instalador Git** | `tools/instalar_actualizacion_git.sh <rol>` | Instala un cron con el intervalo definido en `vms.json` y activa únicamente el agente del rol. |
 | **Sincronizador** | `tools/sincronizar_agente.sh <rol>` | Solicita un pull Git inmediato en la VM, sin copiar archivos desde el orquestador. |
+| **Sincronizador local** | `tools/sincronizar_agente_local.sh <perfil>` | Copia por SSH un agente local, lo versiona y activa atómicamente en una VM local. |
+| **Monitor local** | `tools/instalar_monitor_local.sh` | Instala un LaunchAgent de macOS que comprueba perfiles locales cada 30 segundos. |
 | **Despachador Seguro** | `tools/validar_y_despachar.sh <rol> <dir> <tarea>` | Lanza `agent-runner` por SSH y BLOQUEA FÍSICAMENTE cualquier segundo despacho. |
 | **Compilador de Reportes** | `tools/generar_reporte.sh <dir> <tarea>` | Recopila los logs de salida y genera `AGENT_RUNNER.md`. |
 
@@ -45,6 +57,14 @@ Para realizar la orquestación, el sistema dispone de herramientas especializada
 ## Instrucciones del Flujo de Ejecución (Paso a Paso)
 
 Cuando el orquestador recibe una nueva tarea, debe invocar las herramientas en la siguiente secuencia:
+
+La entrada normal para el usuario es un único comando, sin indicar rol, VM ni workspace:
+
+```bash
+./tools/orquestar.sh "tarea"
+```
+
+`orquestar.sh` ejecuta internamente la secuencia siguiente:
 
 ```mermaid
 graph TD
@@ -58,8 +78,18 @@ graph TD
 3. **Fase de Despacho Seguro**: Invocar `tools/validar_y_despachar.sh <rol> "$DIR" "$TAREA"`. El despachador sincroniza automáticamente el agente correspondiente antes de ejecutarlo.
 4. **Fase de Consolidación**: Invocar `tools/generar_reporte.sh` para publicar el reporte consolidado `proyectos/<slug>/AGENT_RUNNER.md`.
 
+Cada despacho crea además `proyectos/<slug>/EVIDENCIA_AGENTES.md` con los metadatos que la VM emitió durante la ejecución. Esta evidencia debe conservarse junto con la bitácora y el reporte.
+
+Para inspeccionar la decisión sin ejecutar ni modificar ninguna VM:
+
+```bash
+./tools/orquestar.sh --clasificar "tarea"
+```
+
 
 ## Clasificación Estricta y Selección de Rol Único
+
+0. **Clasificación automática previa**: el usuario no selecciona el rol. `tools/orquestar.sh` analiza señales deterministas del prompt y elige la entrada correspondiente de `vms.json`. Si no existen señales suficientes o se mezclan dominios sin declarar Full-Stack, termina con `CLASIFICACION_AMBIGUA` y no modifica ninguna VM.
 
 1. **Selección Objetivo por Requisito**:
    - Si la tarea es exclusivamente de **Backend** (Laravel, PHP, API, DB): Despacha **ÚNICAMENTE** a `backend` (`tools/despachar_vm.sh backend ...`). NO despaches a `frontend` ni a otros roles.
