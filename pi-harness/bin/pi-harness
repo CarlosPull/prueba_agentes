@@ -1,0 +1,441 @@
+#!/usr/bin/env bash
+# Harness multiplataforma y fail-closed para ejecutar Pi con políticas por rol.
+set -euo pipefail
+
+HARNESS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+POLICIES_DIR="$HARNESS_ROOT/policies"
+EXTENSION_PATH="$HARNESS_ROOT/extension/index.ts"
+
+ACCION="${1:-}"
+[ -n "$ACCION" ] && shift || true
+
+ROLE=""
+WORKSPACE=""
+AGENT_DIR=""
+BACKEND_REQUESTED="auto"
+TASK=""
+JSON_OUTPUT=0
+DRY_RUN=0
+
+USAGE() {
+  cat <<'EOF'
+Uso:
+  pi-harness doctor --role <rol> --workspace <ruta> --agent-dir <ruta> [--json]
+  pi-harness start  --role <rol> --workspace <ruta> --agent-dir <ruta> [--backend auto|bwrap|seatbelt|appcontainer] [--task "texto"|--task -] [--dry-run]
+EOF
+}
+
+ERROR() {
+  echo "Error: $*" >&2
+  exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --role)
+      [ "$#" -ge 2 ] || ERROR "falta el valor de --role"
+      ROLE="$2"
+      shift 2
+      ;;
+    --workspace)
+      [ "$#" -ge 2 ] || ERROR "falta el valor de --workspace"
+      WORKSPACE="$2"
+      shift 2
+      ;;
+    --agent-dir)
+      [ "$#" -ge 2 ] || ERROR "falta el valor de --agent-dir"
+      AGENT_DIR="$2"
+      shift 2
+      ;;
+    --backend)
+      [ "$#" -ge 2 ] || ERROR "falta el valor de --backend"
+      BACKEND_REQUESTED="$2"
+      shift 2
+      ;;
+    --task)
+      [ "$#" -ge 2 ] || ERROR "falta el valor de --task"
+      TASK="$2"
+      shift 2
+      ;;
+    --json)
+      JSON_OUTPUT=1
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      USAGE
+      exit 0
+      ;;
+    *)
+      ERROR "opción no reconocida: $1"
+      ;;
+  esac
+done
+
+[ "$ACCION" = "doctor" ] || [ "$ACCION" = "start" ] || {
+  USAGE >&2
+  exit 1
+}
+[[ "$ROLE" =~ ^[a-z][a-z0-9_-]*$ ]] || ERROR "rol no válido: '$ROLE'"
+[ -n "$WORKSPACE" ] || ERROR "--workspace es obligatorio"
+[ -n "$AGENT_DIR" ] || ERROR "--agent-dir es obligatorio"
+command -v jq >/dev/null 2>&1 || ERROR "jq es obligatorio"
+
+REALPATH_EXISTING() {
+  local path="$1"
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$path"
+  else
+    (cd "$path" && pwd -P)
+  fi
+}
+
+WORKSPACE="$(REALPATH_EXISTING "$WORKSPACE")" || ERROR "workspace inexistente: $WORKSPACE"
+AGENT_DIR="$(REALPATH_EXISTING "$AGENT_DIR")" || ERROR "agente inexistente: $AGENT_DIR"
+[ -d "$WORKSPACE" ] || ERROR "workspace no es un directorio: $WORKSPACE"
+[ -s "$AGENT_DIR/SKILL.md" ] || ERROR "el agente no contiene SKILL.md: $AGENT_DIR"
+
+POLICY_FILE="$POLICIES_DIR/$ROLE.json"
+[ -s "$POLICY_FILE" ] || ERROR "no existe política para el rol '$ROLE'"
+
+VALIDATE_POLICY() {
+  jq -e --arg role "$ROLE" '
+    .version == 1 and
+    .role == $role and
+    (.read | type == "array") and
+    (.write | type == "array") and
+    (.deny_read | type == "array") and
+    (.deny_write | type == "array") and
+    all(.read[]; type == "string") and
+    all(.write[]; type == "string") and
+    all(.deny_read[]; type == "string") and
+    all(.deny_write[]; type == "string")
+  ' "$POLICY_FILE" >/dev/null || ERROR "política inválida para '$ROLE'"
+
+  local rule
+  while IFS= read -r rule; do
+    [ -n "$rule" ] || ERROR "la política contiene una regla vacía"
+    [ "$rule" = "all other workspace paths" ] && continue
+    case "$rule" in
+      /*|*"../"*|".."|*"/..") ERROR "regla insegura en la política: $rule" ;;
+    esac
+    local literal="${rule%/**}"
+    case "$literal" in
+      *'*'*|*'?'*|*'['*) ERROR "solo se admite el sufijo /** o una ruta exacta: $rule" ;;
+    esac
+  done < <(jq -r '.read[], .write[], .deny_read[], .deny_write[]' "$POLICY_FILE")
+}
+
+VALIDATE_POLICY
+
+DETECT_PLATFORM() {
+  local detected
+  if [ "${PI_HARNESS_TEST_MODE:-0}" = "1" ] && [ -n "${PI_HARNESS_PLATFORM_OVERRIDE:-}" ]; then
+    printf '%s\n' "$PI_HARNESS_PLATFORM_OVERRIDE"
+    return
+  fi
+  detected="$(uname -s 2>/dev/null || true)"
+  case "$detected" in
+    Linux) printf '%s\n' "linux" ;;
+    Darwin) printf '%s\n' "macos" ;;
+    MINGW*|MSYS*|CYGWIN*) printf '%s\n' "windows" ;;
+    *) ERROR "sistema operativo no soportado: ${detected:-desconocido}" ;;
+  esac
+}
+
+PLATFORM="$(DETECT_PLATFORM)"
+
+SELECT_BACKEND() {
+  local requested="$1"
+  if [ "$requested" != "auto" ]; then
+    case "$requested" in
+      bwrap|seatbelt|appcontainer) printf '%s\n' "$requested" ;;
+      *) ERROR "backend no reconocido: $requested" ;;
+    esac
+    return
+  fi
+  case "$PLATFORM" in
+    linux) printf '%s\n' "bwrap" ;;
+    macos) printf '%s\n' "seatbelt" ;;
+    windows) printf '%s\n' "appcontainer" ;;
+    *) ERROR "no existe backend para la plataforma '$PLATFORM'" ;;
+  esac
+}
+
+BACKEND="$(SELECT_BACKEND "$BACKEND_REQUESTED")"
+
+case "$PLATFORM:$BACKEND" in
+  linux:bwrap) SANDBOX_COMMAND="bwrap" ;;
+  macos:seatbelt) SANDBOX_COMMAND="sandbox-exec" ;;
+  windows:appcontainer) SANDBOX_COMMAND="pi-appcontainer" ;;
+  *) ERROR "el backend '$BACKEND' no es compatible con '$PLATFORM'" ;;
+esac
+
+command -v "$SANDBOX_COMMAND" >/dev/null 2>&1 || {
+  echo "AISLAMIENTO_NO_DISPONIBLE: falta '$SANDBOX_COMMAND' para la plataforma '$PLATFORM'." >&2
+  echo "Pi no será ejecutado sin una barrera compatible." >&2
+  exit 4
+}
+
+PI_BIN="$(command -v pi 2>/dev/null || true)"
+PI_VERSION=""
+if [ -n "$PI_BIN" ]; then
+  PI_VERSION="$(pi --version 2>/dev/null | head -n 1 || true)"
+fi
+
+if [ "$ACCION" = "doctor" ]; then
+  READY=true
+  [ -n "$PI_BIN" ] || READY=false
+  if [ "$JSON_OUTPUT" -eq 1 ]; then
+    jq -n \
+      --arg platform "$PLATFORM" \
+      --arg backend "$BACKEND" \
+      --arg sandbox_command "$(command -v "$SANDBOX_COMMAND")" \
+      --arg pi_bin "$PI_BIN" \
+      --arg pi_version "$PI_VERSION" \
+      --arg role "$ROLE" \
+      --arg workspace "$WORKSPACE" \
+      --arg agent_dir "$AGENT_DIR" \
+      --arg policy "$POLICY_FILE" \
+      --argjson ready "$READY" \
+      '{platform:$platform, backend:$backend, sandbox_command:$sandbox_command, pi_bin:$pi_bin, pi_version:$pi_version, role:$role, workspace:$workspace, agent_dir:$agent_dir, policy:$policy, ready:$ready}'
+  else
+    echo "Sistema operativo: $PLATFORM"
+    echo "Backend seleccionado: $BACKEND"
+    echo "Aislamiento: $(command -v "$SANDBOX_COMMAND")"
+    echo "Pi: ${PI_BIN:-no instalado}"
+    echo "Versión de Pi: ${PI_VERSION:-no disponible}"
+    echo "Rol: $ROLE"
+    echo "Workspace: $WORKSPACE"
+    echo "Agente: $AGENT_DIR"
+    echo "Política: $POLICY_FILE"
+    [ "$READY" = true ] && echo "Resultado: LISTO" || echo "Resultado: INCOMPLETO"
+  fi
+  [ "$READY" = true ] || exit 5
+  exit 0
+fi
+
+[ -n "$PI_BIN" ] || ERROR "Pi no está instalado o no está disponible en PATH"
+[ -s "$EXTENSION_PATH" ] || ERROR "no existe la extensión segura: $EXTENSION_PATH"
+
+if [ "$TASK" = "-" ]; then
+  TASK="$(cat)"
+fi
+[ -n "$TASK" ] || ERROR "--task es obligatorio para start"
+
+SHA256_FILE() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(printf '%08x' "$((RANDOM * RANDOM % 4294967295))")"
+RUNS_DIR="${PI_HARNESS_RUNS_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/pi-harness/runs}"
+RUN_DIR="$RUNS_DIR/$RUN_ID"
+RUNTIME_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pi-harness-$RUN_ID.XXXXXX")"
+MANIFEST="$RUN_DIR/manifest.json"
+mkdir -p "$RUN_DIR" "$RUNTIME_DIR/home" "$RUNTIME_DIR/tmp" "$RUNTIME_DIR/xdg/cache" "$RUNTIME_DIR/xdg/config" "$RUNTIME_DIR/xdg/data" "$RUNTIME_DIR/xdg/state"
+chmod 700 "$RUNS_DIR" "$RUN_DIR" "$RUNTIME_DIR" "$RUNTIME_DIR/home"
+
+CLEANUP() {
+  rm -rf "$RUNTIME_DIR"
+}
+trap CLEANUP EXIT INT TERM
+
+if [ -s "$HOME/.pi/agent/auth.json" ]; then
+  mkdir -p "$RUNTIME_DIR/home/.pi/agent"
+  cp "$HOME/.pi/agent/auth.json" "$RUNTIME_DIR/home/.pi/agent/auth.json"
+  chmod 600 "$RUNTIME_DIR/home/.pi/agent/auth.json"
+fi
+
+POLICY_SHA256="$(SHA256_FILE "$POLICY_FILE")"
+SKILL_SHA256="$(SHA256_FILE "$AGENT_DIR/SKILL.md")"
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+jq -n \
+  --arg run_id "$RUN_ID" --arg role "$ROLE" --arg platform "$PLATFORM" \
+  --arg backend "$BACKEND" --arg sandbox_command "$(command -v "$SANDBOX_COMMAND")" \
+  --arg workspace "$WORKSPACE" --arg agent_dir "$AGENT_DIR" \
+  --arg policy "$POLICY_FILE" --arg policy_sha256 "$POLICY_SHA256" \
+  --arg skill_sha256 "$SKILL_SHA256" --arg pi_bin "$PI_BIN" \
+  --arg pi_version "$PI_VERSION" --arg started_at "$STARTED_AT" \
+  '{schema_version:1, run_id:$run_id, engine:"pi", role:$role, platform:$platform, sandbox_backend:$backend, sandbox_command:$sandbox_command, sandbox_enforced:true, workspace:$workspace, agent_dir:$agent_dir, policy:{path:$policy,sha256:$policy_sha256}, skill_sha256:$skill_sha256, pi:{path:$pi_bin,version:$pi_version}, started_at:$started_at, status:"running"}' \
+  > "$MANIFEST"
+chmod 600 "$MANIFEST"
+
+PROMPT_FILE="$RUNTIME_DIR/prompt.md"
+{
+  cat "$AGENT_DIR/SKILL.md"
+  find -H "$AGENT_DIR" -type f -name '*.md' ! -name 'SKILL.md' -print | LC_ALL=C sort | while IFS= read -r resource; do
+    relative="${resource#"$AGENT_DIR/"}"
+    printf '\n---\nRECURSO DEL AGENTE: %s\n' "$relative"
+    cat "$resource"
+  done
+  printf '\n---\nCONTEXTO DE EJECUCIÓN:\nRol: %s\nWorkspace: %s\nAgente: %s\n' "$ROLE" "$WORKSPACE" "$AGENT_DIR"
+  printf '\nTAREA:\n%s\n' "$TASK"
+} > "$PROMPT_FILE"
+chmod 600 "$PROMPT_FILE"
+PROMPT_SHA256="$(SHA256_FILE "$PROMPT_FILE")"
+jq --arg prompt_sha256 "$PROMPT_SHA256" \
+  '.prompt_sha256 = $prompt_sha256' "$MANIFEST" > "$MANIFEST.tmp"
+mv "$MANIFEST.tmp" "$MANIFEST"
+chmod 600 "$MANIFEST"
+
+PI_ARGS=(
+  "$PI_BIN"
+  --mode json
+  --no-session
+  --no-approve
+  --no-context-files
+  --no-extensions
+  --extension "$EXTENSION_PATH"
+  --no-skills
+  --skill "$AGENT_DIR/SKILL.md"
+  --no-prompt-templates
+  --no-themes
+  -p "Ejecuta la tarea incluida en la entrada estándar respetando la política del harness."
+)
+
+export PI_HARNESS_ROLE="$ROLE"
+export PI_HARNESS_WORKSPACE="$WORKSPACE"
+export PI_HARNESS_POLICY="$POLICY_FILE"
+export PI_HARNESS_AUDIT_FILE="$RUN_DIR/tool-calls.jsonl"
+export PI_HARNESS_PLATFORM="$PLATFORM"
+export PI_HARNESS_SANDBOX_BACKEND="$BACKEND"
+export PI_HARNESS_SANDBOX_ENFORCED=1
+export PI_CODING_AGENT_DIR="$RUNTIME_DIR/home/.pi/agent"
+export XDG_CACHE_HOME="$RUNTIME_DIR/xdg/cache"
+export XDG_CONFIG_HOME="$RUNTIME_DIR/xdg/config"
+export XDG_DATA_HOME="$RUNTIME_DIR/xdg/data"
+export XDG_STATE_HOME="$RUNTIME_DIR/xdg/state"
+export TMPDIR="$RUNTIME_DIR/tmp"
+export PI_SKIP_VERSION_CHECK=1
+export PI_TELEMETRY=0
+
+NORMALIZE_RULE() {
+  printf '%s\n' "${1%/**}"
+}
+
+POLICY_PATHS=()
+while IFS= read -r rule; do
+  path="$WORKSPACE/$(NORMALIZE_RULE "$rule")"
+  [ -e "$path" ] && POLICY_PATHS+=("$path")
+done < <(jq -r '.read[], .write[]' "$POLICY_FILE")
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "DRY_RUN"
+  echo "Plataforma: $PLATFORM"
+  echo "Backend: $BACKEND"
+  echo "Pi: $PI_BIN"
+  echo "Rol: $ROLE"
+  echo "Workspace: $WORKSPACE"
+  echo "Agente: $AGENT_DIR"
+  echo "Política: $POLICY_FILE"
+  echo "Run ID: $RUN_ID"
+  jq '.status = "dry-run" | .ended_at = (now | todateiso8601) | .exit_code = 0' "$MANIFEST" > "$MANIFEST.tmp"
+  mv "$MANIFEST.tmp" "$MANIFEST"
+  exit 0
+fi
+
+RUN_BWRAP() {
+  local args=(--die-with-parent --unshare-pid --proc /proc --dev /dev --tmpfs /tmp)
+  local system_path
+  for system_path in /usr /bin /sbin /lib /lib64 /etc /opt; do
+    [ -e "$system_path" ] && args+=(--ro-bind "$system_path" "$system_path")
+  done
+  args+=(--bind "$RUNTIME_DIR/home" "$HOME")
+  args+=(--bind "$RUNTIME_DIR" "$RUNTIME_DIR")
+  args+=(--ro-bind "$HARNESS_ROOT" "$HARNESS_ROOT")
+  args+=(--ro-bind "$AGENT_DIR" "$AGENT_DIR")
+
+  local pi_root
+  pi_root="$(cd "$(dirname "$PI_BIN")/.." && pwd -P)"
+  args+=(--ro-bind "$pi_root" "$pi_root")
+
+  local path
+  for path in "${POLICY_PATHS[@]}"; do
+    args+=(--ro-bind "$path" "$path")
+  done
+  while IFS= read -r rule; do
+    path="$WORKSPACE/$(NORMALIZE_RULE "$rule")"
+    [ -e "$path" ] && args+=(--bind "$path" "$path")
+  done < <(jq -r '.write[]' "$POLICY_FILE")
+
+  args+=(--remount-ro / --remount-ro /tmp --remount-ro /proc)
+  args+=(--setenv HOME "$HOME" --setenv TMPDIR "$RUNTIME_DIR/tmp")
+  args+=(--chdir "$WORKSPACE" -- "${PI_ARGS[@]}")
+  bwrap "${args[@]}" < "$PROMPT_FILE"
+}
+
+SEATBELT_QUOTE() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+RUN_SEATBELT() {
+  local profile="$RUNTIME_DIR/pi-harness.sb"
+  {
+    echo '(version 1)'
+    echo '(deny default)'
+    echo '(allow process*)'
+    echo '(allow network*)'
+    echo '(allow sysctl-read)'
+    echo '(allow mach-lookup)'
+    for path in /System /usr /bin /sbin /Library /private/etc /dev "$HARNESS_ROOT" "$AGENT_DIR" "$(cd "$(dirname "$PI_BIN")/.." && pwd -P)"; do
+      [ -e "$path" ] && printf '(allow file-read* (subpath "%s"))\n' "$(SEATBELT_QUOTE "$path")"
+    done
+    local path
+    for path in "${POLICY_PATHS[@]}"; do
+      printf '(allow file-read* (subpath "%s"))\n' "$(SEATBELT_QUOTE "$path")"
+    done
+    printf '(allow file-read* file-write* (subpath "%s"))\n' "$(SEATBELT_QUOTE "$RUNTIME_DIR")"
+    while IFS= read -r rule; do
+      path="$WORKSPACE/$(NORMALIZE_RULE "$rule")"
+      [ -e "$path" ] && printf '(allow file-read* file-write* (subpath "%s"))\n' "$(SEATBELT_QUOTE "$path")"
+    done < <(jq -r '.write[]' "$POLICY_FILE")
+  } > "$profile"
+  sandbox-exec -f "$profile" "${PI_ARGS[@]}" < "$PROMPT_FILE"
+}
+
+RUN_APPCONTAINER() {
+  pi-appcontainer \
+    --policy "$POLICY_FILE" \
+    --workspace "$WORKSPACE" \
+    --runtime "$RUNTIME_DIR" \
+    -- "${PI_ARGS[@]}" < "$PROMPT_FILE"
+}
+
+echo "run_id: $RUN_ID" >&2
+echo "manifest: $MANIFEST" >&2
+echo "platform: $PLATFORM" >&2
+echo "sandbox_backend: $BACKEND" >&2
+
+RUN_SELECTED_BACKEND() {
+  case "$BACKEND" in
+    bwrap) RUN_BWRAP ;;
+    seatbelt) RUN_SEATBELT ;;
+    appcontainer) RUN_APPCONTAINER ;;
+  esac
+}
+
+set +e
+RUN_SELECTED_BACKEND > "$RUN_DIR/events.jsonl" 2> "$RUN_DIR/stderr.log"
+EXIT_CODE="$?"
+set -e
+chmod 600 "$RUN_DIR/events.jsonl" "$RUN_DIR/stderr.log" "$RUN_DIR/tool-calls.jsonl" 2>/dev/null || true
+cat "$RUN_DIR/events.jsonl"
+cat "$RUN_DIR/stderr.log" >&2
+
+ENDED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+STATUS="completed"
+[ "$EXIT_CODE" -eq 0 ] || STATUS="failed"
+jq --arg ended_at "$ENDED_AT" --arg status "$STATUS" --argjson exit_code "$EXIT_CODE" \
+  '.ended_at = $ended_at | .status = $status | .exit_code = $exit_code' \
+  "$MANIFEST" > "$MANIFEST.tmp"
+mv "$MANIFEST.tmp" "$MANIFEST"
+chmod 600 "$MANIFEST"
+exit "$EXIT_CODE"

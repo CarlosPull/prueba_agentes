@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "role": "backend",
+  "read": [
+    "app/**",
+    "routes/**",
+    "database/**",
+    "tests/**",
+    "config/**",
+    "bootstrap/**",
+    "vendor/**",
+    "storage/framework/**",
+    "composer.json",
+    "composer.lock",
+    "artisan",
+    "phpunit.xml",
+    ".env.example"
+  ],
+  "write": [
+    "app/**",
+    "routes/**",
+    "database/**",
+    "tests/**",
+    "config/**",
+    "bootstrap/cache/**",
+    "storage/framework/**",
+    "storage/logs/**",
+    "composer.json",
+    "composer.lock"
+  ],
+  "deny_read": [
+    ".env",
+    ".git/**",
+    "resources/js/**",
+    "resources/css/**",
+    "all other workspace paths"
+  ],
+  "deny_write": [
+    ".env",
+    ".git/**",
+    "resources/js/**",
+    "resources/css/**",
+    "all other workspace paths"
+  ]
+}

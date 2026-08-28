@@ -1,5 +1,7 @@
 # Provisionamiento automatizado de VMs
 
+> Este documento corresponde al flujo productivo con `agent-runner` y OpenCode. Para preparar una VM experimental con Pi, consulta `PROVISIONAMIENTO_VM_PI.md` y utiliza `tools/provisionar_vm_pi.sh`.
+
 El comando `tools/provisionar_vm.sh` prepara una VM nueva de backend o frontend usando `vms.json` como única fuente de configuración. Cada clave de primer nivel es un perfil de VM y su campo `stack` determina el rol del agente, por lo que pueden existir varios perfiles backend sin reemplazarse. Puede ejecutarse varias veces: instala lo que falta, actualiza repositorios limpios y nunca descarta cambios Git locales.
 
 ## Qué automatiza

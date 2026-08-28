@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "role": "frontend",
+  "read": [
+    "src/**",
+    "public/**",
+    "node_modules/**",
+    "package.json",
+    "package-lock.json",
+    "index.html",
+    "vite.config.js",
+    "tsconfig.json",
+    "README.md"
+  ],
+  "write": [
+    "src/**",
+    "dist/**",
+    "package.json",
+    "package-lock.json",
+    "index.html",
+    "vite.config.js",
+    "tsconfig.json"
+  ],
+  "deny_read": [
+    ".env",
+    ".git/**",
+    "app/**",
+    "database/**",
+    "all other workspace paths"
+  ],
+  "deny_write": [
+    ".env",
+    ".git/**",
+    "app/**",
+    "database/**",
+    "all other workspace paths"
+  ]
+}

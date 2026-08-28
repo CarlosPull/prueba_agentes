@@ -32,11 +32,16 @@ Utilidades auxiliares:
 ./tools/configurar_ssh_vm.sh user@ip                  # copiar llave SSH a VM nueva
 ./tools/provisionar_vm.sh <rol> --con-sudo-interactivo # preparar una VM nueva de extremo a extremo
 ./tools/provisionar_vm.sh <rol> --solo-verificar       # auditar una VM sin instalar dependencias
+./tools/provisionar_vm_pi.sh <rol> --con-sudo-interactivo # preparar una VM nueva con Pi, sin agent-runner/OpenCode
+./tools/provisionar_vm_pi.sh <rol> --solo-verificar    # auditar la instalación experimental de Pi
+./tools/provisionar_vm_pi.sh <rol> --solo-configurar   # crear interactivamente el perfil en vms.json sin usar SSH
 ./tools/instalar_actualizacion_git.sh <rol>            # instalar el pull Git automático (una vez por VM)
 ./tools/sincronizar_agente.sh <rol>                   # solicitar inmediatamente un pull Git en la VM
 ./tools/sincronizar_agente_local.sh <perfil-vm>       # copiar y activar inmediatamente un agente local
 ./tools/instalar_monitor_local.sh                     # instalar monitor macOS cada 30 segundos
 ./tools/despachar_vm.sh <rol> <dir> "tarea"           # despacho directo (sin lock; usar validar_y_despachar en su lugar)
+./tools/pi_harness.sh doctor ...                      # auditar localmente la futura ejecución con Pi
+./tools/pi_harness.sh start ...                       # probar el harness de Pi sin pasar por el despachador
 ```
 
 > **Importante**: `despachar_vm.sh` invoca primero `sincronizar_agente.sh`, que ordena a la VM consultar Git; no copia archivos desde la Mac. Cada rol declara en `vms.json` su `git_branch`, `git_agent_path` y `remote_agent`. La VM construye el prompt leyendo `remote_agent/actual/SKILL.md` y los recursos Markdown asociados.
@@ -54,6 +59,7 @@ skills/                        # Agentes y sus instrucciones
 
 opencode.json                  # Permisos de directorios externos + default_agent: dev-back
 vms.json                       # IPs, usuarios, workspaces y rutas de agent-runner
+pi-harness/                    # harness experimental de Pi, extensión y políticas por rol
 proyectos/<slug>/              # salida: SOLICITUD.md, AGENT_RUNNER.md, *_output.log
 tests/                         # pruebas aisladas con remoto Git y dobles de SSH/agent-runner
 tools/                         # herramientas locales y bootstraps remotos en shell
@@ -79,6 +85,8 @@ tools/                         # herramientas locales y bootstraps remotos en sh
 - La configuración de VMs se lee de `vms.json`. Las claves son perfiles de VM y `stack` indica el rol; esto permite perfiles adicionales como `backend-prueba` sin reemplazar `backend`.
 - `opencode.json` permite acceso a directorios externos: `/home/serveradmin/laravel-dev/**`, `/home/serveradmin/vue-dev/**`, `/home/serveradmin/agentes/**`, `~/.local/state/agent-runner/runs/**`.
 - **Solo `backend` y `frontend` se despachan vía tools/**. Los agentes `qa` y `dev-security` no tienen despacho automatizado; se definen pero no se invocan desde las herramientas actuales.
+- **Pi todavía no forma parte del despacho**. `tools/provisionar_vm_pi.sh` puede preparar por separado una VM de prueba con Pi y Bubblewrap, pero no sustituye el despachador productivo. `pi-harness/` aplica la ejecución fail-closed: Linux selecciona Bubblewrap, macOS selecciona Seatbelt y Windows exige el adaptador `pi-appcontainer`. El flujo productivo continúa usando `agent-runner` hasta una etapa posterior.
+- Si `provisionar_vm_pi.sh` recibe un perfil inexistente, solicita interactivamente IP, usuario, stack, fuentes y versiones, y lo agrega atómicamente a `vms.json`. La rama del agente usa como valor predeterminado la rama Git actual.
 
 ## Externalidades
 
