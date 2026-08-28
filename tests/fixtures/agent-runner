@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-prompt="$(cat)"
-printf '%s\n' "$prompt" > "$FAKE_RUNNER_PROMPT"
-echo "EJECUCIÓN_REMOTA_SIMULADA: OK"

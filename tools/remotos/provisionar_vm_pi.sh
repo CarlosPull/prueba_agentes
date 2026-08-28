@@ -140,6 +140,7 @@ VERIFICAR() {
   if command -v bwrap >/dev/null 2>&1; then
     bwrap --ro-bind / / --dev /dev --proc /proc -- true >/dev/null 2>&1 || {
       echo "❌ Bubblewrap está instalado, pero el sistema no permite crear el aislamiento"
+      echo "   En Ubuntu 24.04 vuelve a ejecutar el provisionador con --con-sudo-interactivo para instalar su perfil AppArmor."
       errores=1
     }
   else

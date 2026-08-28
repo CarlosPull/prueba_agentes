@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VMS_CONF="$ROOT/vms.json"
+VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$ROOT/vms.json}"
 ROLE="${1:-}"
 
 if [ -z "$ROLE" ]; then

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VMS_CONF="$ROOT/vms.json"
+VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$ROOT/vms.json}"
 
 ROLE="${1:-}"
 PROJECT_DIR="${2:-}"
@@ -14,7 +14,7 @@ if [ -z "$ROLE" ] || [ -z "$PROJECT_DIR" ]; then
 fi
 
 LOG_FILE="$PROJECT_DIR/${ROLE}_output.log"
-EVIDENCE_FILE="$PROJECT_DIR/EVIDENCIA_AGENTES.md"
+EVIDENCE_FILE="$PROJECT_DIR/EVIDENCIA_${ROLE}.md"
 
 if [ ! -s "$LOG_FILE" ]; then
   echo "Error: no existe una bitácora para construir evidencia: $LOG_FILE" >&2
@@ -31,17 +31,19 @@ VALOR_LOG() {
   sed -n "s/^${clave}: //p" "$LOG_FILE" | head -n 1
 }
 
-ip="$(jq -r --arg role "$ROLE" '.[$role].ip // ""' "$VMS_CONF")"
-user="$(jq -r --arg role "$ROLE" '.[$role].user // ""' "$VMS_CONF")"
+profile="$(VALOR_LOG "PERFIL_VM")"
+[ -n "$profile" ] || profile="$(VALOR_LOG "PERFIL_VM_LOCAL")"
+ip="$(jq -r --arg profile "$profile" '.[$profile].ip // ""' "$VMS_CONF")"
+user="$(jq -r --arg profile "$profile" '.[$profile].user // ""' "$VMS_CONF")"
 agente="$(VALOR_LOG "AGENTE_REMOTO")"
 agente_resuelto="$(VALOR_LOG "AGENTE_RESUELTO")"
 version="$(VALOR_LOG "VERSION_AGENTE")"
 commit="$(VALOR_LOG "COMMIT_AGENTE")"
 skill_sha256="$(VALOR_LOG "SHA256_SKILL")"
 workspace="$(VALOR_LOG "WORKSPACE_REMOTO")"
-runner="$(VALOR_LOG "AGENT_RUNNER_REMOTO")"
-opencode_bin="$(VALOR_LOG "OPENCODE_BIN")"
-opencode_version="$(VALOR_LOG "OPENCODE_VERSION")"
+pi_harness="$(VALOR_LOG "PI_HARNESS_REMOTO")"
+pi_bin="$(VALOR_LOG "PI_BIN")"
+pi_version="$(VALOR_LOG "PI_VERSION")"
 run_id="$(VALOR_LOG "run_id")"
 manifest="$(VALOR_LOG "manifest")"
 
@@ -50,33 +52,25 @@ if [ -z "$agente" ] || [ -z "$version" ] || [ -z "$run_id" ]; then
   exit 1
 fi
 
-if [ ! -f "$EVIDENCE_FILE" ]; then
-  {
-    echo "# Evidencia de agentes remotos utilizados"
-    echo ""
-    echo "Este archivo se genera desde metadatos emitidos dentro de cada VM durante la ejecución por SSH."
-    echo ""
-  } > "$EVIDENCE_FILE"
-fi
-
 {
   echo "## Ejecución del rol: $ROLE"
   echo ""
   echo "- Fecha registrada por el orquestador: $(date '+%Y-%m-%d %H:%M:%S %Z')"
   echo "- VM: \`$user@$ip\`"
+  echo "- Perfil de VM: \`$profile\`"
   echo "- Agente solicitado: \`$agente\`"
   echo "- Agente resuelto en la VM: \`${agente_resuelto:-no disponible}\`"
   echo "- Versión del agente: \`$version\`"
   echo "- Commit Git fuente del agente: \`${commit:-no disponible}\`"
   echo "- SHA-256 de SKILL.md: \`${skill_sha256:-no disponible}\`"
   echo "- Workspace remoto: \`${workspace:-no disponible}\`"
-  echo "- Agent Runner remoto: \`${runner:-no disponible}\`"
-  echo "- OpenCode remoto: \`${opencode_bin:-no disponible}\`"
-  echo "- Versión de OpenCode: \`${opencode_version:-no disponible}\`"
+  echo "- Pi Harness remoto: \`${pi_harness:-no disponible}\`"
+  echo "- Pi remoto: \`${pi_bin:-no disponible}\`"
+  echo "- Versión de Pi: \`${pi_version:-no disponible}\`"
   echo "- Run ID: \`$run_id\`"
   echo "- Manifiesto remoto: \`${manifest:-no disponible}\`"
   echo "- Bitácora local: \`${ROLE}_output.log\`"
   echo ""
-} >> "$EVIDENCE_FILE"
+} > "$EVIDENCE_FILE"
 
 echo "$EVIDENCE_FILE"

@@ -2,7 +2,23 @@
 # Harness multiplataforma y fail-closed para ejecutar Pi con políticas por rol.
 set -euo pipefail
 
-HARNESS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RESOLVER_SCRIPT() {
+  local source_path="${BASH_SOURCE[0]}"
+  local source_dir target
+  while [ -L "$source_path" ]; do
+    source_dir="$(cd -P "$(dirname "$source_path")" && pwd)"
+    target="$(readlink "$source_path")"
+    case "$target" in
+      /*) source_path="$target" ;;
+      *) source_path="$source_dir/$target" ;;
+    esac
+  done
+  source_dir="$(cd -P "$(dirname "$source_path")" && pwd)"
+  printf '%s/%s\n' "$source_dir" "$(basename "$source_path")"
+}
+
+SCRIPT_PATH="$(RESOLVER_SCRIPT)"
+HARNESS_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 POLICIES_DIR="$HARNESS_ROOT/policies"
 EXTENSION_PATH="$HARNESS_ROOT/extension/index.ts"
 
@@ -13,6 +29,8 @@ ROLE=""
 WORKSPACE=""
 AGENT_DIR=""
 BACKEND_REQUESTED="auto"
+PROVIDER=""
+MODEL=""
 TASK=""
 JSON_OUTPUT=0
 DRY_RUN=0
@@ -21,7 +39,7 @@ USAGE() {
   cat <<'EOF'
 Uso:
   pi-harness doctor --role <rol> --workspace <ruta> --agent-dir <ruta> [--json]
-  pi-harness start  --role <rol> --workspace <ruta> --agent-dir <ruta> [--backend auto|bwrap|seatbelt|appcontainer] [--task "texto"|--task -] [--dry-run]
+  pi-harness start  --role <rol> --workspace <ruta> --agent-dir <ruta> [--backend auto|bwrap|seatbelt|appcontainer] [--provider <proveedor> --model <modelo>] [--task "texto"|--task -] [--dry-run]
 EOF
 }
 
@@ -50,6 +68,16 @@ while [ "$#" -gt 0 ]; do
     --backend)
       [ "$#" -ge 2 ] || ERROR "falta el valor de --backend"
       BACKEND_REQUESTED="$2"
+      shift 2
+      ;;
+    --provider)
+      [ "$#" -ge 2 ] || ERROR "falta el valor de --provider"
+      PROVIDER="$2"
+      shift 2
+      ;;
+    --model)
+      [ "$#" -ge 2 ] || ERROR "falta el valor de --model"
+      MODEL="$2"
       shift 2
       ;;
     --task)
@@ -83,6 +111,9 @@ done
 [ -n "$WORKSPACE" ] || ERROR "--workspace es obligatorio"
 [ -n "$AGENT_DIR" ] || ERROR "--agent-dir es obligatorio"
 command -v jq >/dev/null 2>&1 || ERROR "jq es obligatorio"
+[[ -z "$PROVIDER" || "$PROVIDER" =~ ^[a-z0-9_-]+$ ]] || ERROR "proveedor no válido: '$PROVIDER'"
+[[ -z "$MODEL" || "$MODEL" =~ ^[A-Za-z0-9._:/-]+$ ]] || ERROR "modelo no válido: '$MODEL'"
+[ -z "$MODEL" ] || [ -n "$PROVIDER" ] || ERROR "--model requiere también --provider"
 
 REALPATH_EXISTING() {
   local path="$1"
@@ -264,7 +295,8 @@ jq -n \
   --arg policy "$POLICY_FILE" --arg policy_sha256 "$POLICY_SHA256" \
   --arg skill_sha256 "$SKILL_SHA256" --arg pi_bin "$PI_BIN" \
   --arg pi_version "$PI_VERSION" --arg started_at "$STARTED_AT" \
-  '{schema_version:1, run_id:$run_id, engine:"pi", role:$role, platform:$platform, sandbox_backend:$backend, sandbox_command:$sandbox_command, sandbox_enforced:true, workspace:$workspace, agent_dir:$agent_dir, policy:{path:$policy,sha256:$policy_sha256}, skill_sha256:$skill_sha256, pi:{path:$pi_bin,version:$pi_version}, started_at:$started_at, status:"running"}' \
+  --arg provider "$PROVIDER" --arg model "$MODEL" \
+  '{schema_version:1, run_id:$run_id, engine:"pi", role:$role, platform:$platform, sandbox_backend:$backend, sandbox_command:$sandbox_command, sandbox_enforced:true, workspace:$workspace, agent_dir:$agent_dir, policy:{path:$policy,sha256:$policy_sha256}, skill_sha256:$skill_sha256, pi:{path:$pi_bin,version:$pi_version,provider:$provider,model:$model}, started_at:$started_at, status:"running"}' \
   > "$MANIFEST"
 chmod 600 "$MANIFEST"
 
@@ -298,8 +330,9 @@ PI_ARGS=(
   --skill "$AGENT_DIR/SKILL.md"
   --no-prompt-templates
   --no-themes
-  -p "Ejecuta la tarea incluida en la entrada estándar respetando la política del harness."
 )
+[ -z "$PROVIDER" ] || PI_ARGS+=(--provider "$PROVIDER" --model "$MODEL")
+PI_ARGS+=(-p "Ejecuta la tarea incluida en la entrada estándar respetando la política del harness.")
 
 export PI_HARNESS_ROLE="$ROLE"
 export PI_HARNESS_WORKSPACE="$WORKSPACE"
@@ -332,6 +365,8 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "Plataforma: $PLATFORM"
   echo "Backend: $BACKEND"
   echo "Pi: $PI_BIN"
+  echo "Proveedor: ${PROVIDER:-predeterminado}"
+  echo "Modelo: ${MODEL:-predeterminado}"
   echo "Rol: $ROLE"
   echo "Workspace: $WORKSPACE"
   echo "Agente: $AGENT_DIR"
@@ -348,8 +383,18 @@ RUN_BWRAP() {
   for system_path in /usr /bin /sbin /lib /lib64 /etc /opt; do
     [ -e "$system_path" ] && args+=(--ro-bind "$system_path" "$system_path")
   done
+  local resolver_path resolver_dir
+  resolver_path="$(readlink -f /etc/resolv.conf 2>/dev/null || true)"
+  if [[ "$resolver_path" = /run/* ]] && [ -f "$resolver_path" ]; then
+    resolver_dir="$(dirname "$resolver_path")"
+    args+=(--ro-bind "$resolver_dir" "$resolver_dir")
+  fi
   args+=(--bind "$RUNTIME_DIR/home" "$HOME")
   args+=(--bind "$RUNTIME_DIR" "$RUNTIME_DIR")
+  # La extensión se ejecuta dentro del sandbox y debe poder registrar cada
+  # autorización o bloqueo. El directorio de auditoría vive fuera del runtime
+  # efímero, por lo que necesita su propio montaje escribible.
+  args+=(--bind "$RUN_DIR" "$RUN_DIR")
   args+=(--ro-bind "$HARNESS_ROOT" "$HARNESS_ROOT")
   args+=(--ro-bind "$AGENT_DIR" "$AGENT_DIR")
 
@@ -393,6 +438,7 @@ RUN_SEATBELT() {
       printf '(allow file-read* (subpath "%s"))\n' "$(SEATBELT_QUOTE "$path")"
     done
     printf '(allow file-read* file-write* (subpath "%s"))\n' "$(SEATBELT_QUOTE "$RUNTIME_DIR")"
+    printf '(allow file-read* file-write* (subpath "%s"))\n' "$(SEATBELT_QUOTE "$RUN_DIR")"
     while IFS= read -r rule; do
       path="$WORKSPACE/$(NORMALIZE_RULE "$rule")"
       [ -e "$path" ] && printf '(allow file-read* file-write* (subpath "%s"))\n' "$(SEATBELT_QUOTE "$path")"
@@ -426,6 +472,14 @@ set +e
 RUN_SELECTED_BACKEND > "$RUN_DIR/events.jsonl" 2> "$RUN_DIR/stderr.log"
 EXIT_CODE="$?"
 set -e
+if [ "$EXIT_CODE" -eq 0 ] && jq -e '
+  select(
+    (.type == "auto_retry_end" and .success == false) or
+    (.type == "message_end" and .message.stopReason == "error")
+  )
+' "$RUN_DIR/events.jsonl" >/dev/null 2>&1; then
+  EXIT_CODE=70
+fi
 chmod 600 "$RUN_DIR/events.jsonl" "$RUN_DIR/stderr.log" "$RUN_DIR/tool-calls.jsonl" 2>/dev/null || true
 cat "$RUN_DIR/events.jsonl"
 cat "$RUN_DIR/stderr.log" >&2

@@ -15,6 +15,14 @@ cp "$FIXTURES/mv" "$TEMP_DIR/bin/mv"
 cp "$FIXTURES/flock" "$TEMP_DIR/bin/flock"
 chmod +x "$TEMP_DIR/bin/ssh" "$TEMP_DIR/bin/mv" "$TEMP_DIR/bin/flock"
 export PATH="$TEMP_DIR/bin:$PATH"
+export PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json"
+
+jq 'with_entries(.value.dispatch_enabled = false)
+  | .backend.engine = "pi"
+  | .backend.dispatch_enabled = true
+  | .backend.pi_harness = "/home/serveradmin/.local/bin/pi-harness"
+  | .backend.pi_provider = "openai-codex"
+  | .backend.pi_model = "gpt-5.4-mini"' "$ROOT/vms.json" > "$PRUEBA_AGENTES_VMS_CONF"
 
 # Crear un remoto Git aislado con la misma estructura del orquestador.
 fuente_git="$TEMP_DIR/fuente-git"
@@ -36,11 +44,12 @@ cp "$ROOT/tools/remotos/actualizar_agente_git.sh" "$agente_remoto/actualizar_des
 chmod +x "$agente_remoto/actualizar_desde_git.sh"
 printf '%s\n%s\n%s\n%s\n' "file://$origen_git" "sincronizacion_agentes_ssh" "backend" "skills/dev-back" > "$agente_remoto/git-agent.conf"
 
-runner_remoto="$FAKE_REMOTE_ROOT/home/serveradmin/.local/bin/agent-runner"
-mkdir -p "$(dirname "$runner_remoto")" "$FAKE_REMOTE_ROOT/home/serveradmin/laravel-dev"
-cp "$FIXTURES/agent-runner" "$runner_remoto"
-chmod +x "$runner_remoto"
-export FAKE_RUNNER_PROMPT="$TEMP_DIR/prompt-remoto.txt"
+pi_harness_remoto="$FAKE_REMOTE_ROOT/home/serveradmin/.local/bin/pi-harness"
+mkdir -p "$(dirname "$pi_harness_remoto")" "$FAKE_REMOTE_ROOT/home/serveradmin/laravel-dev"
+cp "$FIXTURES/pi-harness" "$pi_harness_remoto"
+cp "$FIXTURES/pi" "$TEMP_DIR/bin/pi"
+chmod +x "$pi_harness_remoto" "$TEMP_DIR/bin/pi"
+export FAKE_PI_PROMPT="$TEMP_DIR/prompt-remoto.txt"
 
 salida_primera="$($ROOT/tools/sincronizar_agente.sh backend)"
 test -L "$agente_remoto/actual"
@@ -76,9 +85,9 @@ salida_despacho="$($ROOT/tools/despachar_vm.sh backend "$proyecto" "Crear un end
 
 test "$salida_despacho" = "$proyecto/backend_output.log"
 grep -q "VERSION_AGENTE: $version_tercera" "$proyecto/backend_output.log"
-grep -q "EJECUCIÓN_REMOTA_SIMULADA: OK" "$proyecto/backend_output.log"
-grep -q "# Skill: Dev Backend Specialist" "$FAKE_RUNNER_PROMPT"
-grep -q "# Subagente: Analista de Dominio Backend" "$FAKE_RUNNER_PROMPT"
-grep -q "Crear un endpoint de salud" "$FAKE_RUNNER_PROMPT"
+grep -q "EJECUCIÓN_PI_REMOTA_SIMULADA: OK" "$proyecto/backend_output.log"
+grep -q "PI_HARNESS_REMOTO: .*serveradmin/.local/bin/pi-harness" "$proyecto/backend_output.log"
+grep -q "Crear un endpoint de salud" "$FAKE_PI_PROMPT"
+grep -q "Pi Harness remoto" "$proyecto/EVIDENCIA_backend.md"
 
-echo "✓ Pull Git, actualización atómica, aislamiento y despacho remoto verificados."
+echo "✓ Pull Git, actualización atómica y despacho remoto con Pi verificados."

@@ -1,6 +1,6 @@
 # Provisionamiento inicial de una VM con Pi
 
-`tools/provisionar_vm_pi.sh` prepara una VM Linux nueva para ejecutar los agentes con Pi y `pi-harness`. Es un flujo separado: no modifica `tools/provisionar_vm.sh` y no instala ni copia `agent-runner` u OpenCode.
+`tools/provisionar_vm_pi.sh` prepara una VM Linux nueva para ejecutar los agentes con Pi y `pi-harness`. Este es el runtime del flujo principal; no instala ni copia Agent Runner u OpenCode.
 
 ## Qué instala
 
@@ -14,7 +14,9 @@
 8. Instala el agente desde Git/cron o desde la Mac según `agent_update_mode`.
 9. Comprueba Pi, el harness, la política, el agente activo y que Bubblewrap pueda crear realmente un sandbox.
 
-El script no configura todavía el despachador del orquestador para utilizar Pi. Esa sustitución se realizará después de comprobar manualmente la VM.
+En Ubuntu utiliza primero el perfil oficial `/etc/apparmor.d/bwrap-userns-restrict` cuando el paquete AppArmor lo proporciona (incluido Ubuntu 26.04). Solo en sistemas que no lo incluyen instala el perfil de compatibilidad dirigido a `/usr/bin/bwrap`. No desactiva AppArmor ni cambia globalmente los controles `kernel.apparmor_restrict_unprivileged_*`.
+
+El mismo perfil queda disponible para el despachador del orquestador. Si hay otro perfil habilitado para el mismo stack, debe dejarse `dispatch_enabled: false` en uno de ellos.
 
 ## Configuración automática de `vms.json`
 
@@ -56,7 +58,9 @@ Puede agregarse opcionalmente:
 
 Si se omite, se utiliza `latest`. Para instalaciones reproducibles es preferible colocar una versión exacta, por ejemplo `1.2.3`, después de confirmar la versión que se desea probar.
 
-Los campos de `agent-runner` y `opencode_version` son ignorados por este nuevo script. Se mantienen en los perfiles actuales porque el flujo productivo todavía los utiliza.
+El perfil se registra con `engine: "pi"` y permanece con `dispatch_enabled: false` durante la instalación. Solo después de verificar correctamente la VM cambia a `true` y deshabilita otros perfiles Pi del mismo stack; así el orquestador siempre selecciona una única VM lista.
+
+Con `source_mode: local`, el workspace remoto se sincroniza como espejo del proyecto de la Mac. Se eliminan archivos remotos que ya no existen en la fuente para evitar configuraciones obsoletas; `.git`, `.env`, `vendor` y `node_modules` quedan excluidos de esa eliminación y se administran dentro de la VM.
 
 ## Primera ejecución
 
@@ -99,4 +103,12 @@ La respuesta debe terminar con `Resultado: LISTO`.
 
 ## Autenticación del modelo
 
-La instalación inicial no guarda claves de proveedores en la VM. Para una ejecución manual de Pi se puede exportar temporalmente `OPENAI_API_KEY` o `ANTHROPIC_API_KEY`. En la siguiente etapa, el despachador enviará la credencial disponible solamente a la sesión SSH que ejecute la tarea.
+El provisionador instala Pi, pero el inicio de sesión se realiza una vez de forma interactiva dentro de cada VM. Para el proveedor configurado por defecto (`openai-codex`):
+
+```bash
+ssh usuario@ip-de-la-vm
+export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$HOME/.local/bin:$PATH"
+pi
+```
+
+Dentro de Pi selecciona el inicio de sesión de OpenAI/Codex. La sesión queda en `~/.pi/agent/auth.json`; `pi-harness` la monta dentro del entorno aislado sin copiarla al proyecto. `tools/probar_vms.sh` exige esa sesión antes de permitir un despacho.

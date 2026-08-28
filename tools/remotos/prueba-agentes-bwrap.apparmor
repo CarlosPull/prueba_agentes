@@ -1,0 +1,11 @@
+# Permite únicamente a Bubblewrap crear el user namespace que necesita.
+# El proceso queda sin restricciones AppArmor adicionales porque el aislamiento
+# de archivos y procesos lo aplica Bubblewrap con la política de pi-harness.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile prueba-agentes-bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+
+  include if exists <local/prueba-agentes-bwrap>
+}

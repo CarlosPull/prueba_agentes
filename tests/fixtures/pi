@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  echo "0.84.3-prueba"
+  exit 0
+fi
+echo "Pi simulado" >&2

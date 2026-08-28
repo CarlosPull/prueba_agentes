@@ -1,6 +1,6 @@
 # Harness experimental de Pi
 
-Esta carpeta contiene la primera etapa de la migración de `agent-runner` a Pi. En esta etapa el harness funciona de manera independiente y **no modifica el despacho actual, `vms.json`, el provisionador ni ninguna VM**.
+Esta carpeta contiene el harness de ejecución de Pi usado por el despachador distribuido. El provisionador lo instala dentro de cada VM y `vms.json` selecciona un perfil Pi habilitado por stack.
 
 ## Qué hace
 
@@ -24,6 +24,8 @@ La extensión valida las herramientas `read`, `grep`, `find`, `ls`, `write` y `e
 - `appcontainer`: definido mediante una interfaz externa estable. Hasta que exista el ejecutable nativo `pi-appcontainer`, Windows falla de forma segura y Pi no se inicia.
 
 No se usa un contenedor de aplicaciones. Bubblewrap y Seatbelt crean aislamiento para el proceso de Pi directamente en el sistema anfitrión.
+
+En distribuciones donde `/etc/resolv.conf` apunta a `/run/systemd/resolve`, el backend Linux monta en modo de solo lectura únicamente el directorio que contiene ese archivo para conservar DNS sin exponer el resto de `/run`.
 
 ## Uso local
 
@@ -49,6 +51,12 @@ Para revisar la selección y producir un manifiesto sin lanzar Pi:
 
 Para una ejecución real se quita `--dry-run`. Deben estar instalados `jq`, Pi (`@earendil-works/pi-coding-agent`) y la barrera de la plataforma. En Linux debe existir `bwrap`; en macOS, `sandbox-exec`.
 
+Puede fijarse el proveedor y modelo por ejecución sin cambiar la configuración global de Pi:
+
+```bash
+./tools/pi_harness.sh start ... --provider openrouter --model cohere/north-mini-code:free
+```
+
 Los registros quedan por defecto en:
 
 ```text
@@ -70,4 +78,4 @@ La política es una ayuda de mínimo privilegio, no una lista definitiva del pro
 
 ## Siguiente etapa
 
-El provisionador experimental `tools/provisionar_vm_pi.sh` ya puede instalar Pi, este harness y Bubblewrap en una VM Linux de prueba. Después de validar esa VM todavía será necesario cambiar el despachador mediante una migración controlada; el flujo productivo continúa usando `agent-runner`.
+`tools/provisionar_vm_pi.sh` instala Pi, este harness y Bubblewrap en una VM Linux. `tools/despachar_vm.sh` lo invoca por SSH; el harness carga el agente remoto y aplica la política del rol antes de ejecutar Pi.

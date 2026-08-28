@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECTS_DIR="$ROOT/proyectos"
+PROJECTS_DIR="${PRUEBA_AGENTES_PROJECTS_DIR:-$ROOT/proyectos}"
 
 UNICO=0
 if [ "${1:-}" = "--unico" ]; then

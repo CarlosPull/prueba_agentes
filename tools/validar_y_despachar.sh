@@ -21,8 +21,11 @@ if [ -n "$MODO_FULLSTACK" ] && [ "$MODO_FULLSTACK" != "--fullstack-confirmado" ]
 fi
 
 if [ "$MODO_FULLSTACK" = "--fullstack-confirmado" ]; then
+  ROLE_UPPER="$(printf '%s' "$ROLE" | tr '[:lower:]' '[:upper:]')"
+  PREFIJO_CATEGORIZADO="Solicitud categorizada para $ROLE_UPPER."
   if { [ "$ROLE" != "backend" ] && [ "$ROLE" != "frontend" ]; } ||
-     [[ "$TAREA" != "Solicitud Full-Stack explícita."* ]]; then
+     { [[ "$TAREA" != "Solicitud Full-Stack explícita."* ]] &&
+       [[ "$TAREA" != "$PREFIJO_CATEGORIZADO"* ]]; }; then
     echo "Error: el modo Full-Stack solo acepta subtareas internas de backend o frontend generadas por tools/orquestar.sh." >&2
     exit 1
   fi

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+role="$1"
+project_dir="$2"
+task="$3"
+: "${4:-}"
+
+printf '%s inicio %s\n' "$role" "$(date +%s)" >> "$PRUEBA_PARALELA_EVENTOS"
+sleep 2
+printf '%s fin %s\n' "$role" "$(date +%s)" >> "$PRUEBA_PARALELA_EVENTOS"
+printf 'PI_SIMULADO: %s\nTAREA: %s\n' "$role" "$task" > "$project_dir/${role}_output.log"
+printf '## Ejecución del rol: %s\n\n- Pi simulado\n' "$role" > "$project_dir/EVIDENCIA_${role}.md"

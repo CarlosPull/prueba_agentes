@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$ROOT/vms.json}"
 BOOTSTRAP_LOCAL="$ROOT/tools/remotos/provisionar_vm_pi.sh"
 PAQUETES_BACKEND_LOCAL="$ROOT/tools/remotos/instalar_paquetes_backend.sh"
+APPARMOR_BWRAP_LOCAL="$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor"
 HARNESS_LOCAL="$ROOT/pi-harness"
 VM_PROFILE="${1:-}"
 OPCION="${2:-}"
@@ -138,6 +139,9 @@ CONFIGURAR_PERFIL_NUEVO() {
     --arg agent_poll_seconds "$poll_nuevo" '
       .[$profile] = {
         ip:$ip, user:$user, workspace:$workspace, stack:$stack,
+        engine:"pi", dispatch_enabled:false,
+        pi_harness:("/home/" + $user + "/.local/bin/pi-harness"),
+        pi_provider:"openai-codex", pi_model:"gpt-5.4-mini",
         source_mode:$source_mode, agent_update_mode:$agent_update_mode,
         node_version:$node_version, pi_version:$pi_version,
         install_dependencies:true, local_agent:$local_agent,
@@ -166,7 +170,7 @@ if [ "$OPCION" = "--solo-configurar" ]; then
   jq --arg profile "$VM_PROFILE" '.[$profile]' "$VMS_CONF"
   exit 0
 fi
-for archivo in "$BOOTSTRAP_LOCAL" "$HARNESS_LOCAL/bin/pi-harness" "$HARNESS_LOCAL/extension/index.ts"; do
+for archivo in "$BOOTSTRAP_LOCAL" "$APPARMOR_BWRAP_LOCAL" "$HARNESS_LOCAL/bin/pi-harness" "$HARNESS_LOCAL/extension/index.ts"; do
   [ -s "$archivo" ] || { echo "Error: falta el recurso local '$archivo'." >&2; exit 1; }
 done
 
@@ -277,7 +281,21 @@ if ! ssh "${SSH_OPTS[@]}" "$target" "echo OK" >/dev/null 2>&1; then
 fi
 
 if [ "$OPCION" = "--con-sudo-interactivo" ]; then
-  paquetes=(git curl ca-certificates cron jq tar rsync util-linux bubblewrap build-essential locales software-properties-common)
+  paquetes=(git curl ca-certificates cron jq tar rsync util-linux bubblewrap apparmor build-essential locales software-properties-common)
+  remote_apparmor_profile="/home/$user/.local/lib/prueba-agentes/prueba-agentes-bwrap.apparmor"
+  ssh "${SSH_OPTS[@]}" "$target" \
+    "mkdir -p '/home/$user/.local/lib/prueba-agentes' && install -m 0644 /dev/stdin '$remote_apparmor_profile.nuevo' && mv -f '$remote_apparmor_profile.nuevo' '$remote_apparmor_profile'" \
+    < "$APPARMOR_BWRAP_LOCAL"
+  configurar_apparmor="if [ -s /etc/apparmor.d/bwrap-userns-restrict ]; then
+    if [ -s /etc/apparmor.d/prueba-agentes-bwrap ]; then
+      sudo apparmor_parser -R /etc/apparmor.d/prueba-agentes-bwrap 2>/dev/null || true;
+      sudo rm -f /etc/apparmor.d/prueba-agentes-bwrap;
+    fi;
+    sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict;
+  else
+    sudo install -m 0644 '$remote_apparmor_profile' /etc/apparmor.d/prueba-agentes-bwrap;
+    sudo apparmor_parser -r /etc/apparmor.d/prueba-agentes-bwrap;
+  fi"
   if [ "$stack" = "backend" ]; then
     remote_package_installer="/home/$user/.local/lib/prueba-agentes/instalar_paquetes_backend.sh"
     ssh "${SSH_OPTS[@]}" "$target" \
@@ -285,11 +303,11 @@ if [ "$OPCION" = "--con-sudo-interactivo" ]; then
       < "$PAQUETES_BACKEND_LOCAL"
     echo "📦 Instalando sistema, Bubblewrap y PHP $php_version en '$target'..."
     ssh -tt "${SSH_OPTS[@]}" "$target" \
-      "'$remote_package_installer' '$php_version' '$php_min_version' ${paquetes[*]}"
+      "'$remote_package_installer' '$php_version' '$php_min_version' ${paquetes[*]} && $configurar_apparmor"
   else
     echo "📦 Instalando sistema y Bubblewrap en '$target'..."
     ssh -tt "${SSH_OPTS[@]}" "$target" \
-      "export LANG=C.UTF-8 LC_ALL=C.UTF-8; sudo apt-get update && sudo apt-get install -y ${paquetes[*]} && sudo systemctl enable --now cron"
+      "export LANG=C.UTF-8 LC_ALL=C.UTF-8; sudo apt-get update && sudo apt-get install -y ${paquetes[*]} && sudo systemctl enable --now cron && $configurar_apparmor"
   fi
 fi
 
@@ -311,7 +329,9 @@ if [ "$modo" = "provisionar" ]; then
   if [ "$source_mode" = "local" ]; then
     echo "📤 Copiando proyecto local a '$target:$workspace'..."
     ssh "${SSH_OPTS[@]}" "$target" "mkdir -p '$workspace'"
-    rsync -az --exclude='.git/' --exclude='vendor/' --exclude='node_modules/' --exclude='.env' \
+    # El proyecto local es la fuente autoritativa. --delete elimina residuos de
+    # versiones anteriores, pero los directorios/archivos excluidos se conservan.
+    rsync -az --delete --exclude='.git/' --exclude='vendor/' --exclude='node_modules/' --exclude='.env' \
       "$project_local_path/" "$target:$workspace/"
   fi
 
@@ -355,6 +375,26 @@ fi
 
 ENVIAR_CONFIG | ssh "${SSH_OPTS[@]}" "$target" "'$remote_bootstrap' verificar"
 [ "$agent_update_mode" != "local" ] || "$ROOT/tools/instalar_monitor_local.sh"
+
+# Solo se habilita el despacho después de que la instalación y la verificación
+# remotas terminaron correctamente. El perfil activo sustituye a cualquier otro
+# perfil Pi del mismo stack para mantener una selección determinista.
+config_tmp="$(mktemp "$VMS_CONF.activar.XXXXXX")"
+jq --arg profile "$VM_PROFILE" --arg stack "$stack" '
+  with_entries(
+    if .key != $profile and .value.stack == $stack and .value.engine == "pi"
+    then .value.dispatch_enabled = false
+    else .
+    end
+  )
+  | .[$profile].engine = "pi"
+  | .[$profile].dispatch_enabled = true
+  | .[$profile].pi_harness = ("/home/" + .[$profile].user + "/.local/bin/pi-harness")
+  | .[$profile].pi_provider = (.[$profile].pi_provider // "openai-codex")
+  | .[$profile].pi_model = (.[$profile].pi_model // "gpt-5.4-mini")
+' "$VMS_CONF" > "$config_tmp"
+chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"
+mv "$config_tmp" "$VMS_CONF"
 
 echo "✅ VM '$VM_PROFILE' preparada con Pi, pi-harness y agente '$stack'."
 echo "ℹ️ agent-runner y OpenCode no fueron instalados por este script."

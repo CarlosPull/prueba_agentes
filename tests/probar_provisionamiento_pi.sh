@@ -13,9 +13,15 @@ bash -n "$LOCAL" "$REMOTE" "$ROOT/pi-harness/bin/pi-harness"
 grep -F '@earendil-works/pi-coding-agent@' "$REMOTE" >/dev/null
 grep -F 'npm install -g --ignore-scripts' "$REMOTE" >/dev/null
 grep -F 'bwrap --ro-bind / /' "$REMOTE" >/dev/null
+grep -F 'apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict' "$LOCAL" >/dev/null
+grep -F 'apparmor_parser -R /etc/apparmor.d/prueba-agentes-bwrap' "$LOCAL" >/dev/null
+grep -F 'apparmor_parser -r /etc/apparmor.d/prueba-agentes-bwrap' "$LOCAL" >/dev/null
+grep -F 'profile prueba-agentes-bwrap /usr/bin/bwrap flags=(unconfined)' "$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor" >/dev/null
+grep -F 'userns,' "$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor" >/dev/null
 grep -F 'instalar_actualizacion_git.sh' "$LOCAL" >/dev/null
 grep -F 'configurar_ssh_vm.sh' "$LOCAL" >/dev/null
 grep -F 'pi-harness' "$LOCAL" >/dev/null
+grep -F "rsync -az --delete --exclude='.git/'" "$LOCAL" >/dev/null
 
 if grep -Eq 'python3 -m pip|RUNNER_REPO|agent_runner_local_path|opencode-ai@' "$LOCAL" "$REMOTE"; then
   echo "FALLO: el provisionador Pi todavía contiene una instalación de agent-runner/OpenCode." >&2
@@ -47,4 +53,4 @@ jq -e --arg branch "$branch_actual" '
 
 jq -e 'has("backend-pi-automatico") | not' "$ROOT/vms.json" >/dev/null
 
-echo "OK: configuración automática, provisionador Pi y dependencias verificados sin usar SSH."
+echo "OK: configuración automática, Pi y perfil AppArmor de Bubblewrap verificados sin usar SSH."

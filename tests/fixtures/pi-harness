@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+task=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --task)
+      task="$2"
+      shift 2
+      ;;
+    *) shift ;;
+  esac
+done
+[ "$task" != "-" ] || task="$(cat)"
+printf '%s\n' "$task" > "$FAKE_PI_PROMPT"
+echo "run_id: prueba-pi-remota" >&2
+echo "manifest: /estado/pi-harness/runs/prueba-pi-remota/manifest.json" >&2
+echo "EJECUCIÓN_PI_REMOTA_SIMULADA: OK"
