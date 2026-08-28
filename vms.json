@@ -68,5 +68,25 @@
     "user": "serveradmin",
     "workspace": "/home/serveradmin/qa-dev",
     "agent_runner": "/home/serveradmin/.local/bin/agent-runner"
+  },
+  "backend-pi-prueba": {
+    "ip": "192.168.50.231",
+    "user": "carlos2",
+    "workspace": "/home/carlos2/laravel-dev",
+    "stack": "backend",
+    "source_mode": "local",
+    "agent_update_mode": "git",
+    "node_version": "24.19.0",
+    "pi_version": "latest",
+    "install_dependencies": true,
+    "local_agent": "skills/dev-back",
+    "remote_agent": "/home/carlos2/agentes/backend",
+    "project_local_path": "/Users/carlos/Documents/GitHub/laravel-dev",
+    "php_version": "8.4",
+    "php_min_version": "8.4.1",
+    "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
+    "git_branch": "implementacion_pi",
+    "git_agent_path": "skills/dev-back",
+    "agent_poll_seconds": 30
   }
 }
