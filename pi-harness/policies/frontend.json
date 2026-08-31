@@ -1,6 +1,11 @@
 {
   "version": 1,
   "role": "frontend",
+  "memory": {
+    "shared_contracts": ["read"],
+    "business": ["read"],
+    "company": ["read"]
+  },
   "read": [
     "src/**",
     "public/**",

@@ -33,6 +33,7 @@ done
 
 CONFIGURAR_PERFIL_NUEVO() {
   local ip_nuevo user_nuevo stack_nuevo workspace_default workspace_nuevo
+  local repository_id_nuevo module_nuevo repository_kind_nuevo aliases_nuevo aliases_json
   local source_mode_nuevo project_local_default project_local_nuevo project_git_url_nuevo project_git_branch_nuevo
   local agent_update_mode_nuevo git_url_nuevo git_branch_default git_branch_nuevo
   local node_version_nuevo pi_version_nuevo php_version_nuevo php_min_version_nuevo
@@ -52,6 +53,24 @@ CONFIGURAR_PERFIL_NUEVO() {
   [[ "$ip_nuevo" =~ ^[A-Za-z0-9.:-]+$ ]] || { echo "Error: IP no válida." >&2; exit 1; }
   [[ "$user_nuevo" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Error: usuario no válido." >&2; exit 1; }
   [ "$stack_nuevo" = "backend" ] || [ "$stack_nuevo" = "frontend" ] || { echo "Error: stack no soportado." >&2; exit 1; }
+
+  read -r -p "ID del repositorio ($VM_PROFILE-repo): " repository_id_nuevo
+  repository_id_nuevo="${repository_id_nuevo:-$VM_PROFILE-repo}"
+  read -r -p "Nombre del módulo ($VM_PROFILE): " module_nuevo
+  module_nuevo="${module_nuevo:-$VM_PROFILE}"
+  if [ "$stack_nuevo" = "backend" ]; then
+    read -r -p "Tipo de repositorio [core/module] (module): " repository_kind_nuevo
+    repository_kind_nuevo="${repository_kind_nuevo:-module}"
+    [ "$repository_kind_nuevo" = "core" ] || [ "$repository_kind_nuevo" = "module" ] || { echo "Error: tipo backend no soportado." >&2; exit 1; }
+  else
+    repository_kind_nuevo="frontend"
+  fi
+  read -r -p "Alias para enrutamiento, separados por coma ($repository_id_nuevo,$module_nuevo): " aliases_nuevo
+  aliases_nuevo="${aliases_nuevo:-$repository_id_nuevo,$module_nuevo}"
+  [[ "$repository_id_nuevo" =~ ^[A-Za-z0-9._:-]+$ ]] && [[ "$module_nuevo" =~ ^[A-Za-z0-9._:-]+$ ]] || {
+    echo "Error: ID de repositorio o módulo no válido." >&2; exit 1;
+  }
+  aliases_json="$(printf '%s' "$aliases_nuevo" | jq -R 'split(",") | map(gsub("^[[:space:]]+|[[:space:]]+$"; "")) | map(select(length > 0)) | unique')"
 
   if [ "$stack_nuevo" = "backend" ]; then
     workspace_default="/home/$user_nuevo/laravel-dev"
@@ -136,15 +155,22 @@ CONFIGURAR_PERFIL_NUEVO() {
     --arg php_min_version "$php_min_version_nuevo" --arg local_agent "$local_agent_nuevo" \
     --arg remote_agent "$remote_agent_nuevo" --arg git_url "$git_url_nuevo" \
     --arg git_branch "$git_branch_nuevo" --arg git_agent_path "$git_agent_path_nuevo" \
-    --arg agent_poll_seconds "$poll_nuevo" '
+    --arg agent_poll_seconds "$poll_nuevo" --arg repository_id "$repository_id_nuevo" \
+    --arg module "$module_nuevo" --arg repository_kind "$repository_kind_nuevo" --argjson aliases "$aliases_json" '
       .[$profile] = {
         ip:$ip, user:$user, workspace:$workspace, stack:$stack,
+        repositories:[{
+          id:$repository_id, module:$module, kind:$repository_kind, path:$workspace,
+          business_memory:("/home/" + $user + "/.local/share/prueba-agentes/business/" + $repository_id + ".md"),
+          aliases:$aliases
+        }],
         engine:"pi", dispatch_enabled:false,
         pi_harness:("/home/" + $user + "/.local/bin/pi-harness"),
         pi_provider:"openai-codex", pi_model:"gpt-5.4-mini",
+        memory:{enabled:false,gateway_url:"",core_id:"",tenant_id:"",read_business:false,read_company:false,tls_key:"",tls_cert:"",tls_ca:""},
         source_mode:$source_mode, agent_update_mode:$agent_update_mode,
         node_version:$node_version, pi_version:$pi_version,
-        install_dependencies:true, local_agent:$local_agent,
+        install_dependencies:($repository_kind != "module"), local_agent:$local_agent,
         remote_agent:$remote_agent
       }
       | if $source_mode == "local" then .[$profile].project_local_path = $project_local_path
@@ -198,6 +224,7 @@ pi_version="$(GET_VM_FIELD pi_version)"
 php_version="$(GET_VM_FIELD php_version)"
 php_min_version="$(GET_VM_FIELD php_min_version)"
 install_dependencies="$(GET_VM_FIELD install_dependencies)"
+project_kind="$(jq -r --arg profile "$VM_PROFILE" '.[$profile].repositories[0].kind // empty' "$VMS_CONF")"
 local_agent="$(GET_VM_FIELD local_agent)"
 remote_agent="$(GET_VM_FIELD remote_agent)"
 agent_git_url="$(GET_VM_FIELD git_url)"
@@ -210,6 +237,9 @@ remote_pi_harness="/home/$user/.local/bin/pi-harness"
 for valor in "$ip" "$user" "$workspace" "$stack" "$node_version" "$install_dependencies" "$remote_agent"; do
   [ -n "$valor" ] || { echo "Error: configuración incompleta para '$VM_PROFILE' en vms.json." >&2; exit 1; }
 done
+[ "$project_kind" = "core" ] || [ "$project_kind" = "module" ] || [ "$project_kind" = "frontend" ] || {
+  echo "Error: el repositorio principal de '$VM_PROFILE' debe declarar kind core, module o frontend." >&2; exit 1;
+}
 [[ "$user" =~ ^[A-Za-z0-9._-]+$ ]] && [[ "$ip" =~ ^[A-Za-z0-9.:-]+$ ]] || {
   echo "Error: usuario o dirección SSH no válidos para '$VM_PROFILE'." >&2
   exit 1
@@ -255,9 +285,8 @@ if [ "$source_mode" = "git" ]; then
 else
   [ -d "$project_local_path" ] || { echo "Error: no existe el proyecto local '$project_local_path'." >&2; exit 1; }
   if [ "$stack" = "backend" ]; then
-    [ -s "$project_local_path/composer.json" ] && [ -s "$project_local_path/artisan" ] || {
-      echo "Error: '$project_local_path' no contiene un Laravel válido." >&2; exit 1;
-    }
+    [ -s "$project_local_path/composer.json" ] || { echo "Error: '$project_local_path' no contiene composer.json." >&2; exit 1; }
+    [ "$project_kind" != "core" ] || [ -s "$project_local_path/artisan" ] || { echo "Error: el core '$project_local_path' no contiene artisan." >&2; exit 1; }
   else
     [ -s "$project_local_path/package.json" ] || { echo "Error: el proyecto frontend no contiene package.json." >&2; exit 1; }
   fi
@@ -347,8 +376,8 @@ if [ "$modo" = "provisionar" ]; then
 fi
 
 ENVIAR_CONFIG() {
-  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
-    "$VM_PROFILE" "$stack" "$source_mode" "$agent_update_mode" "$workspace" \
+  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    "$VM_PROFILE" "$stack" "$project_kind" "$source_mode" "$agent_update_mode" "$workspace" \
     "$project_git_url" "$project_git_branch" "$node_version" "$pi_version" \
     "$php_min_version" "$install_dependencies" "$remote_agent" "$agent_git_url" \
     "$agent_git_branch" "$agent_git_path" "$agent_poll_seconds" "$remote_harness" \
@@ -374,20 +403,14 @@ else
 fi
 
 ENVIAR_CONFIG | ssh "${SSH_OPTS[@]}" "$target" "'$remote_bootstrap' verificar"
+"$ROOT/tools/inicializar_memorias_negocio_vm.sh" "$VM_PROFILE"
 [ "$agent_update_mode" != "local" ] || "$ROOT/tools/instalar_monitor_local.sh"
 
-# Solo se habilita el despacho después de que la instalación y la verificación
-# remotas terminaron correctamente. El perfil activo sustituye a cualquier otro
-# perfil Pi del mismo stack para mantener una selección determinista.
+# Solo se habilita este perfil después de una verificación correcta. Pueden
+# coexistir varias VMs backend; el analista elige perfil y repositorio.
 config_tmp="$(mktemp "$VMS_CONF.activar.XXXXXX")"
-jq --arg profile "$VM_PROFILE" --arg stack "$stack" '
-  with_entries(
-    if .key != $profile and .value.stack == $stack and .value.engine == "pi"
-    then .value.dispatch_enabled = false
-    else .
-    end
-  )
-  | .[$profile].engine = "pi"
+jq --arg profile "$VM_PROFILE" '
+  .[$profile].engine = "pi"
   | .[$profile].dispatch_enabled = true
   | .[$profile].pi_harness = ("/home/" + .[$profile].user + "/.local/bin/pi-harness")
   | .[$profile].pi_provider = (.[$profile].pi_provider // "openai-codex")

@@ -32,6 +32,7 @@ BACKEND_REQUESTED="auto"
 PROVIDER=""
 MODEL=""
 TASK=""
+BUSINESS_MEMORY=""
 JSON_OUTPUT=0
 DRY_RUN=0
 
@@ -39,7 +40,7 @@ USAGE() {
   cat <<'EOF'
 Uso:
   pi-harness doctor --role <rol> --workspace <ruta> --agent-dir <ruta> [--json]
-  pi-harness start  --role <rol> --workspace <ruta> --agent-dir <ruta> [--backend auto|bwrap|seatbelt|appcontainer] [--provider <proveedor> --model <modelo>] [--task "texto"|--task -] [--dry-run]
+  pi-harness start  --role <rol> --workspace <ruta> --agent-dir <ruta> [--business-memory <archivo>] [--backend auto|bwrap|seatbelt|appcontainer] [--provider <proveedor> --model <modelo>] [--task "texto"|--task -] [--dry-run]
 EOF
 }
 
@@ -85,6 +86,11 @@ while [ "$#" -gt 0 ]; do
       TASK="$2"
       shift 2
       ;;
+    --business-memory)
+      [ "$#" -ge 2 ] || ERROR "falta el valor de --business-memory"
+      BUSINESS_MEMORY="$2"
+      shift 2
+      ;;
     --json)
       JSON_OUTPUT=1
       shift
@@ -128,6 +134,10 @@ WORKSPACE="$(REALPATH_EXISTING "$WORKSPACE")" || ERROR "workspace inexistente: $
 AGENT_DIR="$(REALPATH_EXISTING "$AGENT_DIR")" || ERROR "agente inexistente: $AGENT_DIR"
 [ -d "$WORKSPACE" ] || ERROR "workspace no es un directorio: $WORKSPACE"
 [ -s "$AGENT_DIR/SKILL.md" ] || ERROR "el agente no contiene SKILL.md: $AGENT_DIR"
+if [ -n "$BUSINESS_MEMORY" ]; then
+  [ -f "$BUSINESS_MEMORY" ] && [ -r "$BUSINESS_MEMORY" ] || ERROR "memoria de negocio inexistente o ilegible: $BUSINESS_MEMORY"
+  BUSINESS_MEMORY="$(REALPATH_EXISTING "$BUSINESS_MEMORY")"
+fi
 
 POLICY_FILE="$POLICIES_DIR/$ROLE.json"
 [ -s "$POLICY_FILE" ] || ERROR "no existe política para el rol '$ROLE'"
@@ -140,6 +150,8 @@ VALIDATE_POLICY() {
     (.write | type == "array") and
     (.deny_read | type == "array") and
     (.deny_write | type == "array") and
+    ((.memory // {}) | type == "object") and
+    all((.memory // {}) | to_entries[]; (.key | IN("shared_contracts", "business", "company")) and (.value | type == "array") and all(.value[]; IN("read", "write"))) and
     all(.read[]; type == "string") and
     all(.write[]; type == "string") and
     all(.deny_read[]; type == "string") and
@@ -273,10 +285,31 @@ MANIFEST="$RUN_DIR/manifest.json"
 mkdir -p "$RUN_DIR" "$RUNTIME_DIR/home" "$RUNTIME_DIR/tmp" "$RUNTIME_DIR/xdg/cache" "$RUNTIME_DIR/xdg/config" "$RUNTIME_DIR/xdg/data" "$RUNTIME_DIR/xdg/state"
 chmod 700 "$RUNS_DIR" "$RUN_DIR" "$RUNTIME_DIR" "$RUNTIME_DIR/home"
 
+MEMORY_ENABLED="${PI_MEMORY_ENABLED:-0}"
+
 CLEANUP() {
   rm -rf "$RUNTIME_DIR"
 }
 trap CLEANUP EXIT INT TERM
+
+PREPARE_MEMORY_GATEWAY() {
+  [ "$MEMORY_ENABLED" = "1" ] || return 0
+  [ "$PLATFORM" != "windows" ] || ERROR "Memory Gateway requiere un adaptador de certificados para AppContainer"
+  [[ "${PI_MEMORY_GATEWAY_URL:-}" =~ ^https://[^[:space:]]+$ ]] || ERROR "Memory Gateway requiere una URL HTTPS"
+  [ -n "${PI_MEMORY_CORE_ID:-}" ] || ERROR "Memory Gateway habilitado sin PI_MEMORY_CORE_ID"
+  for credential in "${PI_MEMORY_TLS_KEY:-}" "${PI_MEMORY_TLS_CERT:-}" "${PI_MEMORY_TLS_CA:-}"; do
+    [ -f "$credential" ] && [ -r "$credential" ] || ERROR "credencial mTLS inexistente o ilegible: $credential"
+  done
+  # Los certificados entran a Pi como descriptores, no como rutas montadas. La
+  # extensión los consume y cierra antes de que el agente pueda lanzar comandos.
+  exec 70<"$PI_MEMORY_TLS_KEY"
+  exec 71<"$PI_MEMORY_TLS_CERT"
+  exec 72<"$PI_MEMORY_TLS_CA"
+  export PI_MEMORY_TLS_KEY_FD=70 PI_MEMORY_TLS_CERT_FD=71 PI_MEMORY_TLS_CA_FD=72
+  unset PI_MEMORY_TLS_KEY PI_MEMORY_TLS_CERT PI_MEMORY_TLS_CA
+}
+
+PREPARE_MEMORY_GATEWAY
 
 if [ -s "$HOME/.pi/agent/auth.json" ]; then
   mkdir -p "$RUNTIME_DIR/home/.pi/agent"
@@ -286,6 +319,8 @@ fi
 
 POLICY_SHA256="$(SHA256_FILE "$POLICY_FILE")"
 SKILL_SHA256="$(SHA256_FILE "$AGENT_DIR/SKILL.md")"
+BUSINESS_MEMORY_SHA256=""
+[ -z "$BUSINESS_MEMORY" ] || BUSINESS_MEMORY_SHA256="$(SHA256_FILE "$BUSINESS_MEMORY")"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 jq -n \
@@ -296,7 +331,11 @@ jq -n \
   --arg skill_sha256 "$SKILL_SHA256" --arg pi_bin "$PI_BIN" \
   --arg pi_version "$PI_VERSION" --arg started_at "$STARTED_AT" \
   --arg provider "$PROVIDER" --arg model "$MODEL" \
-  '{schema_version:1, run_id:$run_id, engine:"pi", role:$role, platform:$platform, sandbox_backend:$backend, sandbox_command:$sandbox_command, sandbox_enforced:true, workspace:$workspace, agent_dir:$agent_dir, policy:{path:$policy,sha256:$policy_sha256}, skill_sha256:$skill_sha256, pi:{path:$pi_bin,version:$pi_version,provider:$provider,model:$model}, started_at:$started_at, status:"running"}' \
+  --argjson memory_enabled "$([ "$MEMORY_ENABLED" = "1" ] && echo true || echo false)" \
+  --arg memory_gateway_url "${PI_MEMORY_GATEWAY_URL:-}" --arg memory_core_id "${PI_MEMORY_CORE_ID:-}" \
+  --arg memory_tenant_id "${PI_MEMORY_TENANT_ID:-}" \
+  --arg business_memory "$BUSINESS_MEMORY" --arg business_memory_sha256 "$BUSINESS_MEMORY_SHA256" \
+  '{schema_version:1, run_id:$run_id, engine:"pi", role:$role, platform:$platform, sandbox_backend:$backend, sandbox_command:$sandbox_command, sandbox_enforced:true, workspace:$workspace, agent_dir:$agent_dir, policy:{path:$policy,sha256:$policy_sha256}, skill_sha256:$skill_sha256, pi:{path:$pi_bin,version:$pi_version,provider:$provider,model:$model}, memory:{enabled:$memory_enabled,gateway:$memory_gateway_url,backend:"cognee-oss",core_id:$memory_core_id,tenant_id:$memory_tenant_id,business_local:{path:$business_memory,sha256:$business_memory_sha256}}, started_at:$started_at, status:"running"}' \
   > "$MANIFEST"
 chmod 600 "$MANIFEST"
 
@@ -309,6 +348,17 @@ PROMPT_FILE="$RUNTIME_DIR/prompt.md"
     cat "$resource"
   done
   printf '\n---\nCONTEXTO DE EJECUCIÓN:\nRol: %s\nWorkspace: %s\nAgente: %s\n' "$ROLE" "$WORKSPACE" "$AGENT_DIR"
+  if [ -n "$BUSINESS_MEMORY" ]; then
+    printf '\n---\nMEMORIA DE NEGOCIO LOCAL DE ESTA VM (privada; úsala sólo para esta tarea):\n'
+    cat "$BUSINESS_MEMORY"
+  fi
+  if [ "$MEMORY_ENABLED" = "1" ]; then
+    printf '\nMEMORY GATEWAY HABILITADO (Cognee OSS como índice semántico y grafo):\n'
+    printf -- '- memoria_buscar consulta únicamente las capas autorizadas.\n'
+    if [ "$ROLE" = "backend" ]; then
+      printf -- '- memoria_publicar_endpoint registra únicamente contratos de endpoints confirmados. No publiques código fuente, secretos ni lógica de negocio.\n'
+    fi
+  fi
   printf '\nTAREA:\n%s\n' "$TASK"
 } > "$PROMPT_FILE"
 chmod 600 "$PROMPT_FILE"
@@ -379,6 +429,7 @@ fi
 
 RUN_BWRAP() {
   local args=(--die-with-parent --unshare-pid --proc /proc --dev /dev --tmpfs /tmp)
+  [ "$MEMORY_ENABLED" != "1" ] || args+=(--keep-fd 70 --keep-fd 71 --keep-fd 72)
   local system_path
   for system_path in /usr /bin /sbin /lib /lib64 /etc /opt; do
     [ -e "$system_path" ] && args+=(--ro-bind "$system_path" "$system_path")

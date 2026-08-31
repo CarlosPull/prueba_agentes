@@ -22,8 +22,8 @@ duracion=$((fin - inicio))
 }
 
 project_dir="$(printf '%s\n' "$salida" | sed -n 's/^Proyecto: //p')"
-[ -s "$project_dir/backend_output.log" ]
-[ -s "$project_dir/frontend_output.log" ]
+[ "$(find "$project_dir" -name '*backend*_output.log' -type f | wc -l | tr -d ' ')" = "1" ]
+[ "$(find "$project_dir" -name '*frontend*_output.log' -type f | wc -l | tr -d ' ')" = "1" ]
 [ -s "$project_dir/REPORTE_PI.md" ]
 [ -s "$project_dir/EVIDENCIA_AGENTES.md" ]
 

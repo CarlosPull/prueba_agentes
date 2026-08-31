@@ -1,0 +1,4 @@
+ANALISTA=requisitos
+PERFILES=backend-core
+CONTRATOS_COMPARTIDOS=loaded
+MEMORIA_TECNOLOGICA=hybrid

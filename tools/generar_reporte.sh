@@ -38,8 +38,9 @@ EVIDENCE="$PROJECT_DIR/EVIDENCIA_AGENTES.md"
   echo ""
   echo "Metadatos emitidos dentro de cada VM durante la ejecución por SSH."
   echo ""
-  for role in backend frontend; do
-    [ ! -s "$PROJECT_DIR/EVIDENCIA_${role}.md" ] || cat "$PROJECT_DIR/EVIDENCIA_${role}.md"
+  for evidence_file in "$PROJECT_DIR"/EVIDENCIA_*.md; do
+    [ "$evidence_file" != "$EVIDENCE" ] || continue
+    [ ! -s "$evidence_file" ] || cat "$evidence_file"
   done
 } > "$EVIDENCE"
 
@@ -54,18 +55,20 @@ REPORT="$PROJECT_DIR/REPORTE_PI.md"
     cat "$PROJECT_DIR/REQUISITOS.md"
     echo ""
   fi
-  for profile in $(GET_ROLES); do
-    role=$(GET_VM_FIELD "$profile" "stack")
+  for log_file in "$PROJECT_DIR"/*_output.log; do
+    [ -f "$log_file" ] || continue
+    profile="$(sed -n 's/^PERFIL_VM: //p; s/^PERFIL_VM_LOCAL: //p' "$log_file" | head -n 1)"
+    role="$(sed -n 's/^ROL: //p' "$log_file" | head -n 1)"
+    repository="$(sed -n 's/^REPOSITORIO: //p' "$log_file" | head -n 1)"
+    module="$(sed -n 's/^MODULO: //p' "$log_file" | head -n 1)"
     ip=$(GET_VM_FIELD "$profile" "ip")
-    workspace=$(GET_VM_FIELD "$profile" "workspace")
+    workspace="$(sed -n 's/^WORKSPACE_REMOTO: //p' "$log_file" | head -n 1)"
     remote_agent=$(GET_VM_FIELD "$profile" "remote_agent")
     git_branch=$(GET_VM_FIELD "$profile" "git_branch")
     git_agent_path=$(GET_VM_FIELD "$profile" "git_agent_path")
-    log_file="$PROJECT_DIR/${role}_output.log"
-    [ -f "$log_file" ] || continue
-    
-    echo "## Rol: $role (perfil: $profile, VM: $ip)"
+    echo "## Rol: $role (perfil: $profile, módulo: ${module:-n/d}, VM: $ip)"
     echo "- Workspace: \`$workspace\`"
+    echo "- Repositorio: \`${repository:-no disponible}\`"
     if [ -n "$remote_agent" ]; then
       echo "- Agente remoto: \`$remote_agent/actual\`"
       echo "- Fuente Git: \`$git_branch:$git_agent_path\`"

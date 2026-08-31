@@ -29,10 +29,10 @@ SSH_OPTS="-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes"
 
 ROLES_SOLICITADOS=("$@")
 ROL_SOLICITADO() {
-  local stack="$1" solicitado
+  local profile="$1" stack="$2" solicitado
   [ "${#ROLES_SOLICITADOS[@]}" -gt 0 ] || return 0
   for solicitado in "${ROLES_SOLICITADOS[@]}"; do
-    [ "$solicitado" = "$stack" ] && return 0
+    { [ "$solicitado" = "$stack" ] || [ "$solicitado" = "$profile" ]; } && return 0
   done
   return 1
 }
@@ -43,16 +43,18 @@ index=1
 errores=0
 for role in $(GET_ROLES); do
   stack=$(GET_VM_FIELD "$role" "stack")
-  ROL_SOLICITADO "$stack" || continue
+  ROL_SOLICITADO "$role" "$stack" || continue
   ip=$(GET_VM_FIELD "$role" "ip")
   user=$(GET_VM_FIELD "$role" "user")
   pi_harness=$(GET_VM_FIELD "$role" "pi_harness")
   node_version=$(GET_VM_FIELD "$role" "node_version")
+  node_directory="$node_version"
+  [[ "$node_directory" == v* ]] || node_directory="v$node_directory"
   [ -n "$pi_harness" ] || pi_harness="/home/$user/.local/bin/pi-harness"
   [ -z "$ip" ] && continue
   echo -n "$index. Perfil '$role', rol '$stack' ($user@$ip)... "
   if ssh $SSH_OPTS "$user@$ip" \
-    "export PATH='/home/$user/.nvm/versions/node/$node_version/bin:/home/$user/.local/bin':\"\$PATH\"; test -x '$pi_harness' && command -v pi >/dev/null && test -s '/home/$user/.pi/agent/auth.json'" \
+    "export PATH='/home/$user/.nvm/versions/node/$node_directory/bin:/home/$user/.local/bin':\"\$PATH\"; test -x '$pi_harness' && command -v pi >/dev/null && test -s '/home/$user/.pi/agent/auth.json'" \
     >/dev/null 2>&1; then
     echo "✓ SSH y Pi OK"
   else

@@ -12,6 +12,7 @@ MODO="${1:-provisionar}"
 
 IFS= read -r VM_PROFILE
 IFS= read -r STACK
+IFS= read -r PROJECT_KIND
 IFS= read -r SOURCE_MODE
 IFS= read -r AGENT_UPDATE_MODE
 IFS= read -r WORKSPACE
@@ -46,6 +47,9 @@ VALIDAR_URL_GIT() {
 
 [[ "$VM_PROFILE" =~ ^[a-z0-9-]+$ ]] || { echo "Error: perfil no válido." >&2; exit 1; }
 [ "$STACK" = "backend" ] || [ "$STACK" = "frontend" ] || { echo "Error: stack no soportado." >&2; exit 1; }
+[ "$PROJECT_KIND" = "core" ] || [ "$PROJECT_KIND" = "module" ] || [ "$PROJECT_KIND" = "frontend" ] || { echo "Error: tipo de repositorio no soportado." >&2; exit 1; }
+[ "$STACK" != "frontend" ] || [ "$PROJECT_KIND" = "frontend" ] || { echo "Error: una VM frontend requiere kind=frontend." >&2; exit 1; }
+[ "$STACK" != "backend" ] || { [ "$PROJECT_KIND" = "core" ] || [ "$PROJECT_KIND" = "module" ]; } || { echo "Error: una VM backend requiere kind=core o kind=module." >&2; exit 1; }
 [ "$SOURCE_MODE" = "git" ] || [ "$SOURCE_MODE" = "local" ] || { echo "Error: source_mode no válido." >&2; exit 1; }
 [ "$AGENT_UPDATE_MODE" = "git" ] || [ "$AGENT_UPDATE_MODE" = "local" ] || { echo "Error: agent_update_mode no válido." >&2; exit 1; }
 [[ "$NODE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Error: Node no válido." >&2; exit 1; }
@@ -203,7 +207,7 @@ fi
 if [ "$INSTALL_DEPENDENCIES" = "true" ]; then
   if [ "$STACK" = "backend" ]; then
     composer install --working-dir="$WORKSPACE" --no-interaction --prefer-dist
-    if [ ! -f "$WORKSPACE/.env" ] && [ -f "$WORKSPACE/.env.example" ]; then
+    if [ "$PROJECT_KIND" = "core" ] && [ ! -f "$WORKSPACE/.env" ] && [ -f "$WORKSPACE/.env.example" ]; then
       cp "$WORKSPACE/.env.example" "$WORKSPACE/.env"
       php "$WORKSPACE/artisan" key:generate --force
     fi

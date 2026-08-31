@@ -4,10 +4,23 @@ set -euo pipefail
 role="$1"
 project_dir="$2"
 task="$3"
-: "${4:-}"
+shift 3
+dispatch_id="$role"
+profile="$role"
+repository="$role"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dispatch-id) dispatch_id="$2"; shift 2 ;;
+    --profile) profile="$2"; shift 2 ;;
+    --repository) repository="$2"; shift 2 ;;
+    --fullstack-confirmado) shift ;;
+    *) shift ;;
+  esac
+done
 
 printf '%s inicio %s\n' "$role" "$(date +%s)" >> "$PRUEBA_PARALELA_EVENTOS"
 sleep 2
 printf '%s fin %s\n' "$role" "$(date +%s)" >> "$PRUEBA_PARALELA_EVENTOS"
-printf 'PI_SIMULADO: %s\nTAREA: %s\n' "$role" "$task" > "$project_dir/${role}_output.log"
-printf '## Ejecución del rol: %s\n\n- Pi simulado\n' "$role" > "$project_dir/EVIDENCIA_${role}.md"
+printf 'PERFIL_VM_LOCAL: %s\nROL: %s\nREPOSITORIO: %s\nPI_SIMULADO: %s\nTAREA: %s\n' \
+  "$profile" "$role" "$repository" "$role" "$task" > "$project_dir/${dispatch_id}_output.log"
+printf '## Ejecución del rol: %s\n\n- Pi simulado\n' "$role" > "$project_dir/EVIDENCIA_${dispatch_id}.md"

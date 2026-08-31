@@ -31,12 +31,36 @@
     "ip": "192.168.50.231",
     "user": "carlos2",
     "workspace": "/home/carlos2/laravel-dev",
+    "repositories": [
+      {
+        "id": "laravel-dev-prueba",
+        "module": "backend-prueba",
+        "kind": "module",
+        "path": "/home/carlos2/laravel-dev",
+        "business_memory": "/home/carlos2/.local/share/prueba-agentes/business/laravel-dev-prueba.md",
+        "aliases": [
+          "backend prueba",
+          "laravel prueba"
+        ]
+      }
+    ],
     "stack": "backend",
     "engine": "pi",
     "dispatch_enabled": false,
     "pi_harness": "/home/carlos2/.local/bin/pi-harness",
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
+    "memory": {
+      "enabled": false,
+      "gateway_url": "",
+      "core_id": "",
+      "tenant_id": "",
+      "read_business": false,
+      "read_company": false,
+      "tls_key": "",
+      "tls_cert": "",
+      "tls_ca": ""
+    },
     "source_mode": "local",
     "agent_update_mode": "git",
     "node_version": "24.19.0",
@@ -56,12 +80,40 @@
     "ip": "192.168.50.40",
     "user": "serveradmin",
     "workspace": "/home/serveradmin/vue-dev",
+    "repositories": [
+      {
+        "id": "vue-dev",
+        "module": "frontend",
+        "kind": "frontend",
+        "path": "/home/serveradmin/vue-dev",
+        "business_memory": "/home/serveradmin/.local/share/prueba-agentes/business/vue-dev.md",
+        "aliases": [
+          "frontend",
+          "interfaz",
+          "vue",
+          "panel",
+          "componente",
+          "pantalla"
+        ]
+      }
+    ],
     "stack": "frontend",
     "engine": "pi",
-    "dispatch_enabled": true,
+    "dispatch_enabled": false,
     "pi_harness": "/home/serveradmin/.local/bin/pi-harness",
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
+    "memory": {
+      "enabled": false,
+      "gateway_url": "",
+      "core_id": "",
+      "tenant_id": "",
+      "read_business": false,
+      "read_company": false,
+      "tls_key": "",
+      "tls_cert": "",
+      "tls_ca": ""
+    },
     "source_mode": "local",
     "agent_update_mode": "git",
     "node_version": "24.19.0",
@@ -79,12 +131,40 @@
     "ip": "192.168.50.193",
     "user": "serveradmin",
     "workspace": "/home/serveradmin/laravel-dev",
+    "repositories": [
+      {
+        "id": "laravel-dev",
+        "module": "backend-general",
+        "kind": "module",
+        "path": "/home/serveradmin/laravel-dev",
+        "business_memory": "/home/serveradmin/.local/share/prueba-agentes/business/laravel-dev.md",
+        "aliases": [
+          "backend",
+          "api",
+          "laravel",
+          "usuarios",
+          "pagos",
+          "ordenes"
+        ]
+      }
+    ],
     "stack": "backend",
     "engine": "pi",
-    "dispatch_enabled": true,
+    "dispatch_enabled": false,
     "pi_harness": "/home/serveradmin/.local/bin/pi-harness",
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
+    "memory": {
+      "enabled": false,
+      "gateway_url": "",
+      "core_id": "",
+      "tenant_id": "",
+      "read_business": false,
+      "read_company": false,
+      "tls_key": "",
+      "tls_cert": "",
+      "tls_ca": ""
+    },
     "source_mode": "local",
     "agent_update_mode": "git",
     "node_version": "24.19.0",
@@ -95,6 +175,158 @@
     "project_local_path": "/Users/carlos/Documents/GitHub/laravel-dev",
     "php_version": "8.4",
     "php_min_version": "8.4.1",
+    "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
+    "git_branch": "implementacion_pi",
+    "git_agent_path": "skills/dev-back",
+    "agent_poll_seconds": 30
+  },
+  "backend-core": {
+    "ip": "192.168.50.193",
+    "user": "serveradmin",
+    "workspace": "/home/serveradmin/api-monolitic",
+    "stack": "backend",
+    "repositories": [
+      {
+        "id": "api-monolitic",
+        "module": "core",
+        "kind": "core",
+        "path": "/home/serveradmin/api-monolitic",
+        "business_memory": "/home/serveradmin/.local/share/prueba-agentes/business/api-monolitic.md",
+        "aliases": [
+          "api",
+          "autenticacion",
+          "core",
+          "monolito",
+          "usuarios"
+        ]
+      }
+    ],
+    "engine": "pi",
+    "dispatch_enabled": true,
+    "pi_harness": "/home/serveradmin/.local/bin/pi-harness",
+    "pi_provider": "openai-codex",
+    "pi_model": "gpt-5.4-mini",
+    "memory": {
+      "enabled": true,
+      "gateway_url": "https://192.168.50.31:9443",
+      "core_id": "api-monolitic",
+      "tenant_id": "empresa-prueba",
+      "read_business": false,
+      "read_company": false,
+      "tls_key": "/home/serveradmin/.config/prueba-agentes/memory-gateway/client.key",
+      "tls_cert": "/home/serveradmin/.config/prueba-agentes/memory-gateway/client.crt",
+      "tls_ca": "/home/serveradmin/.config/prueba-agentes/memory-gateway/ca.crt"
+    },
+    "source_mode": "local",
+    "project_local_path": "/Users/carlos/Documents/GitHub/api-monolitic",
+    "agent_update_mode": "git",
+    "node_version": "24.19.0",
+    "pi_version": "latest",
+    "php_version": "8.4",
+    "php_min_version": "8.4.1",
+    "install_dependencies": true,
+    "local_agent": "skills/dev-back",
+    "remote_agent": "/home/serveradmin/agentes/backend",
+    "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
+    "git_branch": "implementacion_pi",
+    "git_agent_path": "skills/dev-back",
+    "agent_poll_seconds": 30
+  },
+  "backend-comments": {
+    "ip": "192.168.50.40",
+    "user": "serveradmin",
+    "workspace": "/home/serveradmin/api-monolitic-comments",
+    "stack": "backend",
+    "repositories": [
+      {
+        "id": "api-monolitic-comments",
+        "module": "comments",
+        "kind": "module",
+        "path": "/home/serveradmin/api-monolitic-comments",
+        "business_memory": "/home/serveradmin/.local/share/prueba-agentes/business/api-monolitic-comments.md",
+        "aliases": [
+          "comentario",
+          "comentarios",
+          "comments"
+        ]
+      }
+    ],
+    "engine": "pi",
+    "dispatch_enabled": true,
+    "pi_harness": "/home/serveradmin/.local/bin/pi-harness",
+    "pi_provider": "openai-codex",
+    "pi_model": "gpt-5.4-mini",
+    "memory": {
+      "enabled": true,
+      "gateway_url": "https://192.168.50.31:9443",
+      "core_id": "api-monolitic",
+      "tenant_id": "empresa-prueba",
+      "read_business": false,
+      "read_company": false,
+      "tls_key": "/home/serveradmin/.config/prueba-agentes/memory-gateway/client.key",
+      "tls_cert": "/home/serveradmin/.config/prueba-agentes/memory-gateway/client.crt",
+      "tls_ca": "/home/serveradmin/.config/prueba-agentes/memory-gateway/ca.crt"
+    },
+    "source_mode": "local",
+    "project_local_path": "/Users/carlos/Documents/GitHub/api-monolitic-comments",
+    "agent_update_mode": "git",
+    "node_version": "24.19.0",
+    "pi_version": "latest",
+    "php_version": "8.4",
+    "php_min_version": "8.4.1",
+    "install_dependencies": false,
+    "local_agent": "skills/dev-back",
+    "remote_agent": "/home/serveradmin/agentes/backend",
+    "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
+    "git_branch": "implementacion_pi",
+    "git_agent_path": "skills/dev-back",
+    "agent_poll_seconds": 30
+  },
+  "backend-posts": {
+    "ip": "192.168.50.231",
+    "user": "carlos2",
+    "workspace": "/home/carlos2/api-monolitic-posts",
+    "stack": "backend",
+    "repositories": [
+      {
+        "id": "api-monolitic-posts",
+        "module": "posts",
+        "kind": "module",
+        "path": "/home/carlos2/api-monolitic-posts",
+        "business_memory": "/home/carlos2/.local/share/prueba-agentes/business/api-monolitic-posts.md",
+        "aliases": [
+          "posts",
+          "publicacion",
+          "publicaciones"
+        ]
+      }
+    ],
+    "engine": "pi",
+    "dispatch_enabled": true,
+    "pi_harness": "/home/carlos2/.local/bin/pi-harness",
+    "pi_provider": "openai-codex",
+    "pi_model": "gpt-5.4-mini",
+    "memory": {
+      "enabled": true,
+      "gateway_url": "https://192.168.50.31:9443",
+      "core_id": "api-monolitic",
+      "tenant_id": "empresa-prueba",
+      "read_business": false,
+      "read_company": false,
+      "tls_key": "/home/carlos2/.config/prueba-agentes/memory-gateway/client.key",
+      "tls_cert": "/home/carlos2/.config/prueba-agentes/memory-gateway/client.crt",
+      "tls_ca": "/home/carlos2/.config/prueba-agentes/memory-gateway/ca.crt"
+    },
+    "source_mode": "local",
+    "project_local_path": "/Users/carlos/Documents/GitHub/api-monolitic-posts",
+    "agent_update_mode": "git",
+    "node_version": "24.19.0",
+    "pi_version": "latest",
+    "php_version": "8.4",
+    "php_min_version": "8.4.1",
+    "install_dependencies": false,
+    "local_agent": "skills/dev-back",
+    "remote_agent": "/home/carlos2/agentes/backend",
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "implementacion_pi",
     "git_agent_path": "skills/dev-back",

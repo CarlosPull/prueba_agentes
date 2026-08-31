@@ -1,0 +1,30 @@
+[Unit]
+Description=Prueba Agentes Memory Gateway
+After=network-online.target cognee.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=memory-gateway
+Group=memory-gateway
+EnvironmentFile=/etc/memory-gateway/gateway.env
+Environment=COGNEE_API_KEY_FILE=/etc/memory-gateway/cognee-api-key
+Environment=COGNEE_BEARER_TOKEN_FILE=/etc/memory-gateway/cognee-bearer-token
+ExecStart=/usr/bin/node /opt/prueba-agentes-memory-gateway/bin/memory-gateway.mjs
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/memory-gateway
+
+[Install]
+WantedBy=multi-user.target

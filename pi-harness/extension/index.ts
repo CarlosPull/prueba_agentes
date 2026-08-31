@@ -1,10 +1,12 @@
 import {
   appendFileSync,
+  closeSync,
   existsSync,
   lstatSync,
   readFileSync,
   realpathSync,
 } from "node:fs";
+import { request as httpsRequest } from "node:https";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -15,12 +17,63 @@ type Policy = {
   write: string[];
   deny_read: string[];
   deny_write: string[];
+  memory?: Record<string, Access[]>;
 };
 
 type Access = "read" | "write";
 
 const READ_TOOLS = new Set(["read", "grep", "find", "ls"]);
 const WRITE_TOOLS = new Set(["write", "edit"]);
+const MEMORY_TOOLS = new Set(["memoria_buscar", "memoria_publicar_endpoint"]);
+
+type GatewayCredentials = { ca: Buffer; cert: Buffer; key: Buffer };
+
+function consumeCredentialFd(name: string): Buffer {
+  const raw = process.env[name];
+  delete process.env[name];
+  const fd = Number(raw);
+  if (!Number.isInteger(fd) || fd < 3) throw new Error(`Pi harness: descriptor inválido para ${name}`);
+  try { return readFileSync(fd); } finally { closeSync(fd); }
+}
+
+function gatewayRequest(baseUrl: string, credentials: GatewayCredentials, path: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
+  return new Promise((resolveRequest, rejectRequest) => {
+    const target = new URL(path, `${baseUrl.replace(/\/$/, "")}/`);
+    if (target.protocol !== "https:") throw new Error("Memory Gateway requiere HTTPS");
+    const request = httpsRequest(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port || 443,
+        path: target.pathname,
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        ca: credentials.ca,
+        cert: credentials.cert,
+        key: credentials.key,
+        minVersion: "TLSv1.3",
+        rejectUnauthorized: true,
+        signal,
+      },
+      (response) => {
+        let raw = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => { raw += chunk; });
+        response.on("end", () => {
+          let parsed: unknown;
+          try { parsed = JSON.parse(raw); } catch { parsed = { error: raw }; }
+          if ((response.statusCode ?? 500) >= 400) {
+            rejectRequest(new Error(`Memory Gateway rechazó la operación (${response.statusCode}): ${raw.slice(0, 1000)}`));
+            return;
+          }
+          resolveRequest(parsed);
+        });
+      },
+    );
+    request.on("error", rejectRequest);
+    request.end(JSON.stringify(body));
+  });
+}
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name];
@@ -85,6 +138,17 @@ export default function piHarnessPolicy(pi: ExtensionAPI) {
   const auditFile = requiredEnvironment("PI_HARNESS_AUDIT_FILE");
   const role = requiredEnvironment("PI_HARNESS_ROLE");
   const sandboxEnforced = process.env.PI_HARNESS_SANDBOX_ENFORCED === "1";
+  const gatewayUrl = process.env.PI_MEMORY_GATEWAY_URL || "";
+  const coreId = process.env.PI_MEMORY_CORE_ID || "";
+  const tenantId = process.env.PI_MEMORY_TENANT_ID || "";
+  let gatewayCredentials: GatewayCredentials | null = null;
+  if (gatewayUrl) {
+    gatewayCredentials = {
+      key: consumeCredentialFd("PI_MEMORY_TLS_KEY_FD"),
+      cert: consumeCredentialFd("PI_MEMORY_TLS_CERT_FD"),
+      ca: consumeCredentialFd("PI_MEMORY_TLS_CA_FD"),
+    };
+  }
   const policy = JSON.parse(readFileSync(policyPath, "utf8")) as Policy;
 
   if (policy.version !== 1 || policy.role !== role) {
@@ -130,6 +194,80 @@ export default function piHarnessPolicy(pi: ExtensionAPI) {
     }
   }
 
+  function memoryAllowed(layer: string, access: Access): boolean {
+    return Boolean(gatewayCredentials && policy.memory?.[layer]?.includes(access));
+  }
+
+  if (gatewayCredentials) {
+    pi.registerTool({
+      name: "memoria_buscar",
+      label: "Buscar mediante Memory Gateway",
+      description: "Busca contexto autorizado en memoria compartida, de negocio o interna.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["layer", "query"],
+        properties: {
+          layer: { type: "string", enum: ["shared_contracts", "business", "company"] },
+          query: { type: "string", minLength: 1, maxLength: 4000 },
+        },
+      } as any,
+      async execute(_toolCallId, params, signal) {
+        const layer = String(params.layer || "");
+        try {
+          if (!memoryAllowed(layer, "read")) throw new Error(`Acceso de lectura denegado a ${layer}`);
+          const result = await gatewayRequest(gatewayUrl, gatewayCredentials, "/v1/memory/search", {
+            layer, query: params.query, core_id: coreId, tenant_id: tenantId,
+          }, signal);
+          audit("memoria_buscar", "read", layer, true, `consulta Gateway autorizada para ${role}`);
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], details: { layer } };
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "falló la consulta de memoria";
+          audit("memoria_buscar", "read", layer, false, reason);
+          throw error;
+        }
+      },
+    });
+
+    if (memoryAllowed("shared_contracts", "write")) {
+      pi.registerTool({
+        name: "memoria_publicar_endpoint",
+        label: "Publicar endpoint en Memory Gateway",
+        description: "Publica exclusivamente el contrato técnico de un endpoint; no acepta lógica de negocio ni código fuente.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          required: ["method", "path", "repository", "module", "summary"],
+          properties: {
+            method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"] },
+            path: { type: "string", pattern: "^/", maxLength: 500 },
+            repository: { type: "string", maxLength: 100 },
+            module: { type: "string", maxLength: 100 },
+            summary: { type: "string", maxLength: 1000 },
+            authentication: { type: "string", maxLength: 1000 },
+            request_schema: { type: "string", maxLength: 4000 },
+            response_schema: { type: "string", maxLength: 4000 },
+            version: { type: "string", maxLength: 100 },
+            source_commit: { type: "string", maxLength: 100 },
+          },
+        } as any,
+        async execute(_toolCallId, params, signal) {
+          try {
+            const result = await gatewayRequest(gatewayUrl, gatewayCredentials, "/v1/contracts/endpoints", {
+              core_id: coreId, endpoint: params,
+            }, signal);
+            audit("memoria_publicar_endpoint", "write", "shared_contracts", true, "contrato publicado mediante Memory Gateway");
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], details: { layer: "shared_contracts" } };
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : "falló la publicación del endpoint";
+            audit("memoria_publicar_endpoint", "write", "shared_contracts", false, reason);
+            throw error;
+          }
+        },
+      });
+    }
+  }
+
   pi.on("tool_call", async (event) => {
     const input = (event.input ?? {}) as Record<string, unknown>;
     if (READ_TOOLS.has(event.toolName)) {
@@ -148,6 +286,18 @@ export default function piHarnessPolicy(pi: ExtensionAPI) {
       const reason = allowed
         ? "la orden será limitada por el aislamiento del sistema operativo"
         : "no existe evidencia de una barrera del sistema operativo activa";
+      audit(event.toolName, "execute", null, allowed, reason);
+      return allowed ? undefined : { block: true, reason };
+    }
+    if (MEMORY_TOOLS.has(event.toolName)) {
+      const layer = event.toolName === "memoria_publicar_endpoint"
+        ? "shared_contracts"
+        : typeof input.layer === "string" ? input.layer : "";
+      const access: Access = event.toolName === "memoria_publicar_endpoint" ? "write" : "read";
+      const allowed = memoryAllowed(layer, access);
+      const reason = allowed
+        ? "operación controlada por la política y Memory Gateway"
+        : `acceso ${access} denegado a la capa ${layer || "no indicada"}`;
       audit(event.toolName, "execute", null, allowed, reason);
       return allowed ? undefined : { block: true, reason };
     }

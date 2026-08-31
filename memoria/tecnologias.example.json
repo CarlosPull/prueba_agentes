@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "repositories": {
+    "api-monolitic": {
+      "technologies": ["PHP 8.4", "Laravel 13", "Composer"],
+      "architecture": "core Laravel monolítico con módulos Composer por path",
+      "constraints": ["Conservar compatibilidad con módulos del core"]
+    },
+    "api-monolitic-comments": {
+      "technologies": ["PHP 8.4", "Illuminate 13", "Composer"],
+      "architecture": "módulo backend Composer",
+      "constraints": ["Compartir sólo contratos de endpoints"]
+    },
+    "api-monolitic-posts": {
+      "technologies": ["PHP 8.4", "Illuminate 13", "Composer"],
+      "architecture": "módulo backend Composer",
+      "constraints": ["Compartir sólo contratos de endpoints"]
+    },
+    "laravel-dev": {
+      "technologies": ["PHP 8.4", "Laravel 13", "PostgreSQL"],
+      "architecture": "modular",
+      "constraints": ["Controllers delgados", "Contratos API mediante OpenAPI"]
+    },
+    "vue-dev": {
+      "technologies": ["Vue 3", "TypeScript", "Vite"],
+      "architecture": "SPA",
+      "constraints": ["Composition API", "Componentes accesibles"]
+    }
+  }
+}

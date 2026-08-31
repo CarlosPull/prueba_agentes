@@ -46,6 +46,9 @@ printf '%s\n%s\n%s\n%s\n' "file://$origen_git" "sincronizacion_agentes_ssh" "bac
 
 pi_harness_remoto="$FAKE_REMOTE_ROOT/home/serveradmin/.local/bin/pi-harness"
 mkdir -p "$(dirname "$pi_harness_remoto")" "$FAKE_REMOTE_ROOT/home/serveradmin/laravel-dev"
+memoria_negocio="$FAKE_REMOTE_ROOT/home/serveradmin/.local/share/prueba-agentes/business/laravel-dev.md"
+mkdir -p "$(dirname "$memoria_negocio")"
+printf '# Reglas privadas de prueba\n' > "$memoria_negocio"
 cp "$FIXTURES/pi-harness" "$pi_harness_remoto"
 cp "$FIXTURES/pi" "$TEMP_DIR/bin/pi"
 chmod +x "$pi_harness_remoto" "$TEMP_DIR/bin/pi"
@@ -88,6 +91,7 @@ grep -q "VERSION_AGENTE: $version_tercera" "$proyecto/backend_output.log"
 grep -q "EJECUCIÓN_PI_REMOTA_SIMULADA: OK" "$proyecto/backend_output.log"
 grep -q "PI_HARNESS_REMOTO: .*serveradmin/.local/bin/pi-harness" "$proyecto/backend_output.log"
 grep -q "Crear un endpoint de salud" "$FAKE_PI_PROMPT"
+grep -q "MEMORIA_NEGOCIO_LOCAL: .*business/laravel-dev.md" "$proyecto/backend_output.log"
 grep -q "Pi Harness remoto" "$proyecto/EVIDENCIA_backend.md"
 
 echo "✓ Pull Git, actualización atómica y despacho remoto con Pi verificados."

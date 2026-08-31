@@ -31,6 +31,11 @@ Utilidades auxiliares:
 ./tools/descomponer_requisitos.sh "objetivo"          # dividir en requisitos backend/frontend/generales
 ./tools/clasificar_tarea.sh "objetivo"                # clasificador determinista directo
 ./tools/generar_evidencia_agente.sh <rol> <dir>       # evidencia del agente ejecutado en la VM
+./tools/recolectar_contexto_memoria.sh "objetivo"      # tecnologías privadas + contratos compartidos
+./tools/analizar_requisitos.sh "objetivo"              # asignar VM, repositorio y módulo exactos
+./tools/agregar_repositorio_vm.sh ...                  # registrar/copiar otro módulo en una VM
+./tools/configurar_perfil_backend_local.sh ...         # crear perfil core/módulo sin preguntas
+./tools/limpiar_vm_pi.sh <perfil> --confirmar-limpieza # retirar artefactos administrados de una VM
 ./tools/configurar_ssh_vm.sh user@ip                  # copiar llave SSH a VM nueva
 ./tools/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo # preparar una VM Pi de extremo a extremo
 ./tools/provisionar_vm_pi.sh <perfil> --solo-verificar       # auditar una VM Pi sin reinstalar
@@ -81,15 +86,16 @@ tools/                         # herramientas locales y bootstraps remotos en sh
 - Los cambios locales solo llegan a las VMs después de `git commit` y `git push` a la rama configurada en `git_branch`; actualmente es `sincronizacion_agentes_git`.
 - Si la sincronización o su validación falla, Pi no se ejecuta. No se reutiliza silenciosamente una versión anterior.
 - El actualizador usa un bloqueo exclusivo y el despachador uno compartido; una activación nunca interrumpe una ejecución en curso.
-- `validar_y_despachar.sh` crea un `.ejecucion_lock` en la carpeta del proyecto; un segundo despacho al mismo proyecto falla con error explícito.
+- `validar_y_despachar.sh` crea un candado por identificador de despacho; impide repetir el mismo destino sin bloquear módulos distintos que se ejecutan en paralelo.
 - Cada despacho guarda `EVIDENCIA_AGENTES.md` dentro del proyecto con el perfil, VM, agente resuelto, versión, commit, hash de `SKILL.md`, Pi, workspace, `run_id` y manifiesto remoto utilizados.
+- El Memory Gateway conserva SQLite/OpenAPI como fuente autoritativa e indexa el contexto semántico en Cognee OSS self-hosted mediante `add → cognify → search`; las VMs nunca se conectan directamente a Cognee.
 - La configuración de VMs se lee de `vms.json`. Las claves son perfiles de VM y `stack` indica el rol; esto permite perfiles adicionales como `backend-prueba` sin reemplazar `backend`.
 - Las políticas en `pi-harness/policies/*.json` limitan lectura y escritura por rol; el harness selecciona el aislamiento según el sistema operativo.
 - **Solo `backend` y `frontend` se despachan vía tools/**. Los agentes `qa` y `dev-security` no tienen despacho automatizado; se definen pero no se invocan desde las herramientas actuales.
-- `orquestar.sh` descompone primero la solicitud en requisitos atómicos. Guarda `REQUISITOS.json` y `REQUISITOS.md`, agrupa los requisitos por `backend` o `frontend` y comparte los requisitos `general` con cada rol despachado.
+- `orquestar.sh` recolecta primero el inventario tecnológico privado y los contratos compartidos, después descompone la solicitud y asigna cada requisito a un perfil, repositorio y módulo exactos. Guarda sólo un resumen no sensible del contexto.
 - Una solicitud que contiene requisitos backend y frontend se despacha automáticamente a ambos roles aunque el usuario no escriba explícitamente “Full-Stack”. `--clasificar` conserva la salida resumida `fullstack` y `--descomponer` muestra el detalle completo.
-- **Pi es el único motor de despacho**. Cada rol debe tener exactamente un perfil con `engine: "pi"` y `dispatch_enabled: true`. `pi-harness/` aplica ejecución fail-closed: Linux selecciona Bubblewrap, macOS Seatbelt y Windows exige `pi-appcontainer`.
-- Cuando una solicitud contiene backend y frontend, `orquestar.sh` lanza ambos despachos en segundo plano, espera a los dos y después consolida evidencia y reporte. Si uno falla, igualmente espera al otro y devuelve error.
+- **Pi es el único motor de despacho**. Puede haber múltiples perfiles backend y varios repositorios por perfil; el analista debe elegir un destino único o rechazar la solicitud como ambigua. `pi-harness/` aplica ejecución fail-closed: Linux selecciona Bubblewrap, macOS Seatbelt y Windows exige `pi-appcontainer`.
+- Los grupos independientes por perfil/repositorio se lanzan en paralelo, incluso cuando todos son backend. El orquestador espera a todos y después consolida evidencia y reporte; si uno falla, igualmente espera a los demás y devuelve error.
 - Si `provisionar_vm_pi.sh` recibe un perfil inexistente, solicita interactivamente IP, usuario, stack, fuentes y versiones, y lo agrega atómicamente a `vms.json`. La rama del agente usa como valor predeterminado la rama Git actual.
 
 ## Externalidades
@@ -101,7 +107,7 @@ tools/                         # herramientas locales y bootstraps remotos en sh
 
 ## Provisionamiento de una VM nueva
 
-La guía operativa completa está en `PROVISIONAMIENTO_VM.md`.
+La guía operativa completa está consolidada en la sección **Provisionar una VM Pi** de `README.md`.
 
 1. Crear el perfil con `tools/provisionar_vm_pi.sh`; guardará IP, usuario, workspace, stack, Pi, ruta del agente, rama e intervalo de consulta.
 2. Si los repositorios son privados, exportar temporalmente un token de GitHub con acceso de lectura: `export GITHUB_TOKEN='...'`. El token viaja por la entrada estándar de SSH, se usa mediante un `GIT_ASKPASS` temporal y no se guarda en la VM.

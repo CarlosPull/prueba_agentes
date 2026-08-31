@@ -35,8 +35,16 @@ echo "✓ ambigua: se rechazó una tarea sin señales suficientes"
 descomposicion="$($ORQUESTAR --descomponer \
   "Crea una migración Laravel para perfiles; implementa una pantalla Vue para editarlos; agrega mensajes claros")"
 
-[ "$(jq -r '.version' <<<"$descomposicion")" = "1" ] || {
+[ "$(jq -r '.version' <<<"$descomposicion")" = "2" ] || {
   echo "FALLO: la descomposición no tiene una versión reconocible." >&2
+  exit 1
+}
+[ "$(jq -r '.requirements[] | select(.category == "backend") | .target_profile + "/" + .repository' <<<"$descomposicion")" = "backend/laravel-dev" ] || {
+  echo "FALLO: el analista no seleccionó el repositorio backend." >&2
+  exit 1
+}
+[ "$(jq -r '.requirements[] | select(.category == "frontend") | .target_profile + "/" + .repository' <<<"$descomposicion")" = "frontend/vue-dev" ] || {
+  echo "FALLO: el analista no seleccionó el repositorio frontend." >&2
   exit 1
 }
 [ "$(jq '[.requirements[] | select(.category == "backend")] | length' <<<"$descomposicion")" = "1" ] || {

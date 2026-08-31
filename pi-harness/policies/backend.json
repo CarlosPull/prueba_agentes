@@ -1,6 +1,11 @@
 {
   "version": 1,
   "role": "backend",
+  "memory": {
+    "shared_contracts": ["read", "write"],
+    "business": ["read"],
+    "company": ["read"]
+  },
   "read": [
     "app/**",
     "routes/**",

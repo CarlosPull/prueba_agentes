@@ -36,7 +36,7 @@ fi
 cp "$ROOT/vms.json" "$TEMP_DIR/vms.json"
 branch_actual="$(git -C "$ROOT" branch --show-current)"
 printf '%s\n' \
-  '192.168.50.231' 'carlos2' '' '' '' '' '' '' '' '' '' '' '' '' \
+  '192.168.50.231' 'carlos2' '' '' '' '' '' '' '' '' '' '' '' '' '' '' '' '' \
   | PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json" "$LOCAL" backend-pi-automatico --solo-configurar >/dev/null
 
 jq -e --arg branch "$branch_actual" '
@@ -44,6 +44,10 @@ jq -e --arg branch "$branch_actual" '
   .ip == "192.168.50.231" and
   .user == "carlos2" and
   .workspace == "/home/carlos2/laravel-dev" and
+  (.repositories | length) == 1 and
+  .repositories[0].path == "/home/carlos2/laravel-dev" and
+  .repositories[0].kind == "module" and
+  (.repositories[0].business_memory | endswith(".md")) and
   .stack == "backend" and
   .source_mode == "local" and
   .agent_update_mode == "git" and

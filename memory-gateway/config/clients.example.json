@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "clients": {
+    "memory-admin": {
+      "enabled": true,
+      "permissions": ["business:write", "company:write"],
+      "core_ids": [],
+      "tenant_ids": ["empresa-a"]
+    },
+    "orchestrator-analyst": {
+      "enabled": true,
+      "permissions": ["contracts:read", "company:read"],
+      "core_ids": ["core-prueba"],
+      "tenant_ids": []
+    },
+    "backend": {
+      "enabled": true,
+      "permissions": ["contracts:read", "contracts:write", "business:read", "company:read"],
+      "core_ids": ["core-prueba"],
+      "tenant_ids": ["empresa-a"]
+    },
+    "frontend": {
+      "enabled": true,
+      "permissions": ["contracts:read", "business:read"],
+      "core_ids": ["core-prueba"],
+      "tenant_ids": ["empresa-a"]
+    }
+  }
+}

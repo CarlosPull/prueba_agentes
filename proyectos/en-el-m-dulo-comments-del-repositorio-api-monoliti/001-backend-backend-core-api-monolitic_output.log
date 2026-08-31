@@ -1,0 +1,22 @@
+AGENTE_REMOTO: /home/serveradmin/agentes/backend/actual
+PERFIL_VM_LOCAL: backend-core
+ROL: backend
+DESPACHO_ID: 001-backend-backend-core-api-monolitic
+REPOSITORIO: api-monolitic
+MODULO: core
+TIPO_REPOSITORIO: core
+MEMORIA_NEGOCIO_LOCAL: /home/serveradmin/.local/share/prueba-agentes/business/api-monolitic.md
+PERFIL_VM: backend-core
+AGENTE_RESUELTO: /home/serveradmin/agentes/backend/.versiones/f096997e9394182fe1ac2c5f9dcb0f09d4fc8638
+VERSION_AGENTE: f096997e9394182fe1ac2c5f9dcb0f09d4fc8638
+COMMIT_AGENTE: 0fe803f574c4c7a0665fbca5bf625560aa5c1f51
+SHA256_SKILL: 60e9c4acbf531454f26a52546b1467aa902b97aac24ab84cc576f8d4063544ba
+WORKSPACE_REMOTO: /home/serveradmin/api-monolitic
+PI_HARNESS_REMOTO: /home/serveradmin/.local/bin/pi-harness
+PI_BIN: /home/serveradmin/.nvm/versions/node/v24.19.0/bin/pi
+PI_VERSION: 0.84.4
+run_id: 20260831T185956Z-005e0872
+manifest: /home/serveradmin/.local/state/pi-harness/runs/20260831T185956Z-005e0872/manifest.json
+platform: linux
+sandbox_backend: bwrap
+bwrap: Unknown option --keep-fd

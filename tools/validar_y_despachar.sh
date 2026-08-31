@@ -9,16 +9,28 @@ ROLE="${1:-}"
 PROJECT_DIR="${2:-}"
 TAREA="${3:-}"
 MODO_FULLSTACK="${4:-}"
+PROFILE=""
+REPOSITORY=""
+DISPATCH_ID="$ROLE"
+
+shift "$([ "$#" -ge 3 ] && echo 3 || echo 0)"
+MODO_FULLSTACK=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --fullstack-confirmado) MODO_FULLSTACK="$1"; shift ;;
+    --profile) [ "$#" -ge 2 ] || exit 1; PROFILE="$2"; shift 2 ;;
+    --repository) [ "$#" -ge 2 ] || exit 1; REPOSITORY="$2"; shift 2 ;;
+    --dispatch-id) [ "$#" -ge 2 ] || exit 1; DISPATCH_ID="$2"; shift 2 ;;
+    *) echo "Error: opción no reconocida '$1'." >&2; exit 1 ;;
+  esac
+done
 
 if [ -z "$ROLE" ] || [ -z "$PROJECT_DIR" ] || [ -z "$TAREA" ]; then
-  echo "Uso: ./tools/validar_y_despachar.sh <rol> <directorio_proyecto> \"Tarea\" [--fullstack-confirmado]"
+  echo "Uso: ./tools/validar_y_despachar.sh <rol> <directorio_proyecto> \"Tarea\" [--fullstack-confirmado] [--profile perfil --repository repo --dispatch-id id]"
   exit 1
 fi
 
-if [ -n "$MODO_FULLSTACK" ] && [ "$MODO_FULLSTACK" != "--fullstack-confirmado" ]; then
-  echo "Error: opción no reconocida '$MODO_FULLSTACK'." >&2
-  exit 1
-fi
+[[ "$DISPATCH_ID" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Error: dispatch-id no válido." >&2; exit 1; }
 
 if [ "$MODO_FULLSTACK" = "--fullstack-confirmado" ]; then
   ROLE_UPPER="$(printf '%s' "$ROLE" | tr '[:lower:]' '[:upper:]')"
@@ -59,11 +71,7 @@ if [ -z "$MODO_FULLSTACK" ] && { [ "$ROLE" = "backend" ] || [ "$ROLE" = "dev-bac
 fi
 
 # 2. BLOQUEO FÍSICO DE RE-DESPACHO (Candado de Ejecución Única)
-if [ "$MODO_FULLSTACK" = "--fullstack-confirmado" ]; then
-  LOCK_FILE="$PROJECT_DIR/.ejecucion_lock.$ROLE"
-else
-  LOCK_FILE="$PROJECT_DIR/.ejecucion_lock"
-fi
+LOCK_FILE="$PROJECT_DIR/.ejecucion_lock.$DISPATCH_ID"
 if [ -f "$LOCK_FILE" ]; then
   echo "------------------------------------------------------------" >&2
   echo "⛔ BLOQUEO DE SEGURIDAD ABSOLUTO:" >&2
@@ -77,4 +85,8 @@ fi
 touch "$LOCK_FILE"
 
 # 3. Invocación limpia SSH
-"$TOOLS_DIR/despachar_vm.sh" "$ROLE" "$PROJECT_DIR" "$TAREA"
+dispatch_args=()
+[ -z "$PROFILE" ] || dispatch_args+=(--profile "$PROFILE")
+[ -z "$REPOSITORY" ] || dispatch_args+=(--repository "$REPOSITORY")
+dispatch_args+=(--dispatch-id "$DISPATCH_ID")
+"$TOOLS_DIR/despachar_vm.sh" "$ROLE" "$PROJECT_DIR" "$TAREA" "${dispatch_args[@]}"
