@@ -64,9 +64,10 @@ skills/                        # Agentes y sus instrucciones
 ├── dev-security/SKILL.md      # Auditoría de seguridad
 └── qa/SKILL.md                # QA / pruebas automatizadas
 
-vms.json                       # perfiles de VM, workspaces y configuración de Pi
+config/
+└── vms.json                   # perfiles de VM, workspaces y configuración de Pi
+logs/                          # salida y bitácoras: SOLICITUD.md, REPORTE_PI.md, *_output.log
 pi-harness/                    # harness experimental de Pi, extensión y políticas por rol
-proyectos/<slug>/              # salida: SOLICITUD.md, REPORTE_PI.md, *_output.log
 tests/                         # pruebas aisladas con remoto Git y dobles de SSH/Pi
 tools/                         # herramientas locales y bootstraps remotos en shell
 ```

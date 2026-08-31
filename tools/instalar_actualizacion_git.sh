@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VMS_CONF="$ROOT/vms.json"
+VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 ACTUALIZADOR_LOCAL="$ROOT/tools/remotos/actualizar_agente_git.sh"
 CICLO_LOCAL="$ROOT/tools/remotos/ciclo_actualizacion_git.sh"
 VM_PROFILE="${1:-}"

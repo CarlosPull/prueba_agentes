@@ -22,7 +22,7 @@ jq 'with_entries(.value.dispatch_enabled = false)
   | .backend.dispatch_enabled = true
   | .backend.pi_harness = "/home/serveradmin/.local/bin/pi-harness"
   | .backend.pi_provider = "openai-codex"
-  | .backend.pi_model = "gpt-5.4-mini"' "$ROOT/vms.json" > "$PRUEBA_AGENTES_VMS_CONF"
+  | .backend.pi_model = "gpt-5.4-mini"' "$ROOT/config/vms.json" > "$PRUEBA_AGENTES_VMS_CONF"
 
 # Crear un remoto Git aislado con la misma estructura del orquestador.
 fuente_git="$TEMP_DIR/fuente-git"

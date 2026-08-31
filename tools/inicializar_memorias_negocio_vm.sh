@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$ROOT/vms.json}"
+VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 PROFILE="${1:-}"
 [ -n "$PROFILE" ] || { echo "Uso: ./tools/inicializar_memorias_negocio_vm.sh <perfil>" >&2; exit 1; }
 ip="$(jq -er --arg profile "$PROFILE" '.[$profile].ip' "$VMS_CONF")"

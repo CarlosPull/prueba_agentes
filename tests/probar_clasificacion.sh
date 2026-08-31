@@ -4,6 +4,25 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ORQUESTAR="$ROOT/tools/orquestar.sh"
 
+TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/prueba-clasificacion.XXXXXX")"
+trap 'rm -rf "$TEMP_DIR"' EXIT INT TERM
+cat > "$TEMP_DIR/vms.json" <<'JSON'
+{
+  "backend": {
+    "ip":"192.0.2.10","user":"agente","workspace":"/home/agente/laravel-dev","stack":"backend","engine":"pi","dispatch_enabled":true,
+    "repositories":[{"id":"laravel-dev","module":"laravel-dev","kind":"module","path":"/home/agente/laravel-dev","business_memory":"","aliases":["backend","laravel","perfiles"]}],
+    "memory":{"enabled":false}
+  },
+  "frontend": {
+    "ip":"192.0.2.11","user":"agente","workspace":"/home/agente/vue-dev","stack":"frontend","engine":"pi","dispatch_enabled":true,
+    "repositories":[{"id":"vue-dev","module":"vue-dev","kind":"frontend","path":"/home/agente/vue-dev","business_memory":"","aliases":["frontend","vue"]}],
+    "memory":{"enabled":false}
+  }
+}
+JSON
+export PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json"
+
+
 PROBAR_ROL() {
   local esperado="$1"
   local tarea="$2"

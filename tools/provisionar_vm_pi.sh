@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$ROOT/vms.json}"
+VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 BOOTSTRAP_LOCAL="$ROOT/tools/remotos/provisionar_vm_pi.sh"
 PAQUETES_BACKEND_LOCAL="$ROOT/tools/remotos/instalar_paquetes_backend.sh"
 APPARMOR_BWRAP_LOCAL="$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor"

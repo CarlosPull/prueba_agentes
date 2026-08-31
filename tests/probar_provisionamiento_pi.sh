@@ -33,7 +33,7 @@ if "$LOCAL" 'Perfil Invalido' >/dev/null 2>&1; then
   exit 1
 fi
 
-cp "$ROOT/vms.json" "$TEMP_DIR/vms.json"
+cp "$ROOT/config/vms.json" "$TEMP_DIR/vms.json"
 branch_actual="$(git -C "$ROOT" branch --show-current)"
 printf '%s\n' \
   '192.168.50.231' 'carlos2' '' '' '' '' '' '' '' '' '' '' '' '' '' '' '' '' \
@@ -55,6 +55,6 @@ jq -e --arg branch "$branch_actual" '
   .pi_version == "latest"
 ' "$TEMP_DIR/vms.json" >/dev/null
 
-jq -e 'has("backend-pi-automatico") | not' "$ROOT/vms.json" >/dev/null
+jq -e 'has("backend-pi-automatico") | not' "$ROOT/config/vms.json" >/dev/null
 
 echo "OK: configuración automática, Pi y perfil AppArmor de Bubblewrap verificados sin usar SSH."

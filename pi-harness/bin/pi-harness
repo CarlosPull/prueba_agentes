@@ -300,8 +300,9 @@ PREPARE_MEMORY_GATEWAY() {
   for credential in "${PI_MEMORY_TLS_KEY:-}" "${PI_MEMORY_TLS_CERT:-}" "${PI_MEMORY_TLS_CA:-}"; do
     [ -f "$credential" ] && [ -r "$credential" ] || ERROR "credencial mTLS inexistente o ilegible: $credential"
   done
-  # Los certificados entran a Pi como descriptores, no como rutas montadas. La
-  # extensión los consume y cierra antes de que el agente pueda lanzar comandos.
+  # Los certificados entran al sandbox como descriptores. Seatbelt puede
+  # heredarlos directamente; Bubblewrap 0.11.x los convierte en archivos de un
+  # tmpfs privado que la extensión consume y elimina antes de habilitar tools.
   exec 70<"$PI_MEMORY_TLS_KEY"
   exec 71<"$PI_MEMORY_TLS_CERT"
   exec 72<"$PI_MEMORY_TLS_CA"
@@ -429,7 +430,21 @@ fi
 
 RUN_BWRAP() {
   local args=(--die-with-parent --unshare-pid --proc /proc --dev /dev --tmpfs /tmp)
-  [ "$MEMORY_ENABLED" != "1" ] || args+=(--keep-fd 70 --keep-fd 71 --keep-fd 72)
+  if [ "$MEMORY_ENABLED" = "1" ]; then
+    args+=(
+      --dir /run
+      --perms 0700 --tmpfs /run/pi-memory
+      --perms 0400 --file 70 /run/pi-memory/client.key
+      --perms 0400 --file 71 /run/pi-memory/client.crt
+      --perms 0400 --file 72 /run/pi-memory/ca.crt
+      --setenv PI_MEMORY_TLS_KEY_FILE /run/pi-memory/client.key
+      --setenv PI_MEMORY_TLS_CERT_FILE /run/pi-memory/client.crt
+      --setenv PI_MEMORY_TLS_CA_FILE /run/pi-memory/ca.crt
+      --unsetenv PI_MEMORY_TLS_KEY_FD
+      --unsetenv PI_MEMORY_TLS_CERT_FD
+      --unsetenv PI_MEMORY_TLS_CA_FD
+    )
+  fi
   local system_path
   for system_path in /usr /bin /sbin /lib /lib64 /etc /opt; do
     [ -e "$system_path" ] && args+=(--ro-bind "$system_path" "$system_path")

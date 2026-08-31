@@ -5,6 +5,7 @@ import {
   lstatSync,
   readFileSync,
   realpathSync,
+  unlinkSync,
 } from "node:fs";
 import { request as httpsRequest } from "node:https";
 import { isAbsolute, relative, resolve, sep } from "node:path";
@@ -28,12 +29,22 @@ const MEMORY_TOOLS = new Set(["memoria_buscar", "memoria_publicar_endpoint"]);
 
 type GatewayCredentials = { ca: Buffer; cert: Buffer; key: Buffer };
 
-function consumeCredentialFd(name: string): Buffer {
-  const raw = process.env[name];
-  delete process.env[name];
-  const fd = Number(raw);
-  if (!Number.isInteger(fd) || fd < 3) throw new Error(`Pi harness: descriptor inválido para ${name}`);
-  try { return readFileSync(fd); } finally { closeSync(fd); }
+function consumeCredential(fdName: string, fileName: string): Buffer {
+  const rawFd = process.env[fdName];
+  const credentialFile = process.env[fileName];
+  delete process.env[fdName];
+  delete process.env[fileName];
+
+  if (rawFd) {
+    const fd = Number(rawFd);
+    if (!Number.isInteger(fd) || fd < 3) throw new Error(`Pi harness: descriptor inválido para ${fdName}`);
+    try { return readFileSync(fd); } finally { closeSync(fd); }
+  }
+  if (credentialFile) {
+    try { return readFileSync(credentialFile); }
+    finally { unlinkSync(credentialFile); }
+  }
+  throw new Error(`Pi harness: falta la credencial ${fdName} o ${fileName}`);
 }
 
 function gatewayRequest(baseUrl: string, credentials: GatewayCredentials, path: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -144,9 +155,9 @@ export default function piHarnessPolicy(pi: ExtensionAPI) {
   let gatewayCredentials: GatewayCredentials | null = null;
   if (gatewayUrl) {
     gatewayCredentials = {
-      key: consumeCredentialFd("PI_MEMORY_TLS_KEY_FD"),
-      cert: consumeCredentialFd("PI_MEMORY_TLS_CERT_FD"),
-      ca: consumeCredentialFd("PI_MEMORY_TLS_CA_FD"),
+      key: consumeCredential("PI_MEMORY_TLS_KEY_FD", "PI_MEMORY_TLS_KEY_FILE"),
+      cert: consumeCredential("PI_MEMORY_TLS_CERT_FD", "PI_MEMORY_TLS_CERT_FILE"),
+      ca: consumeCredential("PI_MEMORY_TLS_CA_FD", "PI_MEMORY_TLS_CA_FILE"),
     };
   }
   const policy = JSON.parse(readFileSync(policyPath, "utf8")) as Policy;

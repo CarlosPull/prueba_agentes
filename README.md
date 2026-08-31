@@ -11,7 +11,7 @@ Prompt del usuario en la Mac
         │
         ▼
 Recolector de contexto
-  ├─ inventario de perfiles y repositorios de vms.json
+  ├─ inventario de perfiles y repositorios de config/vms.json
   ├─ tecnología privada relevante
   └─ contratos compartidos recuperados por el Memory Gateway
         │
@@ -37,7 +37,7 @@ Despachos SSH en paralelo
           └─ consulta/publica contratos mediante mTLS
                 │
                 ▼
-Reporte, logs y evidencia en proyectos/<slug>/
+Reporte, logs y evidencia en logs/<slug>/
 ```
 
 La entrada normal es:
@@ -102,7 +102,7 @@ Cada repositorio declara `business_memory` en `vms.json`. El archivo vive única
 
 ## Configuración de VMs y repositorios
 
-`vms.json` admite varios perfiles del mismo stack. Cada perfil activo debe declarar Pi y uno o más repositorios:
+`config/vms.json` admite varios perfiles del mismo stack. Cada perfil activo debe declarar Pi y uno o más repositorios:
 
 ```json
 {
@@ -371,7 +371,7 @@ Las VMs nunca se conectan directamente a Cognee. Las credenciales mTLS se entreg
 
 ## Artefactos de una ejecución
 
-Cada solicitud crea `proyectos/<slug>/` con:
+Cada solicitud crea `logs/<slug>/` con:
 
 - `SOLICITUD.md`: prompt original.
 - `CONTEXTO_RECOLECTADO.json`: contexto mínimo utilizado por el analista.

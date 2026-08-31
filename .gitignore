@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 .private/
+logs/*
+!logs/.gitkeep
+proyectos/
+

@@ -2,7 +2,7 @@
 # Instala en una VM su certificado cliente y la CA pública del Gateway.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$ROOT/vms.json}"
+VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 PROFILE="${1:-}"; PKI_DIR="${2:-}"
 [ -n "$PROFILE" ] && [ -n "$PKI_DIR" ] || { echo "Uso: ./tools/instalar_identidad_gateway.sh <perfil> <directorio-pki>" >&2; exit 1; }
 ip="$(jq -er --arg p "$PROFILE" '.[$p].ip' "$VMS_CONF")"

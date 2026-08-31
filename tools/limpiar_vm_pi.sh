@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$ROOT/vms.json}"
+VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 PROFILE="${1:-}"
 CONFIRMATION="${2:-}"
 [ -n "$PROFILE" ] || { echo "Uso: ./tools/limpiar_vm_pi.sh <perfil> --confirmar-limpieza" >&2; exit 1; }

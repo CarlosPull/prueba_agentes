@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLS_DIR="$ROOT/tools"
-VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$ROOT/vms.json}"
+VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 ROLE="${1:-}"
 PROJECT_DIR="${2:-}"
 TAREA="${3:-}"
