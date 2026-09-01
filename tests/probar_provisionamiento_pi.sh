@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOCAL="$ROOT/tools/provisionar_vm_pi.sh"
+LOCAL="$ROOT/tools/vms/provisionar_vm_pi.sh"
 REMOTE="$ROOT/tools/remotos/provisionar_vm_pi.sh"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/prueba-config-pi.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT INT TERM

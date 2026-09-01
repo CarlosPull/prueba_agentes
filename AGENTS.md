@@ -69,7 +69,14 @@ config/
 logs/                          # salida y bitácoras: SOLICITUD.md, REPORTE_PI.md, *_output.log
 pi-harness/                    # harness experimental de Pi, extensión y políticas por rol
 tests/                         # pruebas aisladas con remoto Git y dobles de SSH/Pi
-tools/                         # herramientas locales y bootstraps remotos en shell
+tools/                         # herramientas organizadas en subcarpetas temáticas:
+├── orquestacion/              # entrada principal, clasificación, análisis y memoria
+├── despacho/                  # validación, candados de ejecución física y reportes
+├── vms/                       # provisionamiento, perfiles y mantenimiento de VMs
+├── sincronizacion/            # actualización Git de agentes y monitores
+├── gateway/                   # servidor mTLS de Memory Gateway
+├── agentes/                   # generador de nuevos agentes (crear_agente.sh)
+└── remotos/                   # bootstraps remotos ejecutados en VMs
 ```
 
 ## Convenciones importantes
