@@ -204,15 +204,25 @@ El resultado se guarda automáticamente en `.private/tecnologias.json` bajo una 
 }
 ```
 
-Si ya existe una entrada tecnológica para ese `repo-id`, se conserva para no sobrescribir información revisada manualmente. Si no hay un manifiesto compatible, el alta continúa, crea una entrada sin tecnologías y muestra un aviso para completarla manualmente.
+Si ya existe una entrada tecnológica para ese `repo-id`, por defecto se conserva. Para forzar la re-detección de manifiestos y actualizar el registro (por ejemplo, si agregaste nuevos paquetes o dependencias), usa el flag `--refrescar-tecnologias`:
 
-La detección también puede ejecutarse sin registrar el repositorio:
+```bash
+./tools/vms/agregar_repositorio_vm.sh perfil repo-id modulo module /ruta/local /home/user/remote 'alias1,alias2' --solo-configurar --refrescar-tecnologias
+```
+
+#### Sincronización Automática a la Capa `company` del Gateway
+Al registrar o refrescar la tecnología de un repositorio, el sistema sincroniza automáticamente un resumen estructurado con la capa `company` del Memory Gateway (`memoria_gateway.sh guardar-empresa`). Esto permite que el analista orquestador recupere la información tecnológica centralizada mediante mTLS.
+
+La detección también puede ejecutarse en consola sin registrar el repositorio:
 
 ```bash
 ./tools/vms/detectar_tecnologias_repositorio.sh /ruta/al/repositorio module
 ```
 
 Los valores detectados son las restricciones declaradas en los manifiestos, no una garantía de las versiones instaladas en la VM.
+
+#### Soporte de Despacho Remoto para Roles `qa` y `dev-security`
+El orquestador (`orquestar.sh` y `analizar_requisitos.sh`) admite el despacho remoto automático por SSH para los cuatro stacks de agentes: `backend`, `frontend`, `qa` y `security`. Cuando configuras una VM con `"stack": "qa"` o `"stack": "security"`, las tareas de auditoría de código o generación de suites de pruebas E2E son asignadas y despachadas automáticamente a dicha máquina.
 
 ### 2. Contratos compartidos
 
