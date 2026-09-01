@@ -6,39 +6,41 @@ Este repositorio contiene un orquestador local escrito en shell script. Recibe u
 
 ## Flujo completo
 
-```text
-Prompt del usuario en la Mac
-        │
-        ▼
-Recolector de contexto (tools/orquestacion/recolectar_contexto_memoria.sh)
-  ├─ inventario de perfiles y repositorios de config/vms.json
-  ├─ tecnología privada relevante
-  └─ contratos compartidos recuperados por el Memory Gateway (mTLS)
-        │
-        ▼
-Analista de requisitos (tools/orquestacion/analizar_requisitos.sh)
-  ├─ divide el prompt en requisitos backend/frontend/general
-  ├─ selecciona perfil, VM, repositorio y módulo
-  └─ rechaza destinos ambiguos
-        │
-        ▼
-Despachos SSH en paralelo (tools/despacho/validar_y_despachar.sh)
-        │
-        ├─ VM del core (backend-core / 192.168.50.193)
-        ├─ VM de comments (backend-comments / 192.168.50.40)
-        ├─ VM de posts (backend-posts / 192.168.50.231)
-        └─ VM frontend cuando esté habilitada
-                │
-                ▼
-        Pi + pi-harness + agente de la VM
-          ├─ aplica la política del rol
-          ├─ incorpora memoria de negocio local
-          ├─ modifica únicamente el workspace permitido
-          └─ consulta/publica contratos mediante mTLS
-                │
-                ▼
-Reporte, logs y evidencia en logs/<slug>/
+```mermaid
+flowchart TD
+    U["Prompt general"] --> C["Recolector de contexto"]
+    U --> D["División inicial en<br/>requisitos pequeños"]
+
+    INV["Inventario de módulos y VMs"] --> C
+    TEC["Tecnología privada de la empresa"] --> C
+    C -- "Busca memoria company<br/>y contratos compartidos" --> GW
+
+    subgraph MEM["Memoria central"]
+        GW["Memory Gateway<br/>mTLS + permisos"]
+        GW --> COG["Cognee<br/>búsqueda semántica"]
+        GW --> SQL["SQLite + OpenAPI<br/>fuente autoritativa"]
+        SQL -- "indexa" --> COG
+        COG -. "fallback" .-> SQL
+    end
+
+    GW -- "Memoria relevante" --> CTX["Contexto completo"]
+    C -- "Prompt + inventario<br/>+ tecnología" --> CTX
+    CTX --> A["Analista central"]
+    D --> A
+    A --> RQ["Asigna los requisitos<br/>a los módulos correctos"]
+    RQ --> P["Despacho paralelo<br/>a las VMs seleccionadas"]
+
+    subgraph VMS["Cada VM"]
+        P --> H["Pi + agente especializado"]
+        BM["Memoria de negocio<br/>local del módulo"] --> H
+        H --> W["Trabaja únicamente en<br/>su repositorio autorizado"]
+    end
+
+    H -- "Consulta o publica contratos" --> GW
+    W --> R["Reporte y evidencia final"]
 ```
+
+El recolector obtiene el inventario, la tecnología privada, la memoria `company` y los contratos compartidos. En paralelo conceptual, el prompt se divide inicialmente por su texto; el analista combina esos requisitos con el contexto recolectado para seleccionar los módulos correctos y aplicar sus restricciones tecnológicas. La memoria de negocio del módulo se incorpora más tarde dentro de la VM elegida.
 
 La entrada principal es:
 
@@ -54,6 +56,8 @@ Para analizar sin ejecutar agentes:
 ```
 
 Cuando un prompt contiene trabajo para más de un destino, los despachos se lanzan en paralelo en segundo plano y se esperan en conjunto. Un fallo no cancela silenciosamente el resto; el reporte conserva el resultado de cada VM.
+
+Una oración que menciona inequívocamente varios módulos se expande a todos ellos. Las expresiones `solo lectura`, `sin modificar`, `no edites` y equivalentes activan una política fail-closed que elimina la escritura del workspace y la publicación en el Memory Gateway para todos los despachos de la solicitud.
 
 ---
 
@@ -80,6 +84,7 @@ tools/
 │   ├── provisionar_vm_pi.sh
 │   ├── configurar_perfil_backend_local.sh
 │   ├── agregar_repositorio_vm.sh
+│   ├── detectar_tecnologias_repositorio.sh
 │   ├── limpiar_vm_pi.sh
 │   ├── configurar_ssh_vm.sh
 │   ├── probar_vms.sh
@@ -100,6 +105,7 @@ tools/
 │   └── crear_agente.sh
 └── remotos/                   # Bootstraps remotos ejecutados en VMs
     ├── actualizar_agente_git.sh
+    ├── ciclo_actualizacion_git.sh
     ├── instalar_paquetes_backend.sh
     ├── provisionar_vm_pi.sh
     └── prueba-agentes-bwrap.apparmor
@@ -167,9 +173,46 @@ Puedes explorar los contratos JSON registrados y las reglas corporativas directa
 
 ### 1. Tecnología privada de la empresa
 
-La consume el recolector/analista antes de clasificar. Puede mantenerse en `.private/tecnologias.json` usando [`memoria/tecnologias.example.json`](memoria/tecnologias.example.json) como plantilla, o publicarse en la capa `company` del Gateway.
+La consume el recolector/analista antes de enrutar los requisitos. Puede mantenerse en `.private/tecnologias.json` usando [`memoria/tecnologias.example.json`](memoria/tecnologias.example.json) como plantilla, o publicarse en la capa `company` del Gateway.
 
 La identidad `orchestrator-analyst` sólo puede leer esta capa. Los agentes reciben únicamente el fragmento tecnológico relevante para su requisito.
+
+#### Detección automática al agregar un repositorio
+
+El asistente inicial `provisionar_vm_pi.sh` y el alta adicional `agregar_repositorio_vm.sh` inspeccionan el repositorio local antes de registrarlo. Leen únicamente sus manifiestos; no instalan dependencias ni ejecutan código del proyecto. Reconocen actualmente:
+
+- PHP, Laravel, Illuminate y Composer mediante `composer.json`.
+- Node.js, Vue, React, Next.js, Nuxt, Vite, TypeScript y el gestor de paquetes mediante `package.json` y sus archivos de lock.
+- Python, Go, Rust, Ruby, Java/Maven, Gradle, .NET y Docker mediante sus manifiestos convencionales.
+
+El resultado se guarda automáticamente en `.private/tecnologias.json` bajo una clave idéntica al `repo-id` registrado en `config/vms.json`:
+
+```json
+{
+  "version": 1,
+  "repositories": {
+    "modulo-inventario": {
+      "technologies": ["Composer", "Illuminate ^13.0", "PHP ^8.4"],
+      "architecture": "módulo backend Illuminate/Composer",
+      "constraints": [],
+      "detection": {
+        "mode": "automatic",
+        "sources": ["composer.json"]
+      }
+    }
+  }
+}
+```
+
+Si ya existe una entrada tecnológica para ese `repo-id`, se conserva para no sobrescribir información revisada manualmente. Si no hay un manifiesto compatible, el alta continúa, crea una entrada sin tecnologías y muestra un aviso para completarla manualmente.
+
+La detección también puede ejecutarse sin registrar el repositorio:
+
+```bash
+./tools/vms/detectar_tecnologias_repositorio.sh /ruta/al/repositorio module
+```
+
+Los valores detectados son las restricciones declaradas en los manifiestos, no una garantía de las versiones instaladas en la VM.
 
 ### 2. Contratos compartidos
 
@@ -209,7 +252,15 @@ Para aprovisionar una máquina virtual nueva de extremo a extremo:
 ./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
 ```
 
-El flujo interactivo solicita IP, usuario, stack, selector dinámico de agentes de `skills/`, workspace, origen del proyecto, modo de actualización del agente, rama, intervalo y versiones.
+Cuando el perfil todavía no existe, el flujo interactivo:
+
+1. Solicita la IP, el usuario y el origen del proyecto.
+2. Busca repositorios en el directorio padre de este proyecto —normalmente `/Users/carlos/Documents/GitHub`— y muestra una lista numerada. Se puede definir otra raíz con `PRUEBA_AGENTES_REPOSITORIES_ROOT` o elegir una ruta manual.
+3. Detecta las tecnologías del repositorio seleccionado, propone `backend` o `frontend` y usa el nombre de la carpeta como `repo-id` predeterminado.
+4. Registra el perfil en `config/vms.json` y la tecnología en `.private/tecnologias.json`.
+5. Continúa con el agente de `skills/`, workspace, actualización, rama, intervalo y versiones.
+
+La selección y detección local también se ejecutan con `--solo-configurar`, por lo que es posible preparar y revisar el perfil sin conectarse todavía a la VM. Para proyectos configurados exclusivamente mediante una URL Git no existe una copia local que inspeccionar durante esta fase; su tecnología debe registrarse cuando haya una copia local disponible.
 
 Para retirar los artefactos administrados por este orquestador antes de reprovisionar:
 
@@ -229,7 +280,7 @@ Los agentes pueden actualizarse de dos maneras:
 Flujo de actualización Git:
 
 ```text
-editar agente enskills/ → git add → git commit → git push a git_branch
+editar agente en skills/ → git add → git commit → git push a git_branch
                                          ↓
 VM consulta origin → descarga git_agent_path → activa nueva versión en ~/agentes/<agente>/actual
 ```
@@ -252,6 +303,8 @@ El harness instalado en cada VM:
 4. Carga únicamente el agente y la extensión de seguridad seleccionados.
 5. Incorpora la memoria de negocio local del repositorio.
 6. Guarda manifiesto, eventos, errores y auditoría de herramientas.
+7. En modo solo lectura genera una política efectiva sin escritura y sin herramientas de publicación de memoria.
+8. Conserva el JSONL bruto en la VM y devuelve a la Mac únicamente la respuesta final saneada.
 
 Diagnóstico local del harness:
 
@@ -294,13 +347,17 @@ Cada solicitud crea `logs/<slug>/` con:
 ./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
 
 # Suites de Pruebas Automatizadas
+./tests/probar_automatizacion.sh
 node tests/probar_memory_gateway.mjs
 bash tests/probar_enrutamiento_modular.sh
 bash tests/probar_clasificacion.sh
 node tests/probar_extension_pi.mjs
+bash tests/probar_despacho_paralelo.sh
 bash tests/probar_pi_harness.sh
 bash tests/probar_provisionamiento_pi.sh
 bash tests/probar_sincronizacion.sh
+bash tests/probar_ciclo_actualizacion.sh
+bash tests/probar_monitor_local.sh
 bash tests/probar_creacion_agente.sh
 bash tests/probar_consultar_memoria.sh
 ```
