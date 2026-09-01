@@ -35,8 +35,7 @@ fi
 
 cp "$ROOT/config/vms.json" "$TEMP_DIR/vms.json"
 branch_actual="$(git -C "$ROOT" branch --show-current)"
-printf '%s\n' \
-  '192.168.50.231' 'carlos2' '' '' '' '' '' '' '' '' '' '' '' '' '' '' '' '' \
+printf '%s\n' 192.168.50.231 carlos2 '' '' '' '' '' '' '' '' '' '' '' '' '' '' '' '' '' \
   | PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json" "$LOCAL" backend-pi-automatico --solo-configurar >/dev/null
 
 jq -e --arg branch "$branch_actual" '

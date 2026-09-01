@@ -75,16 +75,44 @@ CONFIGURAR_PERFIL_NUEVO() {
   if [ "$stack_nuevo" = "backend" ]; then
     workspace_default="/home/$user_nuevo/laravel-dev"
     project_local_default="/Users/carlos/Documents/GitHub/laravel-dev"
-    local_agent_nuevo="skills/dev-back"
-    remote_agent_nuevo="/home/$user_nuevo/agentes/backend"
-    git_agent_path_nuevo="skills/dev-back"
   else
     workspace_default="/home/$user_nuevo/vue-dev"
     project_local_default="/Users/carlos/Documents/GitHub/vue-dev"
-    local_agent_nuevo="skills/dev-front"
-    remote_agent_nuevo="/home/$user_nuevo/agentes/frontend"
-    git_agent_path_nuevo="skills/dev-front"
   fi
+
+  local agentes_disponibles=()
+  local i=1
+  local default_agent_name="dev-back"
+  [ "$stack_nuevo" = "backend" ] || default_agent_name="dev-front"
+
+  echo ""
+  echo "🤖 Agentes disponibles en skills/:"
+  for s in "$ROOT/skills"/*; do
+    if [ -d "$s" ] && [ -f "$s/SKILL.md" ]; then
+      local name="$(basename "$s")"
+      agentes_disponibles+=("$name")
+      echo "  [$i] $name"
+      i=$((i+1))
+    fi
+  done
+
+  read -r -p "Selecciona el agente que habitará esta VM ($default_agent_name): " seleccion_agente
+  local agente_elegido="$default_agent_name"
+  if [ -n "${seleccion_agente:-}" ]; then
+    if [[ "$seleccion_agente" =~ ^[0-9]+$ ]] && [ "$seleccion_agente" -ge 1 ] && [ "$seleccion_agente" -le "${#agentes_disponibles[@]}" ]; then
+      agente_elegido="${agentes_disponibles[$((seleccion_agente-1))]}"
+    elif [ -d "$ROOT/skills/$seleccion_agente" ]; then
+      agente_elegido="$seleccion_agente"
+    else
+      echo "Error: el agente '$seleccion_agente' no existe en skills/." >&2; exit 1;
+    fi
+  fi
+
+  local_agent_nuevo="skills/$agente_elegido"
+  git_agent_path_nuevo="skills/$agente_elegido"
+  remote_agent_nuevo="/home/$user_nuevo/agentes/$agente_elegido"
+  echo "✓ Agente asignado a la VM: $agente_elegido ($local_agent_nuevo)"
+  echo ""
 
   read -r -p "Workspace remoto ($workspace_default): " workspace_nuevo
   workspace_nuevo="${workspace_nuevo:-$workspace_default}"
