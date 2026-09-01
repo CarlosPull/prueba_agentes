@@ -74,7 +74,7 @@ tools/                         # herramientas organizadas en subcarpetas temáti
 ├── despacho/                  # validación, candados de ejecución física y reportes
 ├── vms/                       # provisionamiento, perfiles y mantenimiento de VMs
 ├── sincronizacion/            # actualización Git de agentes y monitores
-├── gateway/                   # servidor mTLS de Memory Gateway
+├── gateway/                   # servidor mTLS y CLI de consulta de memoria (consultar_memoria.sh)
 ├── agentes/                   # generador de nuevos agentes (crear_agente.sh)
 └── remotos/                   # bootstraps remotos ejecutados en VMs
 ```
