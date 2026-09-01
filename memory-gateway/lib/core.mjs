@@ -218,13 +218,24 @@ export class MemoryGatewayCore {
       this.authorize(identity, "company:read");
       entityId = "internal:engineering";
     } else throw new HttpError(400, "capa de memoria no válida");
-    if (!this.cognee.configured) throw new HttpError(503, "Cognee no está configurado en el Gateway");
-    try {
-      const result = await this.cognee.search({ entityId, query });
-      return { layer, dataset: result.dataset, result: result.result };
-    } catch (error) {
-      throw new HttpError(502, `Cognee no pudo completar la búsqueda: ${limited(error.message, 1000)}`);
+    if (this.cognee.configured) {
+      try {
+        const result = await this.cognee.search({ entityId, query });
+        return { layer, dataset: result.dataset, result: result.result };
+      } catch {
+        // Fallback a SQLite si Cognee no responde
+      }
     }
+    if (layer === "shared_contracts") {
+      const coreId = identifier(body.core_id, "core_id");
+      const rows = this.db.prepare("SELECT document FROM contracts WHERE core_id=?").all(coreId);
+      const result = rows.map((r) => JSON.parse(r.document));
+      return { layer, dataset: `sqlite_${coreId}`, result };
+    } else if (layer === "company") {
+      const rows = this.db.prepare("SELECT content FROM private_memories WHERE layer='company'").all();
+      return { layer, dataset: "sqlite_company", result: rows.map((r) => r.content) };
+    }
+    return { layer, dataset: "sqlite_fallback", result: [] };
   }
 
   writePrivateMemory(identity, body) {
