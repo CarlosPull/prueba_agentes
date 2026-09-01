@@ -149,6 +149,7 @@ export default function piHarnessPolicy(pi: ExtensionAPI) {
   const auditFile = requiredEnvironment("PI_HARNESS_AUDIT_FILE");
   const role = requiredEnvironment("PI_HARNESS_ROLE");
   const sandboxEnforced = process.env.PI_HARNESS_SANDBOX_ENFORCED === "1";
+  const readOnly = process.env.PI_HARNESS_READ_ONLY === "1";
   const gatewayUrl = process.env.PI_MEMORY_GATEWAY_URL || "";
   const coreId = process.env.PI_MEMORY_CORE_ID || "";
   const tenantId = process.env.PI_MEMORY_TENANT_ID || "";
@@ -186,6 +187,11 @@ export default function piHarnessPolicy(pi: ExtensionAPI) {
 
   function authorize(tool: string, access: Access, requestedPath: string) {
     try {
+      if (readOnly && access === "write") {
+        const reason = "la ejecución fue declarada de solo lectura";
+        audit(tool, access, requestedPath, false, reason);
+        return { block: true as const, reason };
+      }
       const target = resolveInsideWorkspace(workspace, requestedPath);
       const deniedRules = access === "read" ? policy.deny_read : policy.deny_write;
       const allowedRules = access === "read" ? policy.read : policy.write;
@@ -206,7 +212,7 @@ export default function piHarnessPolicy(pi: ExtensionAPI) {
   }
 
   function memoryAllowed(layer: string, access: Access): boolean {
-    return Boolean(gatewayCredentials && policy.memory?.[layer]?.includes(access));
+    return Boolean(gatewayCredentials && !(readOnly && access === "write") && policy.memory?.[layer]?.includes(access));
   }
 
   if (gatewayCredentials) {

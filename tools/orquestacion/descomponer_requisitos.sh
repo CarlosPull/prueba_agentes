@@ -21,15 +21,14 @@ trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
 SEGMENTOS="$TMP_DIR/segmentos.txt"
 REQUISITOS_NDJSON="$TMP_DIR/requisitos.ndjson"
 
-# Se conservan las palabras originales, pero se separan listas, oraciones y
-# conjunciones frecuentes. Los fragmentos sin señal de dominio se marcan como
-# generales y después se incluyen en todas las categorías despachadas.
+# Se conservan las palabras originales y se separan únicamente límites fuertes
+# de oración. No se dividen las conjunciones "y/e": hacerlo separaba el nombre
+# del módulo de su acción y podía perder destinos en solicitudes multimódulo.
+# El analista posterior puede expandir una oración hacia varios repositorios.
 printf '%s\n' "$TAREA" |
   sed -E \
     -e 's/\r//g' \
     -e 's/[;.!?]+[[:space:]]*/\
-/g' \
-    -e 's/[[:space:]]+[YyEe][[:space:]]+/\
 /g' \
     -e 's/[[:space:]]+[Aa]dem[aá]s[[:space:]]+/\
 /g' \

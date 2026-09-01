@@ -116,6 +116,19 @@ try {
   assert(!process.env.PI_MEMORY_TLS_KEY_FD, "la extensión no eliminó los descriptores secretos del entorno");
   const search = await tools.get("memoria_buscar").execute("test", { layer: "shared_contracts", query: "usuarios" });
   assert(search.content[0].text.includes("contrato encontrado"), "Pi no consultó Cognee mediante el Gateway");
+
+  Object.assign(process.env, {
+    PI_HARNESS_READ_ONLY: "1",
+    PI_MEMORY_GATEWAY_URL: `https://127.0.0.1:${gatewayPort}`,
+    PI_MEMORY_TLS_KEY_FD: String(openSync(join(pki, "clients", "backend-test.key"), "r")),
+    PI_MEMORY_TLS_CERT_FD: String(openSync(join(pki, "clients", "backend-test.crt"), "r")),
+    PI_MEMORY_TLS_CA_FD: String(openSync(join(pki, "ca.crt"), "r")),
+  });
+  const readOnlyTools = new Map();
+  piHarnessPolicy({ on() {}, registerTool(definition) { readOnlyTools.set(definition.name, definition); } });
+  assert(readOnlyTools.has("memoria_buscar"), "solo lectura perdió la consulta de memoria");
+  assert(!readOnlyTools.has("memoria_publicar_endpoint"), "solo lectura expuso la publicación de contratos");
+  delete process.env.PI_HARNESS_READ_ONLY;
 } finally {
   gateway.kill("SIGTERM"); cognee.close(); rmSync(temporary, { recursive: true, force: true });
 }

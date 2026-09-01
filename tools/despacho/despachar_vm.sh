@@ -12,11 +12,13 @@ shift "$([ "$#" -ge 3 ] && echo 3 || echo 0)"
 PROFILE_OVERRIDE=""
 REPOSITORY_ID=""
 DISPATCH_ID="$ROLE"
+READ_ONLY=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --profile) [ "$#" -ge 2 ] || { echo "Error: falta --profile." >&2; exit 1; }; PROFILE_OVERRIDE="$2"; shift 2 ;;
     --repository) [ "$#" -ge 2 ] || { echo "Error: falta --repository." >&2; exit 1; }; REPOSITORY_ID="$2"; shift 2 ;;
     --dispatch-id) [ "$#" -ge 2 ] || { echo "Error: falta --dispatch-id." >&2; exit 1; }; DISPATCH_ID="$2"; shift 2 ;;
+    --read-only) READ_ONLY=1; shift ;;
     *) echo "Error: opción no reconocida: $1" >&2; exit 1 ;;
   esac
 done
@@ -167,6 +169,7 @@ q_memory_read_company="$(SHELL_QUOTE "$([ "$memory_read_company" = "true" ] && e
 q_memory_tls_key="$(SHELL_QUOTE "$memory_tls_key")"
 q_memory_tls_cert="$(SHELL_QUOTE "$memory_tls_cert")"
 q_memory_tls_ca="$(SHELL_QUOTE "$memory_tls_ca")"
+q_read_only="$(SHELL_QUOTE "$READ_ONLY")"
 
 REMOTE_CMD="set -eu;
 AGENT_DIR=$q_agent_dir;
@@ -190,6 +193,7 @@ PI_MEMORY_ALLOW_COMPANY=$q_memory_read_company;
 PI_MEMORY_TLS_KEY=$q_memory_tls_key;
 PI_MEMORY_TLS_CERT=$q_memory_tls_cert;
 PI_MEMORY_TLS_CA=$q_memory_tls_ca;
+PI_HARNESS_READ_ONLY=$q_read_only;
 exec 8>\"\$AGENT_BASE/.actualizacion.lock\";
 flock -s 8;
 test -z \"\$BUSINESS_MEMORY\" || test -r \"\$BUSINESS_MEMORY\" || { printf 'Error: falta memoria de negocio local en %s.\n' \"\$BUSINESS_MEMORY\" >&2; exit 1; };
@@ -201,7 +205,7 @@ GIT_COMMIT=\$(cat \"\$AGENT_DIR/.git-commit\" 2>/dev/null || true);
 SKILL_SHA256=\$(sha256sum \"\$AGENT_DIR/SKILL.md\" | awk '{print \$1}');
 TAREA=\$(cat);
 export PATH=$q_node_path:\"\$PATH\";
-export PI_MEMORY_ENABLED PI_MEMORY_GATEWAY_URL PI_MEMORY_CORE_ID PI_MEMORY_TENANT_ID PI_MEMORY_ALLOW_BUSINESS PI_MEMORY_ALLOW_COMPANY PI_MEMORY_TLS_KEY PI_MEMORY_TLS_CERT PI_MEMORY_TLS_CA;
+export PI_MEMORY_ENABLED PI_MEMORY_GATEWAY_URL PI_MEMORY_CORE_ID PI_MEMORY_TENANT_ID PI_MEMORY_ALLOW_BUSINESS PI_MEMORY_ALLOW_COMPANY PI_MEMORY_TLS_KEY PI_MEMORY_TLS_CERT PI_MEMORY_TLS_CA PI_HARNESS_READ_ONLY;
 PI_BIN=\$(command -v pi || true);
 PI_VERSION=\$(pi --version 2>/dev/null | head -n 1 || true);
 printf 'REPOSITORIO: %s\n' \"\$REPOSITORY\" >&2;
@@ -218,10 +222,12 @@ printf 'WORKSPACE_REMOTO: %s\n' \"\$WORKSPACE\" >&2;
 printf 'PI_HARNESS_REMOTO: %s\n' \"\$PI_HARNESS\" >&2;
 printf 'PI_BIN: %s\n' \"\$PI_BIN\" >&2;
 printf 'PI_VERSION: %s\n' \"\$PI_VERSION\" >&2;
+READ_ONLY_ARG='';
+[ \"\$PI_HARNESS_READ_ONLY\" != 1 ] || READ_ONLY_ARG='--read-only';
 if [ -n \"\$BUSINESS_MEMORY\" ]; then
-  printf '%s\n' \"\$TAREA\" | \"\$PI_HARNESS\" start --role \"\$ROLE\" --workspace \"\$WORKSPACE\" --agent-dir \"\$AGENT_DIR\" --business-memory \"\$BUSINESS_MEMORY\" --backend auto --provider \"\$PROVIDER\" --model \"\$MODEL\" --task -;
+  printf '%s\n' \"\$TAREA\" | \"\$PI_HARNESS\" start --role \"\$ROLE\" --workspace \"\$WORKSPACE\" --agent-dir \"\$AGENT_DIR\" --business-memory \"\$BUSINESS_MEMORY\" --backend auto --provider \"\$PROVIDER\" --model \"\$MODEL\" \$READ_ONLY_ARG --task -;
 else
-  printf '%s\n' \"\$TAREA\" | \"\$PI_HARNESS\" start --role \"\$ROLE\" --workspace \"\$WORKSPACE\" --agent-dir \"\$AGENT_DIR\" --backend auto --provider \"\$PROVIDER\" --model \"\$MODEL\" --task -;
+  printf '%s\n' \"\$TAREA\" | \"\$PI_HARNESS\" start --role \"\$ROLE\" --workspace \"\$WORKSPACE\" --agent-dir \"\$AGENT_DIR\" --backend auto --provider \"\$PROVIDER\" --model \"\$MODEL\" \$READ_ONLY_ARG --task -;
 fi"
 
 LOG_FILE="$PROJECT_DIR/${DISPATCH_ID}_output.log"

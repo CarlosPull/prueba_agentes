@@ -53,6 +53,7 @@ cp "$FIXTURES/pi-harness" "$pi_harness_remoto"
 cp "$FIXTURES/pi" "$TEMP_DIR/bin/pi"
 chmod +x "$pi_harness_remoto" "$TEMP_DIR/bin/pi"
 export FAKE_PI_PROMPT="$TEMP_DIR/prompt-remoto.txt"
+export FAKE_PI_ARGS="$TEMP_DIR/args-pi-harness.txt"
 
 salida_primera="$($ROOT/tools/sincronizacion/sincronizar_agente.sh backend)"
 test -L "$agente_remoto/actual"
@@ -93,5 +94,10 @@ grep -q "PI_HARNESS_REMOTO: .*serveradmin/.local/bin/pi-harness" "$proyecto/back
 grep -q "Crear un endpoint de salud" "$FAKE_PI_PROMPT"
 grep -q "MEMORIA_NEGOCIO_LOCAL: .*business/laravel-dev.md" "$proyecto/backend_output.log"
 grep -q "Pi Harness remoto" "$proyecto/EVIDENCIA_backend.md"
+
+proyecto_lectura="$TEMP_DIR/proyecto-lectura"
+mkdir -p "$proyecto_lectura"
+"$ROOT/tools/despacho/despachar_vm.sh" backend "$proyecto_lectura" "Auditar sin modificar archivos" --read-only >/dev/null
+grep -Fx -- '--read-only' "$FAKE_PI_ARGS"
 
 echo "✓ Pull Git, actualización atómica y despacho remoto con Pi verificados."

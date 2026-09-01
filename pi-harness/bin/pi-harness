@@ -35,12 +35,13 @@ TASK=""
 BUSINESS_MEMORY=""
 JSON_OUTPUT=0
 DRY_RUN=0
+READ_ONLY=0
 
 USAGE() {
   cat <<'EOF'
 Uso:
   pi-harness doctor --role <rol> --workspace <ruta> --agent-dir <ruta> [--json]
-  pi-harness start  --role <rol> --workspace <ruta> --agent-dir <ruta> [--business-memory <archivo>] [--backend auto|bwrap|seatbelt|appcontainer] [--provider <proveedor> --model <modelo>] [--task "texto"|--task -] [--dry-run]
+  pi-harness start  --role <rol> --workspace <ruta> --agent-dir <ruta> [--business-memory <archivo>] [--backend auto|bwrap|seatbelt|appcontainer] [--provider <proveedor> --model <modelo>] [--read-only] [--task "texto"|--task -] [--dry-run]
 EOF
 }
 
@@ -97,6 +98,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --dry-run)
       DRY_RUN=1
+      shift
+      ;;
+    --read-only)
+      READ_ONLY=1
       shift
       ;;
     -h|--help)
@@ -285,6 +290,12 @@ MANIFEST="$RUN_DIR/manifest.json"
 mkdir -p "$RUN_DIR" "$RUNTIME_DIR/home" "$RUNTIME_DIR/tmp" "$RUNTIME_DIR/xdg/cache" "$RUNTIME_DIR/xdg/config" "$RUNTIME_DIR/xdg/data" "$RUNTIME_DIR/xdg/state"
 chmod 700 "$RUNS_DIR" "$RUN_DIR" "$RUNTIME_DIR" "$RUNTIME_DIR/home"
 
+if [ "$READ_ONLY" -eq 1 ]; then
+  EFFECTIVE_POLICY="$RUNTIME_DIR/policy-read-only.json"
+  jq '.write = [] | .memory = ((.memory // {}) | with_entries(.value |= map(select(. == "read"))))' "$POLICY_FILE" > "$EFFECTIVE_POLICY"
+  POLICY_FILE="$EFFECTIVE_POLICY"
+fi
+
 MEMORY_ENABLED="${PI_MEMORY_ENABLED:-0}"
 
 CLEANUP() {
@@ -336,7 +347,8 @@ jq -n \
   --arg memory_gateway_url "${PI_MEMORY_GATEWAY_URL:-}" --arg memory_core_id "${PI_MEMORY_CORE_ID:-}" \
   --arg memory_tenant_id "${PI_MEMORY_TENANT_ID:-}" \
   --arg business_memory "$BUSINESS_MEMORY" --arg business_memory_sha256 "$BUSINESS_MEMORY_SHA256" \
-  '{schema_version:1, run_id:$run_id, engine:"pi", role:$role, platform:$platform, sandbox_backend:$backend, sandbox_command:$sandbox_command, sandbox_enforced:true, workspace:$workspace, agent_dir:$agent_dir, policy:{path:$policy,sha256:$policy_sha256}, skill_sha256:$skill_sha256, pi:{path:$pi_bin,version:$pi_version,provider:$provider,model:$model}, memory:{enabled:$memory_enabled,gateway:$memory_gateway_url,backend:"cognee-oss",core_id:$memory_core_id,tenant_id:$memory_tenant_id,business_local:{path:$business_memory,sha256:$business_memory_sha256}}, started_at:$started_at, status:"running"}' \
+  --argjson read_only "$([ "$READ_ONLY" -eq 1 ] && echo true || echo false)" \
+  '{schema_version:1, run_id:$run_id, engine:"pi", role:$role, platform:$platform, sandbox_backend:$backend, sandbox_command:$sandbox_command, sandbox_enforced:true, read_only:$read_only, workspace:$workspace, agent_dir:$agent_dir, policy:{path:$policy,sha256:$policy_sha256}, skill_sha256:$skill_sha256, pi:{path:$pi_bin,version:$pi_version,provider:$provider,model:$model}, memory:{enabled:$memory_enabled,gateway:$memory_gateway_url,backend:"cognee-oss",core_id:$memory_core_id,tenant_id:$memory_tenant_id,business_local:{path:$business_memory,sha256:$business_memory_sha256}}, started_at:$started_at, status:"running"}' \
   > "$MANIFEST"
 chmod 600 "$MANIFEST"
 
@@ -357,7 +369,11 @@ PROMPT_FILE="$RUNTIME_DIR/prompt.md"
     printf '\nMEMORY GATEWAY HABILITADO (Cognee OSS como índice semántico y grafo):\n'
     printf -- '- memoria_buscar consulta únicamente las capas autorizadas.\n'
     if [ "$ROLE" = "backend" ]; then
-      printf -- '- memoria_publicar_endpoint registra únicamente contratos de endpoints confirmados. No publiques código fuente, secretos ni lógica de negocio.\n'
+      if [ "$READ_ONLY" -eq 1 ]; then
+        printf -- '- Modo solo lectura activo: memoria_publicar_endpoint no está disponible.\n'
+      else
+        printf -- '- memoria_publicar_endpoint registra únicamente contratos de endpoints confirmados. No publiques código fuente, secretos ni lógica de negocio.\n'
+      fi
     fi
   fi
   printf '\nTAREA:\n%s\n' "$TASK"
@@ -392,6 +408,7 @@ export PI_HARNESS_AUDIT_FILE="$RUN_DIR/tool-calls.jsonl"
 export PI_HARNESS_PLATFORM="$PLATFORM"
 export PI_HARNESS_SANDBOX_BACKEND="$BACKEND"
 export PI_HARNESS_SANDBOX_ENFORCED=1
+export PI_HARNESS_READ_ONLY="$READ_ONLY"
 export PI_CODING_AGENT_DIR="$RUNTIME_DIR/home/.pi/agent"
 export XDG_CACHE_HOME="$RUNTIME_DIR/xdg/cache"
 export XDG_CONFIG_HOME="$RUNTIME_DIR/xdg/config"
@@ -547,8 +564,19 @@ if [ "$EXIT_CODE" -eq 0 ] && jq -e '
   EXIT_CODE=70
 fi
 chmod 600 "$RUN_DIR/events.jsonl" "$RUN_DIR/stderr.log" "$RUN_DIR/tool-calls.jsonl" 2>/dev/null || true
-cat "$RUN_DIR/events.jsonl"
-cat "$RUN_DIR/stderr.log" >&2
+# La VM conserva el JSONL completo para auditoría. Hacia la Mac sólo se emite
+# la respuesta final del asistente; así no regresan el prompt, la memoria de
+# negocio ni resultados de herramientas incluidos por Pi en message_start.
+FINAL_OUTPUT="$(bash "$HARNESS_ROOT/bin/filtrar_salida_pi.sh" "$RUN_DIR/events.jsonl" 2>/dev/null || true)"
+if [ -n "$FINAL_OUTPUT" ]; then
+  printf '%s\n' "$FINAL_OUTPUT"
+elif [ "${PI_HARNESS_TEST_MODE:-0}" != "1" ] && [ "$EXIT_CODE" -eq 0 ]; then
+  echo "Error: Pi terminó sin una respuesta final verificable." >&2
+  EXIT_CODE=71
+fi
+if [ -s "$RUN_DIR/stderr.log" ]; then
+  echo "Diagnóstico stderr de Pi conservado únicamente en la VM: $RUN_DIR/stderr.log" >&2
+fi
 
 ENDED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 STATUS="completed"

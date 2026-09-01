@@ -12,6 +12,7 @@ MODO_FULLSTACK="${4:-}"
 PROFILE=""
 REPOSITORY=""
 DISPATCH_ID="$ROLE"
+READ_ONLY=0
 
 shift "$([ "$#" -ge 3 ] && echo 3 || echo 0)"
 MODO_FULLSTACK=""
@@ -21,6 +22,7 @@ while [ "$#" -gt 0 ]; do
     --profile) [ "$#" -ge 2 ] || exit 1; PROFILE="$2"; shift 2 ;;
     --repository) [ "$#" -ge 2 ] || exit 1; REPOSITORY="$2"; shift 2 ;;
     --dispatch-id) [ "$#" -ge 2 ] || exit 1; DISPATCH_ID="$2"; shift 2 ;;
+    --read-only) READ_ONLY=1; shift ;;
     *) echo "Error: opción no reconocida '$1'." >&2; exit 1 ;;
   esac
 done
@@ -89,4 +91,5 @@ dispatch_args=()
 [ -z "$PROFILE" ] || dispatch_args+=(--profile "$PROFILE")
 [ -z "$REPOSITORY" ] || dispatch_args+=(--repository "$REPOSITORY")
 dispatch_args+=(--dispatch-id "$DISPATCH_ID")
+[ "$READ_ONLY" -eq 0 ] || dispatch_args+=(--read-only)
 "$ROOT/tools/despacho/despachar_vm.sh" "$ROLE" "$PROJECT_DIR" "$TAREA" "${dispatch_args[@]}"

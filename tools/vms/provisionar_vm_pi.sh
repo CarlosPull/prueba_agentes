@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
+PRIVATE_TECH_MEMORY="${PRUEBA_AGENTES_PRIVATE_TECH_MEMORY:-$ROOT/.private/tecnologias.json}"
 BOOTSTRAP_LOCAL="$ROOT/tools/remotos/provisionar_vm_pi.sh"
 PAQUETES_BACKEND_LOCAL="$ROOT/tools/remotos/instalar_paquetes_backend.sh"
 APPARMOR_BWRAP_LOCAL="$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor"
@@ -34,10 +35,12 @@ done
 CONFIGURAR_PERFIL_NUEVO() {
   local ip_nuevo user_nuevo stack_nuevo workspace_default workspace_nuevo
   local repository_id_nuevo module_nuevo repository_kind_nuevo aliases_nuevo aliases_json
-  local source_mode_nuevo project_local_default project_local_nuevo project_git_url_nuevo project_git_branch_nuevo
+  local source_mode_nuevo project_local_nuevo project_git_url_nuevo project_git_branch_nuevo
   local agent_update_mode_nuevo git_url_nuevo git_branch_default git_branch_nuevo
   local node_version_nuevo pi_version_nuevo php_version_nuevo php_min_version_nuevo
   local local_agent_nuevo remote_agent_nuevo git_agent_path_nuevo poll_nuevo config_tmp respuesta
+  local repositories_root candidate selection default_repository detected_technology technology_tmp technology_action private_parent stack_default
+  local repositorios_locales=()
 
   [ "$OPCION" != "--solo-verificar" ] || {
     echo "Error: no se puede verificar un perfil inexistente: '$VM_PROFILE'." >&2
@@ -47,17 +50,82 @@ CONFIGURAR_PERFIL_NUEVO() {
   echo "🧭 El perfil '$VM_PROFILE' no existe; iniciando configuración inicial."
   read -r -p "IP de la VM: " ip_nuevo
   read -r -p "Usuario de Ubuntu: " user_nuevo
-  read -r -p "Stack [backend/frontend] (backend): " stack_nuevo
-  stack_nuevo="${stack_nuevo:-backend}"
 
   [[ "$ip_nuevo" =~ ^[A-Za-z0-9.:-]+$ ]] || { echo "Error: IP no válida." >&2; exit 1; }
   [[ "$user_nuevo" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Error: usuario no válido." >&2; exit 1; }
-  [ "$stack_nuevo" = "backend" ] || [ "$stack_nuevo" = "frontend" ] || { echo "Error: stack no soportado." >&2; exit 1; }
 
-  read -r -p "ID del repositorio ($VM_PROFILE-repo): " repository_id_nuevo
-  repository_id_nuevo="${repository_id_nuevo:-$VM_PROFILE-repo}"
-  read -r -p "Nombre del módulo ($VM_PROFILE): " module_nuevo
-  module_nuevo="${module_nuevo:-$VM_PROFILE}"
+  read -r -p "Origen del proyecto [local/git] (local): " source_mode_nuevo
+  source_mode_nuevo="${source_mode_nuevo:-local}"
+  [ "$source_mode_nuevo" = "local" ] || [ "$source_mode_nuevo" = "git" ] || { echo "Error: origen no válido." >&2; exit 1; }
+
+  project_local_nuevo=""
+  project_git_url_nuevo=""
+  project_git_branch_nuevo=""
+  detected_technology=""
+  if [ "$source_mode_nuevo" = "local" ]; then
+    repositories_root="${PRUEBA_AGENTES_REPOSITORIES_ROOT:-$(dirname "$ROOT")}"
+    [ -d "$repositories_root" ] || { echo "Error: no existe el directorio de repositorios '$repositories_root'." >&2; exit 1; }
+    while IFS= read -r candidate; do
+      if [ -d "$candidate/.git" ] || [ -s "$candidate/composer.json" ] || [ -s "$candidate/package.json" ] || \
+         [ -s "$candidate/pyproject.toml" ] || [ -s "$candidate/requirements.txt" ] || [ -s "$candidate/go.mod" ] || \
+         [ -s "$candidate/Cargo.toml" ] || [ -s "$candidate/Gemfile" ] || [ -s "$candidate/pom.xml" ] || \
+         [ -s "$candidate/build.gradle" ] || [ -s "$candidate/build.gradle.kts" ] || [ -s "$candidate/Dockerfile" ] || \
+         [ -s "$candidate/compose.yaml" ] || [ -s "$candidate/docker-compose.yml" ] || \
+         find "$candidate" -maxdepth 1 -type f -name '*.csproj' -print -quit | grep -q .; then
+        repositorios_locales+=("$candidate")
+      fi
+    done < <(find "$repositories_root" -mindepth 1 -maxdepth 1 -type d -print | LC_ALL=C sort)
+
+    echo ""
+    echo "📦 Repositorios locales disponibles en $repositories_root:"
+    if [ "${#repositorios_locales[@]}" -gt 0 ]; then
+      for i in "${!repositorios_locales[@]}"; do
+        printf '  [%d] %s\n' "$((i + 1))" "$(basename "${repositorios_locales[$i]}")"
+      done
+      echo "  [m] Escribir otra ruta"
+      read -r -p "Selecciona el repositorio [1]: " selection
+      selection="${selection:-1}"
+      if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#repositorios_locales[@]}" ]; then
+        project_local_nuevo="${repositorios_locales[$((selection - 1))]}"
+      elif [ "$selection" = "m" ] || [ "$selection" = "M" ]; then
+        read -r -p "Ruta del proyecto en esta Mac: " project_local_nuevo
+      elif [ -d "$selection" ]; then
+        project_local_nuevo="$selection"
+      else
+        echo "Error: selección de repositorio no válida." >&2; exit 1
+      fi
+    else
+      echo "  No se encontraron repositorios; introduce una ruta manual."
+      read -r -p "Ruta del proyecto en esta Mac: " project_local_nuevo
+    fi
+    [ -d "$project_local_nuevo" ] || { echo "Error: no existe '$project_local_nuevo'." >&2; exit 1; }
+    project_local_nuevo="$(cd "$project_local_nuevo" && pwd -P)"
+    default_repository="$(basename "$project_local_nuevo")"
+    detected_technology="$($ROOT/tools/vms/detectar_tecnologias_repositorio.sh "$project_local_nuevo" module)"
+  else
+    read -r -p "URL Git HTTPS del proyecto: " project_git_url_nuevo
+    read -r -p "Rama Git del proyecto: " project_git_branch_nuevo
+    [[ "$project_git_url_nuevo" =~ ^https://github\.com/[A-Za-z0-9._/-]+\.git$ ]] || { echo "Error: URL Git no válida." >&2; exit 1; }
+    [[ "$project_git_branch_nuevo" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Error: rama Git no válida." >&2; exit 1; }
+    default_repository="$(basename "${project_git_url_nuevo%.git}")"
+  fi
+
+  stack_default="backend"
+  if [ -n "$detected_technology" ] && jq -e '
+    ([.technologies[] | select(test("^(Vue|React|Next\\.js|Nuxt)"))] | length) > 0 and
+    ([.technologies[] | select(test("^(PHP|Laravel|Illuminate)"))] | length) == 0
+  ' <<< "$detected_technology" >/dev/null; then
+    stack_default="frontend"
+  fi
+  read -r -p "Stack [backend/frontend] ($stack_default): " stack_nuevo
+  stack_nuevo="${stack_nuevo:-$stack_default}"
+  [ "$stack_nuevo" = "backend" ] || [ "$stack_nuevo" = "frontend" ] || { echo "Error: stack no soportado." >&2; exit 1; }
+  workspace_default="/home/$user_nuevo/$default_repository"
+
+  read -r -p "ID del repositorio ($default_repository): " repository_id_nuevo
+  repository_id_nuevo="${repository_id_nuevo:-$default_repository}"
+  read -r -p "Nombre del módulo ($repository_id_nuevo): " module_nuevo
+  module_nuevo="${module_nuevo:-$repository_id_nuevo}"
   if [ "$stack_nuevo" = "backend" ]; then
     read -r -p "Tipo de repositorio [core/module] (module): " repository_kind_nuevo
     repository_kind_nuevo="${repository_kind_nuevo:-module}"
@@ -71,13 +139,9 @@ CONFIGURAR_PERFIL_NUEVO() {
     echo "Error: ID de repositorio o módulo no válido." >&2; exit 1;
   }
   aliases_json="$(printf '%s' "$aliases_nuevo" | jq -R 'split(",") | map(gsub("^[[:space:]]+|[[:space:]]+$"; "")) | map(select(length > 0)) | unique')"
-
-  if [ "$stack_nuevo" = "backend" ]; then
-    workspace_default="/home/$user_nuevo/laravel-dev"
-    project_local_default="/Users/carlos/Documents/GitHub/laravel-dev"
-  else
-    workspace_default="/home/$user_nuevo/vue-dev"
-    project_local_default="/Users/carlos/Documents/GitHub/vue-dev"
+  if [ "$source_mode_nuevo" = "local" ]; then
+    detected_technology="$($ROOT/tools/vms/detectar_tecnologias_repositorio.sh "$project_local_nuevo" "$repository_kind_nuevo")"
+    echo "✓ Tecnologías detectadas: $(jq -r 'if (.technologies | length) == 0 then "ninguna" else .technologies | join(", ") end' <<< "$detected_technology")"
   fi
 
   local agentes_disponibles=()
@@ -116,23 +180,6 @@ CONFIGURAR_PERFIL_NUEVO() {
 
   read -r -p "Workspace remoto ($workspace_default): " workspace_nuevo
   workspace_nuevo="${workspace_nuevo:-$workspace_default}"
-  read -r -p "Origen del proyecto [local/git] (local): " source_mode_nuevo
-  source_mode_nuevo="${source_mode_nuevo:-local}"
-  [ "$source_mode_nuevo" = "local" ] || [ "$source_mode_nuevo" = "git" ] || { echo "Error: origen no válido." >&2; exit 1; }
-
-  project_local_nuevo=""
-  project_git_url_nuevo=""
-  project_git_branch_nuevo=""
-  if [ "$source_mode_nuevo" = "local" ]; then
-    read -r -p "Proyecto en esta Mac ($project_local_default): " project_local_nuevo
-    project_local_nuevo="${project_local_nuevo:-$project_local_default}"
-    [ -d "$project_local_nuevo" ] || { echo "Error: no existe '$project_local_nuevo'." >&2; exit 1; }
-  else
-    read -r -p "URL Git HTTPS del proyecto: " project_git_url_nuevo
-    read -r -p "Rama Git del proyecto: " project_git_branch_nuevo
-    [[ "$project_git_url_nuevo" =~ ^https://github\.com/[A-Za-z0-9._/-]+\.git$ ]] || { echo "Error: URL Git no válida." >&2; exit 1; }
-    [[ "$project_git_branch_nuevo" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Error: rama Git no válida." >&2; exit 1; }
-  fi
 
   read -r -p "Actualización del agente [git/local] (git): " agent_update_mode_nuevo
   agent_update_mode_nuevo="${agent_update_mode_nuevo:-git}"
@@ -172,7 +219,35 @@ CONFIGURAR_PERFIL_NUEVO() {
     php_min_version_nuevo="${php_min_version_nuevo:-8.4.1}"
   fi
 
+  technology_tmp=""
+  technology_action=""
+  if [ "$source_mode_nuevo" = "local" ]; then
+    private_parent="${PRIVATE_TECH_MEMORY%/*}"
+    [ "$private_parent" != "$PRIVATE_TECH_MEMORY" ] || private_parent="."
+    [ "$private_parent" = "." ] || install -d -m 0700 "$private_parent"
+    if [ -s "$PRIVATE_TECH_MEMORY" ]; then
+      jq -e '.version == 1 and (.repositories | type == "object")' "$PRIVATE_TECH_MEMORY" >/dev/null || {
+        echo "Error: inventario tecnológico privado inválido: $PRIVATE_TECH_MEMORY" >&2; exit 1;
+      }
+      if jq -e --arg repository "$repository_id_nuevo" '.repositories | has($repository)' "$PRIVATE_TECH_MEMORY" >/dev/null; then
+        technology_action="preservada"
+      else
+        technology_tmp="$(mktemp "$PRIVATE_TECH_MEMORY.XXXXXX")"
+        jq --arg repository "$repository_id_nuevo" --argjson technology "$detected_technology" \
+          '.repositories[$repository] = $technology' "$PRIVATE_TECH_MEMORY" > "$technology_tmp"
+        technology_action="detectada"
+      fi
+    else
+      technology_tmp="$(mktemp "$PRIVATE_TECH_MEMORY.XXXXXX")"
+      jq -n --arg repository "$repository_id_nuevo" --argjson technology "$detected_technology" \
+        '{version:1,repositories:{($repository):$technology}}' > "$technology_tmp"
+      technology_action="detectada"
+    fi
+    [ -z "$technology_tmp" ] || chmod 0600 "$technology_tmp"
+  fi
+
   config_tmp="$(mktemp "$VMS_CONF.nuevo.XXXXXX")"
+  trap 'rm -f "$config_tmp"; [ -z "$technology_tmp" ] || rm -f "$technology_tmp"' EXIT INT TERM
   jq \
     --arg profile "$VM_PROFILE" --arg ip "$ip_nuevo" --arg user "$user_nuevo" \
     --arg workspace "$workspace_nuevo" --arg stack "$stack_nuevo" \
@@ -212,8 +287,18 @@ CONFIGURAR_PERFIL_NUEVO() {
         else . end
     ' "$VMS_CONF" > "$config_tmp"
   chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"
+  [ -z "$technology_tmp" ] || mv "$technology_tmp" "$PRIVATE_TECH_MEMORY"
   mv "$config_tmp" "$VMS_CONF"
+  trap - EXIT INT TERM
   echo "✓ Perfil '$VM_PROFILE' guardado en $VMS_CONF."
+  if [ -n "$technology_action" ]; then
+    echo "✓ Tecnología $technology_action en $PRIVATE_TECH_MEMORY."
+    if [ "$(jq '.technologies | length' <<< "$detected_technology")" -eq 0 ] && [ "$technology_action" = "detectada" ]; then
+      echo "  Aviso: no se encontraron manifiestos compatibles; completa manualmente la entrada '$repository_id_nuevo'." >&2
+    fi
+  else
+    echo "ℹ️ Origen Git: no hay una copia local que inspeccionar; registra la tecnología cuando el repositorio esté disponible localmente."
+  fi
 }
 
 if ! jq -e --arg profile "$VM_PROFILE" '(.[$profile] | type) == "object"' "$VMS_CONF" >/dev/null; then
@@ -224,7 +309,7 @@ if [ "$OPCION" = "--solo-configurar" ]; then
   jq --arg profile "$VM_PROFILE" '.[$profile]' "$VMS_CONF"
   exit 0
 fi
-for archivo in "$BOOTSTRAP_LOCAL" "$APPARMOR_BWRAP_LOCAL" "$HARNESS_LOCAL/bin/pi-harness" "$HARNESS_LOCAL/extension/index.ts"; do
+for archivo in "$BOOTSTRAP_LOCAL" "$APPARMOR_BWRAP_LOCAL" "$HARNESS_LOCAL/bin/pi-harness" "$HARNESS_LOCAL/bin/filtrar_salida_pi.sh" "$HARNESS_LOCAL/extension/index.ts"; do
   [ -s "$archivo" ] || { echo "Error: falta el recurso local '$archivo'." >&2; exit 1; }
 done
 
@@ -381,7 +466,7 @@ if [ "$modo" = "provisionar" ]; then
   ssh "${SSH_OPTS[@]}" "$target" "mkdir -p '$remote_harness' '/home/$user/.local/bin'"
   rsync -az --delete --exclude='.git/' "$HARNESS_LOCAL/" "$target:$remote_harness/"
   ssh "${SSH_OPTS[@]}" "$target" \
-    "chmod 0755 '$remote_harness/bin/pi-harness' && ln -sfn '$remote_harness/bin/pi-harness' '$remote_pi_harness'"
+    "chmod 0755 '$remote_harness/bin/pi-harness' '$remote_harness/bin/filtrar_salida_pi.sh' && ln -sfn '$remote_harness/bin/pi-harness' '$remote_pi_harness'"
 
   if [ "$source_mode" = "local" ]; then
     echo "📤 Copiando proyecto local a '$target:$workspace'..."

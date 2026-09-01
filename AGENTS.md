@@ -4,7 +4,7 @@
 
 Orquestador local distribuido (shell scripts puros, sin Python). Coordina agentes especializados definidos en Markdown dentro de `skills/`. Ejecuta Pi mediante `pi-harness` sobre VMs remotas vía SSH.
 
-> **Nota sobre el README**: el `README.md` describe un sistema anterior basado en Python (`./bin/orquesta`, `runtime/orquestador.py`). La versión actual usa únicamente `tools/*.sh`. No sigas los comandos del README.
+> **Nota sobre el README**: el `README.md` ya describe la arquitectura actual basada en shell, Pi y `tools/*/*.sh`. El flujo Python/OpenCode anterior está retirado.
 
 ## Comandos esenciales (`tools/`)
 
@@ -34,6 +34,7 @@ Utilidades auxiliares:
 ./tools/orquestacion/recolectar_contexto_memoria.sh "objetivo"      # tecnologías privadas + contratos compartidos
 ./tools/orquestacion/analizar_requisitos.sh "objetivo"              # asignar VM, repositorio y módulo exactos
 ./tools/vms/agregar_repositorio_vm.sh ...                  # registrar/copiar otro módulo en una VM
+./tools/vms/detectar_tecnologias_repositorio.sh <ruta> <tipo> # inspeccionar manifiestos sin ejecutar el proyecto
 ./tools/vms/configurar_perfil_backend_local.sh ...         # crear perfil core/módulo sin preguntas
 ./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza # retirar artefactos administrados de una VM
 ./tools/vms/configurar_ssh_vm.sh user@ip                  # copiar llave SSH a VM nueva
@@ -98,13 +99,17 @@ tools/                         # herramientas organizadas en subcarpetas temáti
 - Cada despacho guarda `EVIDENCIA_AGENTES.md` dentro del proyecto con el perfil, VM, agente resuelto, versión, commit, hash de `SKILL.md`, Pi, workspace, `run_id` y manifiesto remoto utilizados.
 - El Memory Gateway conserva SQLite/OpenAPI como fuente autoritativa e indexa el contexto semántico en Cognee OSS self-hosted mediante `add → cognify → search`; las VMs nunca se conectan directamente a Cognee.
 - La configuración de VMs se lee de `vms.json`. Las claves son perfiles de VM y `stack` indica el rol; esto permite perfiles adicionales como `backend-prueba` sin reemplazar `backend`.
+- `agregar_repositorio_vm.sh` detecta tecnologías desde los manifiestos del repositorio local y registra atómicamente una entrada por `repo-id` en `.private/tecnologias.json`. Las entradas preexistentes se conservan y nunca se ejecuta código del proyecto durante la detección.
 - Las políticas en `pi-harness/policies/*.json` limitan lectura y escritura por rol; el harness selecciona el aislamiento según el sistema operativo.
 - **Solo `backend` y `frontend` se despachan vía tools/**. Los agentes `qa` y `dev-security` no tienen despacho automatizado; se definen pero no se invocan desde las herramientas actuales.
 - `orquestar.sh` recolecta primero el inventario tecnológico privado y los contratos compartidos, después descompone la solicitud y asigna cada requisito a un perfil, repositorio y módulo exactos. Guarda sólo un resumen no sensible del contexto.
+- Las conjunciones no se cortan de forma ciega: una oración puede expandirse hacia varios perfiles cuando menciona alias inequívocos de varios módulos. Las instrucciones de dominio sin destino se heredan únicamente por los destinos explícitos de ese dominio.
+- Las solicitudes que indiquen `solo lectura`, `sin modificar` o equivalentes activan `execution_policy.read_only`. El despachador pasa `--read-only` a `pi-harness`, que elimina permisos de escritura del workspace y de la memoria compartida; `memoria_publicar_endpoint` no se registra.
+- El JSONL bruto, los resultados de herramientas y el prompt enriquecido permanecen en el directorio de ejecución de la VM. La Mac recibe únicamente la respuesta final saneada y metadatos de evidencia.
 - Una solicitud que contiene requisitos backend y frontend se despacha automáticamente a ambos roles aunque el usuario no escriba explícitamente “Full-Stack”. `--clasificar` conserva la salida resumida `fullstack` y `--descomponer` muestra el detalle completo.
 - **Pi es el único motor de despacho**. Puede haber múltiples perfiles backend y varios repositorios por perfil; el analista debe elegir un destino único o rechazar la solicitud como ambigua. `pi-harness/` aplica ejecución fail-closed: Linux selecciona Bubblewrap, macOS Seatbelt y Windows exige `pi-appcontainer`.
 - Los grupos independientes por perfil/repositorio se lanzan en paralelo, incluso cuando todos son backend. El orquestador espera a todos y después consolida evidencia y reporte; si uno falla, igualmente espera a los demás y devuelve error.
-- Si `provisionar_vm_pi.sh` recibe un perfil inexistente, solicita interactivamente IP, usuario, stack, fuentes y versiones, y lo agrega atómicamente a `vms.json`. La rama del agente usa como valor predeterminado la rama Git actual.
+- Si `provisionar_vm_pi.sh` recibe un perfil inexistente, lista los repositorios locales de `PRUEBA_AGENTES_REPOSITORIES_ROOT` (por defecto, el directorio padre del orquestador), permite elegir uno o introducir una ruta, detecta sus tecnologías, propone el stack y registra el perfil y su entrada tecnológica. La rama del agente usa como valor predeterminado la rama Git actual.
 
 ## Externalidades
 

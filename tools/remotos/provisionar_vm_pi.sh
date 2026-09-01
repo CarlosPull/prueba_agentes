@@ -138,6 +138,7 @@ VERIFICAR() {
   test -x "$NODE_BIN/node" || { echo "❌ Falta Node $NODE_VERSION"; errores=1; }
   test -x "$NODE_BIN/pi" || { echo "❌ Falta Pi en $NODE_BIN"; errores=1; }
   test -x "$PI_HARNESS_BIN" || { echo "❌ Falta pi-harness: $PI_HARNESS_BIN"; errores=1; }
+  test -s "$REMOTE_HARNESS/bin/filtrar_salida_pi.sh" || { echo "❌ Falta filtro seguro de salida de Pi"; errores=1; }
   test -s "$REMOTE_HARNESS/extension/index.ts" || { echo "❌ Falta extensión de seguridad de Pi"; errores=1; }
   test -s "$REMOTE_HARNESS/policies/$STACK.json" || { echo "❌ Falta política del stack $STACK"; errores=1; }
   test -s "$REMOTE_AGENT/actual/SKILL.md" || { echo "❌ Falta agente activo"; errores=1; }

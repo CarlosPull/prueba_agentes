@@ -79,6 +79,28 @@ manifest="$(find "$TEMP_DIR/runs" -mindepth 2 -maxdepth 2 -name manifest.json -p
 [ "$(jq -r '.prompt_sha256 | length' "$manifest")" = "64" ] || FAIL "el manifiesto no identifica el prompt"
 [ "$(jq -r '.pi.provider' "$manifest")" = "openrouter" ] || FAIL "el manifiesto no registra el proveedor"
 [ "$(jq -r '.pi.model' "$manifest")" = "cohere/north-mini-code:free" ] || FAIL "el manifiesto no registra el modelo"
+
+PI_HARNESS_PLATFORM_OVERRIDE=linux "$HARNESS" start \
+  --role backend \
+  --workspace "$TEMP_DIR/workspace" \
+  --agent-dir "$TEMP_DIR/agente" \
+  --read-only \
+  --task "Auditoría de solo lectura" \
+  --dry-run >/dev/null
+read_only_manifest="$(find "$TEMP_DIR/runs" -mindepth 2 -maxdepth 2 -name manifest.json -print | while IFS= read -r candidate; do
+  [ "$(jq -r '.read_only' "$candidate")" = "true" ] && { echo "$candidate"; break; }
+done)"
+[ -n "$read_only_manifest" ] || FAIL "el manifiesto no registra el modo solo lectura"
+
+cat > "$TEMP_DIR/events-sensibles.jsonl" <<'JSONL'
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"SECRETO_MEMORIA_NEGOCIO"}]}}
+{"type":"tool_execution_end","result":{"content":[{"type":"text","text":"RESULTADO_SENSIBLE"}]}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Respuesta final segura"}]}}
+JSONL
+salida_filtrada="$(bash "$ROOT_DIR/pi-harness/bin/filtrar_salida_pi.sh" "$TEMP_DIR/events-sensibles.jsonl")"
+[ "$salida_filtrada" = "Respuesta final segura" ] || FAIL "el filtro no aisló la respuesta final"
+printf '%s' "$salida_filtrada" | grep -q 'SECRETO_MEMORIA_NEGOCIO' && FAIL "el filtro devolvió el prompt privado"
+printf '%s' "$salida_filtrada" | grep -q 'RESULTADO_SENSIBLE' && FAIL "el filtro devolvió resultados de herramientas"
 grep -F 'resolver_path="$(readlink -f /etc/resolv.conf' "$ROOT_DIR/pi-harness/bin/pi-harness" >/dev/null || \
   FAIL "el backend Linux no conserva el resolvedor DNS enlazado"
 grep -F 'args+=(--bind "$RUN_DIR" "$RUN_DIR")' "$ROOT_DIR/pi-harness/bin/pi-harness" >/dev/null || \

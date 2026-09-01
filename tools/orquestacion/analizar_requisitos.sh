@@ -17,81 +17,116 @@ else
 fi
 "$ROOT/tools/orquestacion/descomponer_requisitos.sh" "$PROMPT" > "$tmp/base.json"
 
+prompt_lower="$(printf '%s' "$PROMPT" | tr '[:upper:]' '[:lower:]')"
+read_only=false
+if printf '%s\n' "$prompt_lower" | grep -Eq 'solo lectura|sólo lectura|sin modificar|no (modifiques|modificar|edites|editar|escribas|escribir)|read[- ]only'; then
+  read_only=true
+fi
+
+# Destinos mencionados explícitamente en cualquier requisito de cada dominio.
+# Sirven para propagar instrucciones compartidas como "comprueba relaciones"
+# sin elegir una VM por la longitud accidental de un alias del prompt completo.
+jq -n --slurpfile base "$tmp/base.json" --slurpfile context "$tmp/context.json" '
+  [$context[0].inventory[] as $candidate
+   | (([ $candidate.aliases[]?, $candidate.repository, $candidate.module ]
+       | map(ascii_downcase) | unique
+       | map(select(. as $signal | ["api","backend","frontend","laravel","php","vue","interfaz","panel","componente","pantalla"] | index($signal) | not)))) as $signals
+   | select([ $base[0].requirements[]
+       | select(.category == $candidate.stack)
+       | (.text | ascii_downcase) as $text
+       | $signals[] as $signal
+       | select(($signal | length) > 0 and ($text | contains($signal)))
+     ] | length > 0)
+   | $candidate]
+' > "$tmp/explicit_targets.json"
+
 : > "$tmp/enriched.ndjson"
 while IFS= read -r requirement; do
   category="$(jq -r '.category' <<< "$requirement")"
-  if [ "$category" = "general" ] || [ "$category" = "qa" ] || [ "$category" = "security" ]; then
+  if [ "$category" = "general" ]; then
+    jq -c '. + {target_profile:null,repository:null,module:null,repository_kind:null,workspace:null,technology_constraints:null,depends_on:[]}' <<< "$requirement" >> "$tmp/enriched.ndjson"
+    continue
+  fi
+
+  has_candidates="$(jq -r --arg stack "$category" '[.inventory[] | select(.stack == $stack)] | length' "$tmp/context.json")"
+  if [ "$has_candidates" -eq 0 ] && { [ "$category" = "qa" ] || [ "$category" = "security" ]; }; then
     jq -c '. + {target_profile:null,repository:null,module:null,repository_kind:null,workspace:null,technology_constraints:null,depends_on:[]}' <<< "$requirement" >> "$tmp/enriched.ndjson"
     continue
   fi
 
   text_lower="$(jq -r '.text | ascii_downcase' <<< "$requirement")"
-  prompt_lower="$(printf '%s' "$PROMPT" | tr '[:upper:]' '[:lower:]')"
-  jq -c --arg stack "$category" --arg text "$text_lower" --arg original "$prompt_lower" '
+  jq -c --arg stack "$category" --arg text "$text_lower" '
     (.shared_contracts.results | tostring | ascii_downcase) as $contracts
     | [.inventory[] | select(.stack == $stack)
       | . as $candidate
-      | (([.aliases[]?, .repository, .module] | map(ascii_downcase) | unique)) as $signals
+      | (([.aliases[]?, .repository, .module]
+          | map(ascii_downcase) | unique
+          | map(select(. as $signal | ["api","backend","frontend","laravel","php","vue","interfaz","panel","componente","pantalla"] | index($signal) | not)))) as $signals
       | ([$signals[] as $signal | select(($signal | length) > 0 and ($text | contains($signal))) | ($signal | length)] | add // 0) as $requirement_score
-      | ([$signals[] as $signal | select(($signal | length) > 0 and ($original | contains($signal))) | ($signal | length)] | add // 0) as $original_score
       | (if (($contracts | contains(($candidate.repository | ascii_downcase))) or ($contracts | contains(($candidate.module | ascii_downcase)))) then 1 else 0 end) as $contract_score
       | . + {
           explicit_requirement_score:$requirement_score,
-          original_context_score:$original_score,
           semantic_contract_score:$contract_score,
-          match_score:(($requirement_score * 100) + ($original_score * 20) + $contract_score)
+          match_score:(($requirement_score * 100) + $contract_score)
         }]
   ' "$tmp/context.json" > "$tmp/candidates.json"
   total="$(jq 'length' "$tmp/candidates.json")"
   [ "$total" -gt 0 ] || { echo "ROUTING_SIN_DESTINO: no hay repositorios habilitados para '$category'." >&2; exit 4; }
-  max_score="$(jq '[.[].match_score] | max // 0' "$tmp/candidates.json")"
-  if [ "$total" -eq 1 ]; then
-    selected="$(jq '.[0]' "$tmp/candidates.json")"
+  explicit_count="$(jq '[.[] | select(.explicit_requirement_score > 0)] | length' "$tmp/candidates.json")"
+  if [ "$explicit_count" -gt 0 ]; then
+    jq -c '.[] | select(.explicit_requirement_score > 0)' "$tmp/candidates.json" > "$tmp/selected.ndjson"
+  elif [ "$total" -eq 1 ]; then
+    jq -c '.[0]' "$tmp/candidates.json" > "$tmp/selected.ndjson"
   else
-    matches="$(jq --argjson score "$max_score" '[.[] | select(.match_score == $score)] | length' "$tmp/candidates.json")"
-    if [ "$max_score" -eq 0 ] || [ "$matches" -ne 1 ]; then
+    jq -c --arg stack "$category" '.[] | select(.stack == $stack)' "$tmp/explicit_targets.json" > "$tmp/selected.ndjson"
+    inherited_count="$(wc -l < "$tmp/selected.ndjson" | tr -d ' ')"
+    if [ "$inherited_count" -eq 0 ]; then
       options="$(jq -r '.[] | "\(.profile):\(.repository)[\(.module)]"' "$tmp/candidates.json" | paste -sd, -)"
       id="$(jq -r '.id' <<< "$requirement")"
       echo "ROUTING_AMBIGUO: $id no identifica un módulo único entre: $options" >&2
       echo "Menciona el módulo o agrega un alias en vms.json." >&2
       exit 5
     fi
-    selected="$(jq --argjson score "$max_score" '[.[] | select(.match_score == $score)][0]' "$tmp/candidates.json")"
   fi
   technology_semantic="$(jq -c '.private_technology.semantic_results // []' "$tmp/context.json")"
-  jq -cn --argjson requirement "$requirement" --argjson selected "$selected" --argjson semantic "$technology_semantic" '
-    $requirement + {
-      target_profile:$selected.profile,
-      repository:$selected.repository,
-      module:$selected.module,
-      repository_kind:$selected.kind,
-      workspace:$selected.workspace,
-      technology_constraints:(
-        if $selected.technology == null and ($semantic | length) == 0 then null
-        elif $selected.technology == null then {semantic_context:$semantic}
-        elif ($semantic | length) == 0 then $selected.technology
-        else $selected.technology + {semantic_context:$semantic}
-        end
-      ),
-      depends_on:[]
-    }
-  ' >> "$tmp/enriched.ndjson"
+  while IFS= read -r selected; do
+    jq -cn --argjson requirement "$requirement" --argjson selected "$selected" --argjson semantic "$technology_semantic" '
+      $requirement + {
+        target_profile:$selected.profile,
+        repository:$selected.repository,
+        module:$selected.module,
+        repository_kind:$selected.kind,
+        workspace:$selected.workspace,
+        technology_constraints:(
+          if $selected.technology == null and ($semantic | length) == 0 then null
+          elif $selected.technology == null then {semantic_context:$semantic}
+          elif ($semantic | length) == 0 then $selected.technology
+          else $selected.technology + {semantic_context:$semantic}
+          end
+        ),
+        depends_on:[]
+      }
+    ' >> "$tmp/enriched.ndjson"
+  done < "$tmp/selected.ndjson"
 done < <(jq -c '.requirements[]' "$tmp/base.json")
 
-jq -s --arg original "$PROMPT" --slurpfile context "$tmp/context.json" '
-  {
+jq -s --arg original "$PROMPT" --argjson read_only "$read_only" --slurpfile context "$tmp/context.json" '
+  (to_entries | map(.value + {id:("REQ-" + ((.key + 1) | tostring | if length == 1 then "00" + . elif length == 2 then "0" + . else . end))})) as $requirements
+  | $requirements
+  | {
     version:2,
     analyst:"requisitos",
     original:$original,
+    execution_policy:{read_only:$read_only,allow_workspace_write:($read_only|not),allow_memory_write:($read_only|not)},
     context:{
       private_technology_status:$context[0].private_technology.status,
       shared_contracts_status:$context[0].shared_contracts.status,
       shared_contract_groups:($context[0].shared_contracts.results | length),
       shared_contracts:$context[0].shared_contracts.results
     },
-    requirements:.,
-    categories:([.[].category] | unique),
-    dispatch_categories:([.[].category | select(. != "general")] | unique),
-    targets:([.[] | select(.target_profile != null) | {profile:.target_profile,repository,module,category}] | unique)
+    requirements:$requirements,
+    categories:([$requirements[].category] | unique),
+    dispatch_categories:([$requirements[].category | select(. != "general")] | unique),
+    targets:([$requirements[] | select(.target_profile != null) | {profile:.target_profile,repository,module,category}] | unique)
   }
 ' "$tmp/enriched.ndjson"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+[ -z "${FAKE_PI_ARGS:-}" ] || printf '%s\n' "$@" > "$FAKE_PI_ARGS"
 task=""
 while [ "$#" -gt 0 ]; do
   case "$1" in

@@ -9,6 +9,13 @@ export PRUEBA_AGENTES_PROJECTS_DIR="$TEMP_DIR/proyectos"
 export PRUEBA_AGENTES_DIAGNOSTICO_VMS=true
 export PRUEBA_AGENTES_DESPACHADOR="$ROOT/tests/fixtures/despachador-pi-paralelo"
 export PRUEBA_PARALELA_EVENTOS="$TEMP_DIR/eventos.log"
+export PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json"
+cat > "$PRUEBA_AGENTES_VMS_CONF" <<'JSON'
+{
+  "backend":{"ip":"192.0.2.10","user":"agente","workspace":"/home/agente/backend","stack":"backend","engine":"pi","dispatch_enabled":true,"repositories":[{"id":"backend","module":"backend","kind":"module","path":"/home/agente/backend","business_memory":"","aliases":["laravel","backend","perfiles"]}],"memory":{"enabled":false}},
+  "frontend":{"ip":"192.0.2.11","user":"agente","workspace":"/home/agente/frontend","stack":"frontend","engine":"pi","dispatch_enabled":true,"repositories":[{"id":"frontend","module":"frontend","kind":"frontend","path":"/home/agente/frontend","business_memory":"","aliases":["vue","frontend","perfiles"]}],"memory":{"enabled":false}}
+}
+JSON
 
 inicio="$(date +%s)"
 salida="$($ROOT/tools/orquestacion/orquestar.sh \

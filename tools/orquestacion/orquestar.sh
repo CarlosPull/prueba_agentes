@@ -23,10 +23,7 @@ if [ "$MODO" = "descomponer" ]; then printf '%s\n' "$REQUISITOS_JSON"; exit 0; f
 
 mapa_categorias="$(jq -r '.dispatch_categories[]' <<< "$REQUISITOS_JSON")"
 [ -n "$mapa_categorias" ] || { echo "CLASIFICACION_AMBIGUA: no se pudo asignar ningún requisito." >&2; exit 2; }
-if printf '%s\n' "$mapa_categorias" | grep -Eq '^(qa|security)$'; then
-  echo "Hay requisitos QA/seguridad, pero esos roles aún no tienen VM automatizada." >&2; exit 3
-fi
-if printf '%s\n' "$mapa_categorias" | grep -Ev '^(backend|frontend)$' | grep -q .; then
+if printf '%s\n' "$mapa_categorias" | grep -Ev '^(backend|frontend|qa|security)$' | grep -q .; then
   echo "Error: categoría no soportada." >&2; exit 1
 fi
 
@@ -53,7 +50,7 @@ jq '{version,prompt,private_technology,shared_contracts:{status:.shared_contract
 } > "$PROJECT_DIR/REQUISITOS.md"
 
 groups_file="$analysis_tmp/groups.ndjson"
-jq -c '([.requirements[] | select(.category == "general") | {id,text,depends_on}]) as $general | [.requirements[] | select(.target_profile != null)] | sort_by(.category,.target_profile,.repository) | group_by([.category,.target_profile,.repository])[] | {category:.[0].category,profile:.[0].target_profile,repository:.[0].repository,module:.[0].module,repository_kind:.[0].repository_kind,workspace:.[0].workspace,technology_constraints:.[0].technology_constraints,requirements:(map({id,text,depends_on}) + $general)}' \
+jq -c '.execution_policy as $execution_policy | ([.requirements[] | select(.category == "general") | {id,text,depends_on}]) as $general | [.requirements[] | select(.target_profile != null)] | sort_by(.category,.target_profile,.repository) | group_by([.category,.target_profile,.repository])[] | {category:.[0].category,profile:.[0].target_profile,repository:.[0].repository,module:.[0].module,repository_kind:.[0].repository_kind,workspace:.[0].workspace,technology_constraints:.[0].technology_constraints,execution_policy:$execution_policy,requirements:(map({id,text,depends_on}) + $general | unique_by(.id,.text))}' \
   <<< "$REQUISITOS_JSON" > "$groups_file"
 group_count="$(wc -l < "$groups_file" | tr -d ' ')"
 multi_category=0
@@ -69,10 +66,13 @@ while IFS= read -r group; do
     "Solicitud categorizada para " + ($category|ascii_upcase) + ".\n" +
     "Destino decidido por el analista:\n- Perfil VM: " + $profile + "\n- Repositorio: " + $repository + "\n- Módulo: " + $module + "\n" +
     (if .technology_constraints then "- Restricciones tecnológicas relevantes: " + (.technology_constraints|tojson) + "\n" else "" end) +
+    "Política de ejecución obligatoria: " + (.execution_policy|tojson) + "\n" +
+    (if .execution_policy.read_only then "MODO SOLO LECTURA: no escribas archivos, no ejecutes comandos que alteren estado y no publiques contratos ni memoria.\n" else "" end) +
     "La memoria de negocio privada del repositorio será incorporada localmente por pi-harness.\nEjecuta exclusivamente estos requisitos:\n" +
     ([.requirements[] | "- [" + .id + "] " + .text] | join("\n")) + "\nNo modifiques otros repositorios ni requisitos asignados a otros destinos."
   ' <<< "$group")"
   args=("$category" "$PROJECT_DIR" "$task_payload" --profile "$profile" --repository "$repository" --dispatch-id "$dispatch_id")
+  [ "$(jq -r '.execution_policy.read_only' <<< "$group")" != "true" ] || args+=(--read-only)
   [ "$multi_category" -eq 0 ] || args+=(--fullstack-confirmado)
   "$DESPACHADOR" "${args[@]}" &
   pids+=("$!"); dispatch_ids+=("$dispatch_id")

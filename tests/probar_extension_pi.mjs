@@ -49,6 +49,7 @@ try {
   process.env.PI_HARNESS_PLATFORM = "linux";
   process.env.PI_HARNESS_SANDBOX_BACKEND = "bwrap";
   process.env.PI_HARNESS_SANDBOX_ENFORCED = "1";
+  delete process.env.PI_HARNESS_READ_ONLY;
 
   let toolCallHandler;
   piHarnessPolicy({
@@ -67,6 +68,9 @@ try {
   const deniedFrontend = await toolCallHandler({ toolName: "write", input: { path: "resources/js/App.vue" } });
   assert(deniedFrontend?.block === true, "backend pudo escribir en frontend");
 
+  const allowedWrite = await toolCallHandler({ toolName: "write", input: { path: "app/Nuevo.php" } });
+  assert(allowedWrite === undefined, "se bloqueó una escritura permitida en modo normal");
+
   const deniedSymlink = await toolCallHandler({ toolName: "read", input: { path: "app/escape/secret.txt" } });
   assert(deniedSymlink?.block === true, "un enlace simbólico escapó del workspace");
 
@@ -79,8 +83,19 @@ try {
   const unknownTool = await toolCallHandler({ toolName: "otra", input: {} });
   assert(unknownTool?.block === true, "una herramienta desconocida fue permitida");
 
+  process.env.PI_HARNESS_READ_ONLY = "1";
+  let readOnlyHandler;
+  piHarnessPolicy({
+    on(event, handler) {
+      if (event === "tool_call") readOnlyHandler = handler;
+    },
+  });
+  const deniedReadOnlyWrite = await readOnlyHandler({ toolName: "write", input: { path: "app/Nuevo.php" } });
+  assert(deniedReadOnlyWrite?.block === true, "el modo solo lectura permitió una escritura autorizada por la política base");
+  delete process.env.PI_HARNESS_READ_ONLY;
+
   const auditLines = readFileSync(auditPath, "utf8").trim().split("\n").filter(Boolean);
-  assert(auditLines.length === 7, "la auditoría no contiene todas las decisiones");
+  assert(auditLines.length === 9, "la auditoría no contiene todas las decisiones");
   assert(auditLines.every((line) => JSON.parse(line).role === "backend"), "la auditoría perdió el rol");
 } finally {
   rmSync(temporary, { recursive: true, force: true });
