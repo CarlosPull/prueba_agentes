@@ -1,7 +1,7 @@
 ---
 name: dev-back
 description: Especialista en diseño, arquitectura y desarrollo backend con PHP 8, Laravel 13 y APIs RESTful.
-version: 1.0.0
+version: 1.0.1
 tools:
   - ssh
   - pi-harness
