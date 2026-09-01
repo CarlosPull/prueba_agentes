@@ -1,6 +1,6 @@
 # Provisionamiento inicial de una VM con Pi
 
-`tools/provisionar_vm_pi.sh` prepara una VM Linux nueva para ejecutar los agentes con Pi y `pi-harness`. Este es el runtime del flujo principal; no instala ni copia Agent Runner u OpenCode.
+`tools/vms/provisionar_vm_pi.sh` prepara una VM Linux nueva para ejecutar los agentes con Pi y `pi-harness`. Este es el runtime del flujo principal; no instala ni copia Agent Runner u OpenCode.
 
 ## Qué instala
 
@@ -25,13 +25,13 @@ No es necesario crear manualmente el perfil. Cuando el nombre recibido no existe
 Para configurar y provisionar en una sola ejecución:
 
 ```bash
-./tools/provisionar_vm_pi.sh backend-pi-prueba --con-sudo-interactivo
+./tools/vms/provisionar_vm_pi.sh backend-pi-prueba --con-sudo-interactivo
 ```
 
 Para guardar solamente el perfil sin abrir una conexión SSH:
 
 ```bash
-./tools/provisionar_vm_pi.sh backend-pi-prueba --solo-configurar
+./tools/vms/provisionar_vm_pi.sh backend-pi-prueba --solo-configurar
 ```
 
 La rama de agentes propuesta por defecto es la rama actual del orquestador.
@@ -67,7 +67,7 @@ Con `source_mode: local`, el workspace remoto se sincroniza como espejo del proy
 Para una VM backend completamente nueva:
 
 ```bash
-./tools/provisionar_vm_pi.sh <perfil-vm> --con-sudo-interactivo
+./tools/vms/provisionar_vm_pi.sh <perfil-vm> --con-sudo-interactivo
 ```
 
 Si `backend-pi-prueba` todavía no existe, el script lo creará; no reemplaza `backend` ni `backend-prueba`.
@@ -78,7 +78,7 @@ Si el proyecto se obtiene de un repositorio privado con `source_mode: git`:
 
 ```bash
 export GITHUB_TOKEN='token-de-solo-lectura'
-./tools/provisionar_vm_pi.sh <perfil-vm> --con-sudo-interactivo
+./tools/vms/provisionar_vm_pi.sh <perfil-vm> --con-sudo-interactivo
 unset GITHUB_TOKEN
 ```
 
@@ -87,7 +87,7 @@ El token se utiliza de forma temporal y no se almacena en la VM. Con `source_mod
 ## Verificación posterior
 
 ```bash
-./tools/provisionar_vm_pi.sh <perfil-vm> --solo-verificar
+./tools/vms/provisionar_vm_pi.sh <perfil-vm> --solo-verificar
 ```
 
 Dentro de la VM también puede ejecutarse:
@@ -111,4 +111,4 @@ export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$HOME/.local/bin:$PATH"
 pi
 ```
 
-Dentro de Pi selecciona el inicio de sesión de OpenAI/Codex. La sesión queda en `~/.pi/agent/auth.json`; `pi-harness` la monta dentro del entorno aislado sin copiarla al proyecto. `tools/probar_vms.sh` exige esa sesión antes de permitir un despacho.
+Dentro de Pi selecciona el inicio de sesión de OpenAI/Codex. La sesión queda en `~/.pi/agent/auth.json`; `pi-harness` la monta dentro del entorno aislado sin copiarla al proyecto. `tools/vms/probar_vms.sh` exige esa sesión antes de permitir un despacho.

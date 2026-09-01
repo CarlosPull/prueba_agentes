@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ORQUESTAR="$ROOT/tools/orquestar.sh"
+ORQUESTAR="$ROOT/tools/orquestacion/orquestar.sh"
 
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/prueba-clasificacion.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT INT TERM

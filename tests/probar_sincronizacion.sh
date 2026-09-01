@@ -54,7 +54,7 @@ cp "$FIXTURES/pi" "$TEMP_DIR/bin/pi"
 chmod +x "$pi_harness_remoto" "$TEMP_DIR/bin/pi"
 export FAKE_PI_PROMPT="$TEMP_DIR/prompt-remoto.txt"
 
-salida_primera="$($ROOT/tools/sincronizar_agente.sh backend)"
+salida_primera="$($ROOT/tools/sincronizacion/sincronizar_agente.sh backend)"
 test -L "$agente_remoto/actual"
 test -s "$agente_remoto/actual/SKILL.md"
 test -s "$agente_remoto/actual/.agent-version"
@@ -65,7 +65,7 @@ test ! -e "$FAKE_REMOTE_ROOT/home/serveradmin/agentes/frontend"
 printf '%s' "$salida_primera" | grep -q "descargado desde Git y activado"
 
 version_primera="$(cat "$agente_remoto/actual/.agent-version")"
-salida_segunda="$($ROOT/tools/sincronizar_agente.sh backend)"
+salida_segunda="$($ROOT/tools/sincronizacion/sincronizar_agente.sh backend)"
 version_segunda="$(cat "$agente_remoto/actual/.agent-version")"
 test "$version_primera" = "$version_segunda"
 printf '%s' "$salida_segunda" | grep -q "ya está actualizado desde Git"
@@ -76,7 +76,7 @@ git -C "$fuente_git" add skills/dev-back/memory.md
 git -C "$fuente_git" commit -qm "Actualizar memoria"
 git -C "$fuente_git" push -q origin sincronizacion_agentes_ssh
 
-salida_tercera="$($ROOT/tools/sincronizar_agente.sh backend)"
+salida_tercera="$($ROOT/tools/sincronizacion/sincronizar_agente.sh backend)"
 version_tercera="$(cat "$agente_remoto/actual/.agent-version")"
 test "$version_primera" != "$version_tercera"
 grep -q "Convención de prueba Git" "$agente_remoto/actual/memory.md"
@@ -84,7 +84,7 @@ printf '%s' "$salida_tercera" | grep -q "descargado desde Git y activado"
 
 proyecto="$TEMP_DIR/proyecto"
 mkdir -p "$proyecto"
-salida_despacho="$($ROOT/tools/despachar_vm.sh backend "$proyecto" "Crear un endpoint de salud")"
+salida_despacho="$($ROOT/tools/despacho/despachar_vm.sh backend "$proyecto" "Crear un endpoint de salud")"
 
 test "$salida_despacho" = "$proyecto/backend_output.log"
 grep -q "VERSION_AGENTE: $version_tercera" "$proyecto/backend_output.log"

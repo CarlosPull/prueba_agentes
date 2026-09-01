@@ -9,7 +9,7 @@ mkdir -p "$TEMP_DIR/bin" "$TEMP_DIR/home"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$TEMP_DIR/bin/launchctl"
 chmod +x "$TEMP_DIR/bin/launchctl"
 
-HOME="$TEMP_DIR/home" PATH="$TEMP_DIR/bin:$PATH" "$ROOT/tools/instalar_monitor_local.sh" >/dev/null
+HOME="$TEMP_DIR/home" PATH="$TEMP_DIR/bin:$PATH" "$ROOT/tools/sincronizacion/instalar_monitor_local.sh" >/dev/null
 
 plist="$TEMP_DIR/home/Library/LaunchAgents/com.prueba-agentes.sincronizacion-local.plist"
 test -s "$plist"

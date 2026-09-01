@@ -8,7 +8,7 @@ VM_PROFILE="${1:-}"
 SILENCIOSO="${2:-}"
 
 if [ -z "$VM_PROFILE" ]; then
-  echo "Uso: ./tools/sincronizar_agente_local.sh <perfil-vm> [--silencioso]" >&2
+  echo "Uso: ./tools/sincronizacion/sincronizar_agente_local.sh <perfil-vm> [--silencioso]" >&2
   exit 1
 fi
 if [[ ! "$VM_PROFILE" =~ ^[a-z0-9-]+$ ]]; then

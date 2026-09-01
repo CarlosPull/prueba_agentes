@@ -13,7 +13,7 @@ fi
 
 TAREA="${1:-}"
 if [ -z "$TAREA" ]; then
-  echo "Uso: ./tools/preparar_proyecto.sh [--unico] \"Descripción de la tarea\""
+  echo "Uso: ./tools/orquestacion/preparar_proyecto.sh [--unico] \"Descripción de la tarea\""
   exit 1
 fi
 

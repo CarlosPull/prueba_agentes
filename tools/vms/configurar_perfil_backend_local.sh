@@ -15,7 +15,7 @@ ALIASES_CSV="${8:-}"
 REMOTE_PATH="${9:-}"
 
 if [ -z "$PROFILE" ] || [ -z "$IP" ] || [ -z "$USER_VM" ] || [ -z "$LOCAL_PATH" ] || [ -z "$KIND" ] || [ -z "$REPOSITORY" ] || [ -z "$MODULE" ]; then
-  echo "Uso: ./tools/configurar_perfil_backend_local.sh <perfil> <ip> <usuario> <repo-local> <core|module> <repo-id> <modulo> [aliases-csv] [workspace-remoto]" >&2
+  echo "Uso: ./tools/vms/configurar_perfil_backend_local.sh <perfil> <ip> <usuario> <repo-local> <core|module> <repo-id> <modulo> [aliases-csv] [workspace-remoto]" >&2
   exit 1
 fi
 [[ "$PROFILE" =~ ^[a-z0-9-]+$ ]] && [[ "$IP" =~ ^[A-Za-z0-9.:-]+$ ]] && [[ "$USER_VM" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Error: perfil, IP o usuario no válidos." >&2; exit 1; }
@@ -61,4 +61,4 @@ chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_t
 mv "$config_tmp" "$VMS_CONF"
 trap - EXIT INT TERM
 echo "✓ Perfil '$PROFILE' configurado: $KIND $REPOSITORY → $USER_VM@$IP:$REMOTE_PATH"
-echo "  Ejecuta: ./tools/provisionar_vm_pi.sh $PROFILE --con-sudo-interactivo"
+echo "  Ejecuta: ./tools/vms/provisionar_vm_pi.sh $PROFILE --con-sudo-interactivo"

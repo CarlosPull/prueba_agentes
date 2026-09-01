@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TARGET="${1:-}"; PKI_DIR="${2:-}"; CLIENTS_FILE="${3:-}"
 [ -n "$TARGET" ] && [ -n "$PKI_DIR" ] && [ -n "$CLIENTS_FILE" ] || {
-  echo "Uso: COGNEE_BASE_URL=... ./tools/provisionar_memory_gateway.sh usuario@ip <pki-dir> <clients.json>" >&2
+  echo "Uso: COGNEE_BASE_URL=... ./tools/gateway/provisionar_memory_gateway.sh usuario@ip <pki-dir> <clients.json>" >&2
   exit 1
 }
 [[ "$TARGET" =~ ^[A-Za-z0-9._-]+@[A-Za-z0-9.:-]+$ ]] || { echo "Error: destino SSH no válido." >&2; exit 1; }

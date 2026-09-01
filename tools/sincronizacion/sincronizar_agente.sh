@@ -7,7 +7,7 @@ VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$
 ROLE="${1:-}"
 
 if [ -z "$ROLE" ]; then
-  echo "Uso: ./tools/sincronizar_agente.sh <rol>" >&2
+  echo "Uso: ./tools/sincronizacion/sincronizar_agente.sh <rol>" >&2
   exit 1
 fi
 
@@ -52,4 +52,4 @@ if [ -f "$HOME/.ssh/id_ed25519" ]; then
 fi
 
 ssh "${SSH_OPTS[@]}" "$user@$ip" \
-  "test -x '$remote_agent/actualizar_desde_git.sh' || { echo 'Error: ejecuta primero ./tools/instalar_actualizacion_git.sh $ROLE' >&2; exit 1; }; '$remote_agent/actualizar_desde_git.sh'"
+  "test -x '$remote_agent/actualizar_desde_git.sh' || { echo 'Error: ejecuta primero ./tools/sincronizacion/instalar_actualizacion_git.sh $ROLE' >&2; exit 1; }; '$remote_agent/actualizar_desde_git.sh'"

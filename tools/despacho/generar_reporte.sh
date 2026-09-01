@@ -14,7 +14,7 @@ PROJECT_DIR="${1:-}"
 TAREA="${2:-}"
 
 if [ -z "$PROJECT_DIR" ] || [ -z "$TAREA" ]; then
-  echo "Uso: ./tools/generar_reporte.sh <directorio_proyecto> \"Tarea\""
+  echo "Uso: ./tools/despacho/generar_reporte.sh <directorio_proyecto> \"Tarea\""
   exit 1
 fi
 

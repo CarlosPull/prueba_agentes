@@ -14,7 +14,7 @@ ALIASES_CSV="${7:-$REPOSITORY,$MODULE}"
 MODE="${8:-}"
 
 if [ -z "$PROFILE" ] || [ -z "$REPOSITORY" ] || [ -z "$MODULE" ] || [ -z "$KIND" ] || [ -z "$LOCAL_PATH" ] || [ -z "$REMOTE_PATH" ]; then
-  echo "Uso: ./tools/agregar_repositorio_vm.sh <perfil> <repo-id> <modulo> <module|core|frontend> <ruta-local> <ruta-remota> [aliases,separados,por,coma] [--solo-configurar]" >&2
+  echo "Uso: ./tools/vms/agregar_repositorio_vm.sh <perfil> <repo-id> <modulo> <module|core|frontend> <ruta-local> <ruta-remota> [aliases,separados,por,coma] [--solo-configurar]" >&2
   exit 1
 fi
 [[ "$PROFILE" =~ ^[A-Za-z0-9._-]+$ ]] && [[ "$REPOSITORY" =~ ^[A-Za-z0-9._:-]+$ ]] && [[ "$MODULE" =~ ^[A-Za-z0-9._:-]+$ ]] || {

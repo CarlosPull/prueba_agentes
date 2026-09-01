@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 PROFILE="${1:-}"
 CONFIRMATION="${2:-}"
-[ -n "$PROFILE" ] || { echo "Uso: ./tools/limpiar_vm_pi.sh <perfil> --confirmar-limpieza" >&2; exit 1; }
+[ -n "$PROFILE" ] || { echo "Uso: ./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza" >&2; exit 1; }
 [ "$CONFIRMATION" = "--confirmar-limpieza" ] || { echo "Error: falta --confirmar-limpieza." >&2; exit 1; }
 [[ "$PROFILE" =~ ^[a-z0-9-]+$ ]] || { echo "Error: perfil inválido." >&2; exit 1; }
 

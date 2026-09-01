@@ -3,11 +3,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CLASIFICADOR="$ROOT/tools/clasificar_tarea.sh"
+CLASIFICADOR="$ROOT/tools/orquestacion/clasificar_tarea.sh"
 TAREA="${1:-}"
 
 if [ -z "$TAREA" ]; then
-  echo "Uso: ./tools/descomponer_requisitos.sh \"Solicitud\"" >&2
+  echo "Uso: ./tools/orquestacion/descomponer_requisitos.sh \"Solicitud\"" >&2
   exit 1
 fi
 

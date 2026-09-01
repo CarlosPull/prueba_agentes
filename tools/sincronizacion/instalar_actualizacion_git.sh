@@ -9,7 +9,7 @@ CICLO_LOCAL="$ROOT/tools/remotos/ciclo_actualizacion_git.sh"
 VM_PROFILE="${1:-}"
 
 if [ -z "$VM_PROFILE" ]; then
-  echo "Uso: ./tools/instalar_actualizacion_git.sh <perfil-vm>" >&2
+  echo "Uso: ./tools/sincronizacion/instalar_actualizacion_git.sh <perfil-vm>" >&2
   exit 1
 fi
 

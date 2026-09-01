@@ -9,8 +9,8 @@ MISION="${3:-}"
 HERRAMIENTAS_CSV="${4:-pi-harness}"
 
 USO() {
-  echo "Uso interactivo:   ./tools/crear_agente.sh" >&2
-  echo "Uso no interactivo: ./tools/crear_agente.sh <nombre> \"Descripción\" \"Misión\" [\"herramientas-csv\"]" >&2
+  echo "Uso interactivo:   ./tools/agentes/crear_agente.sh" >&2
+  echo "Uso no interactivo: ./tools/agentes/crear_agente.sh <nombre> \"Descripción\" \"Misión\" [\"herramientas-csv\"]" >&2
 }
 
 # Modo interactivo si no se proporcionan parámetros suficientes

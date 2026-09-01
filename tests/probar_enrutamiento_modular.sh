@@ -37,19 +37,19 @@ export PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json"
 export PRUEBA_AGENTES_PRIVATE_TECH_MEMORY="$TEMP_DIR/tecnologias.json"
 export PRUEBA_AGENTES_PRIVATE_MEMORY_REQUIRED=1
 
-pagos="$($ROOT/tools/orquestar.sh --descomponer 'Crea un endpoint Laravel para procesar pagos')"
+pagos="$($ROOT/tools/orquestacion/orquestar.sh --descomponer 'Crea un endpoint Laravel para procesar pagos')"
 [ "$(jq -r '.requirements[0].target_profile + "/" + .requirements[0].repository' <<< "$pagos")" = "backend-pagos/modulo-pagos" ]
 [ "$(jq -r '.requirements[0].technology_constraints.technologies[0]' <<< "$pagos")" = "PHP 8.4" ]
 
 # Los fragmentos secundarios heredan el destino explícito del prompt completo;
 # el contexto semántico nunca debe superar a una mención directa del usuario.
-pagos_fragmentado="$($ROOT/tools/orquestar.sh --descomponer 'En pagos crea un endpoint Laravel y agrega validación PHP')"
+pagos_fragmentado="$($ROOT/tools/orquestacion/orquestar.sh --descomponer 'En pagos crea un endpoint Laravel y agrega validación PHP')"
 [ "$(jq '[.requirements[] | select(.category == "backend" and .target_profile == "backend-pagos" and .repository == "modulo-pagos")] | length' <<< "$pagos_fragmentado")" = "2" ]
 
-core="$($ROOT/tools/orquestar.sh --descomponer 'Crea un endpoint Laravel en el core de autenticación')"
+core="$($ROOT/tools/orquestacion/orquestar.sh --descomponer 'Crea un endpoint Laravel en el core de autenticación')"
 [ "$(jq -r '.requirements[0].target_profile + "/" + .requirements[0].repository' <<< "$core")" = "backend-core/sistema-core" ]
 
-if "$ROOT/tools/orquestar.sh" --descomponer 'Crea un endpoint Laravel' >"$TEMP_DIR/ambiguo.out" 2>"$TEMP_DIR/ambiguo.err"; then
+if "$ROOT/tools/orquestacion/orquestar.sh" --descomponer 'Crea un endpoint Laravel' >"$TEMP_DIR/ambiguo.out" 2>"$TEMP_DIR/ambiguo.err"; then
   echo "FALLO: un requisito backend ambiguo seleccionó una VM arbitrariamente." >&2
   exit 1
 fi
@@ -60,7 +60,7 @@ export PRUEBA_AGENTES_DIAGNOSTICO_VMS=true
 export PRUEBA_AGENTES_DESPACHADOR="$ROOT/tests/fixtures/despachador-pi-paralelo"
 export PRUEBA_PARALELA_EVENTOS="$TEMP_DIR/eventos.log"
 inicio="$(date +%s)"
-salida="$($ROOT/tools/orquestar.sh 'Crea un endpoint Laravel para procesar pagos; crea un endpoint Laravel en el core de autenticación')"
+salida="$($ROOT/tools/orquestacion/orquestar.sh 'Crea un endpoint Laravel para procesar pagos; crea un endpoint Laravel en el core de autenticación')"
 fin="$(date +%s)"
 [ "$((fin - inicio))" -lt 4 ] || { echo "FALLO: los módulos backend se ejecutaron secuencialmente." >&2; exit 1; }
 project_dir="$(printf '%s\n' "$salida" | sed -n 's/^Proyecto: //p')"
@@ -77,7 +77,7 @@ cat > "$TEMP_DIR/vm-alta.json" <<'JSON'
 JSON
 FAKE_REMOTE_ROOT="$TEMP_DIR/remoto" PATH="$TEMP_DIR/bin:$PATH" \
   PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vm-alta.json" \
-  "$ROOT/tools/agregar_repositorio_vm.sh" backend-modulos modulo-inventario inventario module \
+  "$ROOT/tools/vms/agregar_repositorio_vm.sh" backend-modulos modulo-inventario inventario module \
     "$TEMP_DIR/proyecto-local" /home/serveradmin/modulo-inventario 'inventario,stock' --solo-configurar >/dev/null
 jq -e '."backend-modulos".repositories[0] | .id == "modulo-inventario" and .module == "inventario" and (.aliases | index("stock") != null)' "$TEMP_DIR/vm-alta.json" >/dev/null
 [ -s "$TEMP_DIR/remoto/home/serveradmin/.local/share/prueba-agentes/business/modulo-inventario.md" ]

@@ -11,7 +11,7 @@ export PRUEBA_AGENTES_DESPACHADOR="$ROOT/tests/fixtures/despachador-pi-paralelo"
 export PRUEBA_PARALELA_EVENTOS="$TEMP_DIR/eventos.log"
 
 inicio="$(date +%s)"
-salida="$($ROOT/tools/orquestar.sh \
+salida="$($ROOT/tools/orquestacion/orquestar.sh \
   "Crea una migración Laravel para perfiles y crea un componente Vue para editar perfiles")"
 fin="$(date +%s)"
 duracion=$((fin - inicio))

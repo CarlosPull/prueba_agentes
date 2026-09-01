@@ -5,8 +5,8 @@ set -euo pipefail
 TARGET="${1:-}"
 
 if [ -z "$TARGET" ]; then
-  echo "Uso: ./tools/configurar_ssh_vm.sh <usuario>@<ip_vm>"
-  echo "Ejemplo: ./tools/configurar_ssh_vm.sh serveradmin@192.168.50.100"
+  echo "Uso: ./tools/vms/configurar_ssh_vm.sh <usuario>@<ip_vm>"
+  echo "Ejemplo: ./tools/vms/configurar_ssh_vm.sh serveradmin@192.168.50.100"
   exit 1
 fi
 
@@ -14,7 +14,7 @@ fi
 AT_COUNT=$(echo "$TARGET" | tr -cd '@' | wc -c | tr -d ' ')
 if [ "$AT_COUNT" -ne 1 ]; then
   echo "❌ Error: El parámetro '$TARGET' tiene un formato incorrecto (múltiples '@')."
-  echo "Uso correcto: ./tools/configurar_ssh_vm.sh serveradmin@192.168.50.63"
+  echo "Uso correcto: ./tools/vms/configurar_ssh_vm.sh serveradmin@192.168.50.63"
   exit 1
 fi
 

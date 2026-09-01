@@ -12,7 +12,7 @@ VM_PROFILE="${1:-}"
 OPCION="${2:-}"
 
 USO() {
-  echo "Uso: ./tools/provisionar_vm_pi.sh <perfil-vm> [--con-sudo-interactivo|--solo-verificar|--solo-configurar]" >&2
+  echo "Uso: ./tools/vms/provisionar_vm_pi.sh <perfil-vm> [--con-sudo-interactivo|--solo-verificar|--solo-configurar]" >&2
 }
 
 [ -n "$VM_PROFILE" ] || { USO; exit 1; }
@@ -306,7 +306,7 @@ SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes)
 
 if ! ssh "${SSH_OPTS[@]}" "$target" "echo OK" >/dev/null 2>&1; then
   echo "🔑 Configurando acceso SSH sin contraseña hacia '$target'..."
-  "$ROOT/tools/configurar_ssh_vm.sh" "$target"
+  "$ROOT/tools/vms/configurar_ssh_vm.sh" "$target"
 fi
 
 if [ "$OPCION" = "--con-sudo-interactivo" ]; then
@@ -389,7 +389,7 @@ if ENVIAR_CONFIG | ssh "${SSH_OPTS[@]}" "$target" "'$remote_bootstrap' '$modo'";
 else
   codigo=$?
   if [ "$codigo" -eq 20 ] && [ "$OPCION" != "--con-sudo-interactivo" ]; then
-    echo "Reintenta con: ./tools/provisionar_vm_pi.sh $VM_PROFILE --con-sudo-interactivo" >&2
+    echo "Reintenta con: ./tools/vms/provisionar_vm_pi.sh $VM_PROFILE --con-sudo-interactivo" >&2
   fi
   exit "$codigo"
 fi
@@ -397,14 +397,14 @@ fi
 [ "$modo" != "verificar" ] || exit 0
 
 if [ "$agent_update_mode" = "git" ]; then
-  "$ROOT/tools/instalar_actualizacion_git.sh" "$VM_PROFILE"
+  "$ROOT/tools/sincronizacion/instalar_actualizacion_git.sh" "$VM_PROFILE"
 else
   echo "✓ Agente instalado desde la Mac; no se configura cron Git."
 fi
 
 ENVIAR_CONFIG | ssh "${SSH_OPTS[@]}" "$target" "'$remote_bootstrap' verificar"
-"$ROOT/tools/inicializar_memorias_negocio_vm.sh" "$VM_PROFILE"
-[ "$agent_update_mode" != "local" ] || "$ROOT/tools/instalar_monitor_local.sh"
+"$ROOT/tools/vms/inicializar_memorias_negocio_vm.sh" "$VM_PROFILE"
+[ "$agent_update_mode" != "local" ] || "$ROOT/tools/sincronizacion/instalar_monitor_local.sh"
 
 # Solo se habilita este perfil después de una verificación correcta. Pueden
 # coexistir varias VMs backend; el analista elige perfil y repositorio.

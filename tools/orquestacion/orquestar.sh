@@ -4,21 +4,21 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TOOLS_DIR="$ROOT/tools"
-DIAGNOSTICO_VMS="${PRUEBA_AGENTES_DIAGNOSTICO_VMS:-$TOOLS_DIR/probar_vms.sh}"
-DESPACHADOR="${PRUEBA_AGENTES_DESPACHADOR:-$TOOLS_DIR/validar_y_despachar.sh}"
+DIAGNOSTICO_VMS="${PRUEBA_AGENTES_DIAGNOSTICO_VMS:-$ROOT/tools/vms/probar_vms.sh}"
+DESPACHADOR="${PRUEBA_AGENTES_DESPACHADOR:-$ROOT/tools/despacho/validar_y_despachar.sh}"
 MODO="ejecutar"
 case "${1:-}" in
   --clasificar) MODO="clasificar"; shift ;;
   --descomponer) MODO="descomponer"; shift ;;
 esac
 TAREA="${1:-}"
-[ -n "$TAREA" ] || { echo "Uso: ./tools/orquestar.sh [--clasificar|--descomponer] \"Tarea\"" >&2; exit 1; }
-if [ "$MODO" = "clasificar" ]; then "$TOOLS_DIR/clasificar_tarea.sh" "$TAREA"; exit 0; fi
+[ -n "$TAREA" ] || { echo "Uso: ./tools/orquestacion/orquestar.sh [--clasificar|--descomponer] \"Tarea\"" >&2; exit 1; }
+if [ "$MODO" = "clasificar" ]; then "$ROOT/tools/orquestacion/clasificar_tarea.sh" "$TAREA"; exit 0; fi
 
 analysis_tmp="$(mktemp -d "${TMPDIR:-/tmp}/orquestacion-contexto.XXXXXX")"
 trap 'rm -rf "$analysis_tmp"' EXIT INT TERM
-"$TOOLS_DIR/recolectar_contexto_memoria.sh" "$TAREA" > "$analysis_tmp/contexto.json"
-REQUISITOS_JSON="$($TOOLS_DIR/analizar_requisitos.sh "$TAREA" "$analysis_tmp/contexto.json")"
+"$ROOT/tools/orquestacion/recolectar_contexto_memoria.sh" "$TAREA" > "$analysis_tmp/contexto.json"
+REQUISITOS_JSON="$($ROOT/tools/orquestacion/analizar_requisitos.sh "$TAREA" "$analysis_tmp/contexto.json")"
 if [ "$MODO" = "descomponer" ]; then printf '%s\n' "$REQUISITOS_JSON"; exit 0; fi
 
 mapa_categorias="$(jq -r '.dispatch_categories[]' <<< "$REQUISITOS_JSON")"
@@ -37,7 +37,7 @@ while IFS= read -r profile; do [ -z "$profile" ] || profiles+=("$profile"); done
 [ "${#profiles[@]}" -gt 0 ] || { echo "Error: el analista no produjo destinos." >&2; exit 2; }
 "$DIAGNOSTICO_VMS" "${profiles[@]}"
 
-PROJECT_DIR="$($TOOLS_DIR/preparar_proyecto.sh --unico "$TAREA")"
+PROJECT_DIR="$($ROOT/tools/orquestacion/preparar_proyecto.sh --unico "$TAREA")"
 printf '%s\n' "$REQUISITOS_JSON" > "$PROJECT_DIR/REQUISITOS.json"
 jq '{version,prompt,private_technology,shared_contracts:{status:.shared_contracts.status,groups:(.shared_contracts.results|length)},inventory:[.inventory[]|{profile,stack,repository,module,kind}]}' \
   "$analysis_tmp/contexto.json" > "$PROJECT_DIR/CONTEXTO_RECOLECTADO.json"
@@ -82,7 +82,7 @@ failed=0
 for position in "${!pids[@]}"; do
   if ! wait "${pids[$position]}"; then echo "❌ Falló el despacho ${dispatch_ids[$position]}." >&2; failed=1; fi
 done
-"$TOOLS_DIR/generar_reporte.sh" "$PROJECT_DIR" "$TAREA"
+"$ROOT/tools/despacho/generar_reporte.sh" "$PROJECT_DIR" "$TAREA"
 [ "$failed" -eq 0 ] || { echo "Revisa las bitácoras en: $PROJECT_DIR" >&2; exit 1; }
 echo "✅ Ejecución distribuida terminada"
 echo "Destinos ejecutados: $group_count"

@@ -8,7 +8,7 @@ GATEWAY_URL="${1:-}"
 CORE_ID="${2:-}"
 TENANT_ID="${3:-}"
 [ -n "$GATEWAY_URL" ] && [ -n "$CORE_ID" ] && [ -n "$TENANT_ID" ] || {
-  echo "Uso: ./tools/configurar_memory_gateway.sh <https-url> <core_id> <tenant_id> [--leer-negocio] [--leer-empresa] [perfil ...]" >&2
+  echo "Uso: ./tools/gateway/configurar_memory_gateway.sh <https-url> <core_id> <tenant_id> [--leer-negocio] [--leer-empresa] [perfil ...]" >&2
   exit 1
 }
 [[ "$GATEWAY_URL" =~ ^https://[^[:space:]]+$ ]] || { echo "Error: el Gateway debe usar HTTPS." >&2; exit 1; }

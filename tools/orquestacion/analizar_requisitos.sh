@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROMPT="${1:-}"
 CONTEXT_FILE="${2:-}"
-[ -n "$PROMPT" ] || { echo "Uso: ./tools/analizar_requisitos.sh \"prompt\" [contexto.json]" >&2; exit 1; }
+[ -n "$PROMPT" ] || { echo "Uso: ./tools/orquestacion/analizar_requisitos.sh \"prompt\" [contexto.json]" >&2; exit 1; }
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/analista-requisitos.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT INT TERM
@@ -13,9 +13,9 @@ if [ -n "$CONTEXT_FILE" ]; then
   [ -s "$CONTEXT_FILE" ] || { echo "Error: contexto inexistente: $CONTEXT_FILE" >&2; exit 1; }
   cp "$CONTEXT_FILE" "$tmp/context.json"
 else
-  "$ROOT/tools/recolectar_contexto_memoria.sh" "$PROMPT" > "$tmp/context.json"
+  "$ROOT/tools/orquestacion/recolectar_contexto_memoria.sh" "$PROMPT" > "$tmp/context.json"
 fi
-"$ROOT/tools/descomponer_requisitos.sh" "$PROMPT" > "$tmp/base.json"
+"$ROOT/tools/orquestacion/descomponer_requisitos.sh" "$PROMPT" > "$tmp/base.json"
 
 : > "$tmp/enriched.ndjson"
 while IFS= read -r requirement; do

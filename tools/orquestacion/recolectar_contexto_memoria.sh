@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 PRIVATE_MEMORY="${PRUEBA_AGENTES_PRIVATE_TECH_MEMORY:-$ROOT/.private/tecnologias.json}"
 PROMPT="${1:-}"
-[ -n "$PROMPT" ] || { echo "Uso: ./tools/recolectar_contexto_memoria.sh \"prompt\"" >&2; exit 1; }
+[ -n "$PROMPT" ] || { echo "Uso: ./tools/orquestacion/recolectar_contexto_memoria.sh \"prompt\"" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "Error: jq es obligatorio." >&2; exit 1; }
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/recolector-memoria.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT INT TERM

@@ -10,7 +10,7 @@ PROJECT_DIR="${2:-}"
 DISPATCH_ID="${3:-$ROLE}"
 
 if [ -z "$ROLE" ] || [ -z "$PROJECT_DIR" ]; then
-  echo "Uso: ./tools/generar_evidencia_agente.sh <rol> <directorio_proyecto> [dispatch-id]" >&2
+  echo "Uso: ./tools/despacho/generar_evidencia_agente.sh <rol> <directorio_proyecto> [dispatch-id]" >&2
   exit 1
 fi
 

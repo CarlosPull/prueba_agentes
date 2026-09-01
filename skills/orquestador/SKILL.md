@@ -3,18 +3,18 @@ name: orquestador
 description: Coordinador principal del sistema de agentes. Recibe una solicitud, analiza requerimientos y ejecuta secuencialmente las herramientas de tools/ hacia las VMs.
 version: 1.0.0
 tools:
-  - tools/probar_vms.sh
-  - tools/orquestar.sh
-  - tools/clasificar_tarea.sh
-  - tools/generar_evidencia_agente.sh
-  - tools/preparar_proyecto.sh
-  - tools/provisionar_vm_pi.sh
-  - tools/instalar_actualizacion_git.sh
-  - tools/sincronizar_agente.sh
-  - tools/sincronizar_agente_local.sh
-  - tools/instalar_monitor_local.sh
-  - tools/despachar_vm.sh
-  - tools/generar_reporte.sh
+  - tools/vms/probar_vms.sh
+  - tools/orquestacion/orquestar.sh
+  - tools/orquestacion/clasificar_tarea.sh
+  - tools/despacho/generar_evidencia_agente.sh
+  - tools/orquestacion/preparar_proyecto.sh
+  - tools/vms/provisionar_vm_pi.sh
+  - tools/sincronizacion/instalar_actualizacion_git.sh
+  - tools/sincronizacion/sincronizar_agente.sh
+  - tools/sincronizacion/sincronizar_agente_local.sh
+  - tools/sincronizacion/instalar_monitor_local.sh
+  - tools/despacho/despachar_vm.sh
+  - tools/despacho/generar_reporte.sh
 ---
 
 # Skill: Orquestador (`orquestador`)
@@ -37,19 +37,19 @@ Para realizar la orquestación, el sistema dispone de herramientas especializada
 
 | Herramienta | Ruta | Función |
 | :--- | :--- | :--- |
-| **Diagnóstico SSH** | `tools/probar_vms.sh` | Comprueba conectividad SSH con todas las VMs configuradas en `config/vms.json`. |
-| **Entrada automática** | `tools/orquestar.sh "tarea"` | Clasifica el prompt, elige rol y VM, ejecuta el flujo seguro y genera el reporte. |
-| **Clasificador** | `tools/clasificar_tarea.sh "tarea"` | Devuelve `backend`, `frontend`, `fullstack`, `qa` o `security` sin ejecutar agentes. |
-| **Evidencia remota** | `tools/generar_evidencia_agente.sh <rol> <dir>` | Registra en `EVIDENCIA_AGENTES.md` la VM, agente resuelto, versión, commit, OpenCode, workspace y run remoto utilizados. |
-| **Configurador SSH** | `tools/configurar_ssh_vm.sh user@ip` | Copia automáticamente la clave SSH de tu Mac a una nueva VM sin contraseña. |
-| **Provisionador de VM** | `tools/provisionar_vm_pi.sh <perfil>` | Instala y verifica Pi, pi-harness, proyecto, agente y actualización Git en una VM nueva. |
-| **Inicializador** | `tools/preparar_proyecto.sh` | Crea la carpeta `logs/<slug>/` y guarda `SOLICITUD.md`. |
-| **Instalador Git** | `tools/instalar_actualizacion_git.sh <rol>` | Instala un cron con el intervalo definido en `config/vms.json` y activa únicamente el agente del rol. |
-| **Sincronizador** | `tools/sincronizar_agente.sh <rol>` | Solicita un pull Git inmediato en la VM, sin copiar archivos desde el orquestador. |
-| **Sincronizador local** | `tools/sincronizar_agente_local.sh <perfil>` | Copia por SSH un agente local, lo versiona y activa atómicamente en una VM local. |
-| **Monitor local** | `tools/instalar_monitor_local.sh` | Instala un LaunchAgent de macOS que comprueba perfiles locales cada 30 segundos. |
-| **Despachador Seguro** | `tools/validar_y_despachar.sh <rol> <dir> <tarea>` | Lanza Pi por SSH mediante pi-harness y BLOQUEA FÍSICAMENTE cualquier segundo despacho. |
-| **Compilador de Reportes** | `tools/generar_reporte.sh <dir> <tarea>` | Recopila los logs de salida y genera `REPORTE_PI.md`. |
+| **Diagnóstico SSH** | `tools/vms/probar_vms.sh` | Comprueba conectividad SSH con todas las VMs configuradas en `config/vms.json`. |
+| **Entrada automática** | `tools/orquestacion/orquestar.sh "tarea"` | Clasifica el prompt, elige rol y VM, ejecuta el flujo seguro y genera el reporte. |
+| **Clasificador** | `tools/orquestacion/clasificar_tarea.sh "tarea"` | Devuelve `backend`, `frontend`, `fullstack`, `qa` o `security` sin ejecutar agentes. |
+| **Evidencia remota** | `tools/despacho/generar_evidencia_agente.sh <rol> <dir>` | Registra en `EVIDENCIA_AGENTES.md` la VM, agente resuelto, versión, commit, OpenCode, workspace y run remoto utilizados. |
+| **Configurador SSH** | `tools/vms/configurar_ssh_vm.sh user@ip` | Copia automáticamente la clave SSH de tu Mac a una nueva VM sin contraseña. |
+| **Provisionador de VM** | `tools/vms/provisionar_vm_pi.sh <perfil>` | Instala y verifica Pi, pi-harness, proyecto, agente y actualización Git en una VM nueva. |
+| **Inicializador** | `tools/orquestacion/preparar_proyecto.sh` | Crea la carpeta `logs/<slug>/` y guarda `SOLICITUD.md`. |
+| **Instalador Git** | `tools/sincronizacion/instalar_actualizacion_git.sh <rol>` | Instala un cron con el intervalo definido en `config/vms.json` y activa únicamente el agente del rol. |
+| **Sincronizador** | `tools/sincronizacion/sincronizar_agente.sh <rol>` | Solicita un pull Git inmediato en la VM, sin copiar archivos desde el orquestador. |
+| **Sincronizador local** | `tools/sincronizacion/sincronizar_agente_local.sh <perfil>` | Copia por SSH un agente local, lo versiona y activa atómicamente en una VM local. |
+| **Monitor local** | `tools/sincronizacion/instalar_monitor_local.sh` | Instala un LaunchAgent de macOS que comprueba perfiles locales cada 30 segundos. |
+| **Despachador Seguro** | `tools/despacho/validar_y_despachar.sh <rol> <dir> <tarea>` | Lanza Pi por SSH mediante pi-harness y BLOQUEA FÍSICAMENTE cualquier segundo despacho. |
+| **Compilador de Reportes** | `tools/despacho/generar_reporte.sh <dir> <tarea>` | Recopila los logs de salida y genera `REPORTE_PI.md`. |
 
 
 ---
@@ -61,39 +61,39 @@ Cuando el orquestador recibe una nueva tarea, debe invocar las herramientas en l
 La entrada normal para el usuario es un único comando, sin indicar rol, VM ni workspace:
 
 ```bash
-./tools/orquestar.sh "tarea"
+./tools/orquestacion/orquestar.sh "tarea"
 ```
 
 `orquestar.sh` ejecuta internamente la secuencia siguiente:
 
 ```mermaid
 graph TD
-    A[1. ./tools/probar_vms.sh] --> B[2. ./tools/preparar_proyecto.sh "tarea"]
-    B --> C[3. ./tools/validar_y_despachar.sh <rol> <dir> "tarea"]
-    C --> D[4. ./tools/generar_reporte.sh <dir> "tarea"]
+    A[1. ./tools/vms/probar_vms.sh] --> B[2. ./tools/orquestacion/preparar_proyecto.sh "tarea"]
+    B --> C[3. ./tools/despacho/validar_y_despachar.sh <rol> <dir> "tarea"]
+    C --> D[4. ./tools/despacho/generar_reporte.sh <dir> "tarea"]
 ```
 
-1. **Fase de Verificación**: Invocar `tools/probar_vms.sh` para asegurar que las VMs están alcanzables.
-2. **Fase de Inicialización**: Invocar `tools/preparar_proyecto.sh "$TAREA"` para obtener la ruta de la bitácora en `logs/`.
-3. **Fase de Despacho Seguro**: Invocar `tools/validar_y_despachar.sh <rol> "$DIR" "$TAREA"`. El despachador sincroniza automáticamente el agente correspondiente antes de ejecutarlo.
-4. **Fase de Consolidación**: Esperar todos los despachos paralelos e invocar `tools/generar_reporte.sh` para publicar `logs/<slug>/REPORTE_PI.md`.
+1. **Fase de Verificación**: Invocar `tools/vms/probar_vms.sh` para asegurar que las VMs están alcanzables.
+2. **Fase de Inicialización**: Invocar `tools/orquestacion/preparar_proyecto.sh "$TAREA"` para obtener la ruta de la bitácora en `logs/`.
+3. **Fase de Despacho Seguro**: Invocar `tools/despacho/validar_y_despachar.sh <rol> "$DIR" "$TAREA"`. El despachador sincroniza automáticamente el agente correspondiente antes de ejecutarlo.
+4. **Fase de Consolidación**: Esperar todos los despachos paralelos e invocar `tools/despacho/generar_reporte.sh` para publicar `logs/<slug>/REPORTE_PI.md`.
 
 Cada despacho crea además `logs/<slug>/EVIDENCIA_AGENTES.md` con los metadatos que la VM emitió durante la ejecución. Esta evidencia debe conservarse junto con la bitácora y el reporte.
 
 Para inspeccionar la decisión sin ejecutar ni modificar ninguna VM:
 
 ```bash
-./tools/orquestar.sh --clasificar "tarea"
+./tools/orquestacion/orquestar.sh --clasificar "tarea"
 ```
 
 
 ## Clasificación Estricta y Selección de Rol Único
 
-0. **Clasificación automática previa**: el usuario no selecciona el rol. `tools/orquestar.sh` analiza señales deterministas del prompt y elige la entrada correspondiente de `vms.json`. Si no existen señales suficientes o se mezclan dominios sin declarar Full-Stack, termina con `CLASIFICACION_AMBIGUA` y no modifica ninguna VM.
+0. **Clasificación automática previa**: el usuario no selecciona el rol. `tools/orquestacion/orquestar.sh` analiza señales deterministas del prompt y elige la entrada correspondiente de `vms.json`. Si no existen señales suficientes o se mezclan dominios sin declarar Full-Stack, termina con `CLASIFICACION_AMBIGUA` y no modifica ninguna VM.
 
 1. **Selección Objetivo por Requisito**:
-   - Si la tarea es exclusivamente de **Backend** (Laravel, PHP, API, DB): Despacha **ÚNICAMENTE** a `backend` (`tools/despachar_vm.sh backend ...`). NO despaches a `frontend` ni a otros roles.
-   - Si la tarea es exclusivamente de **Frontend** (Vue 3, TypeScript, UI): Despacha **ÚNICAMENTE** a `frontend` (`tools/despachar_vm.sh frontend ...`). NO despaches a `backend` ni a otros roles.
+   - Si la tarea es exclusivamente de **Backend** (Laravel, PHP, API, DB): Despacha **ÚNICAMENTE** a `backend` (`tools/despacho/despachar_vm.sh backend ...`). NO despaches a `frontend` ni a otros roles.
+   - Si la tarea es exclusivamente de **Frontend** (Vue 3, TypeScript, UI): Despacha **ÚNICAMENTE** a `frontend` (`tools/despacho/despachar_vm.sh frontend ...`). NO despaches a `backend` ni a otros roles.
    - **ÚNICAMENTE** despacha a múltiples roles en paralelo si el prompt del usuario solicita explícitamente una solución Full-Stack.
 
 2. **EVALUACIÓN POR SUBAGENTE ANALISTA Y BLOQUEO DE RE-DESPACHO**:

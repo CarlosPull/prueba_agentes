@@ -26,7 +26,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$ROLE" ] || [ -z "$PROJECT_DIR" ] || [ -z "$TAREA" ]; then
-  echo "Uso: ./tools/validar_y_despachar.sh <rol> <directorio_proyecto> \"Tarea\" [--fullstack-confirmado] [--profile perfil --repository repo --dispatch-id id]"
+  echo "Uso: ./tools/despacho/validar_y_despachar.sh <rol> <directorio_proyecto> \"Tarea\" [--fullstack-confirmado] [--profile perfil --repository repo --dispatch-id id]"
   exit 1
 fi
 
@@ -38,7 +38,7 @@ if [ "$MODO_FULLSTACK" = "--fullstack-confirmado" ]; then
   if { [ "$ROLE" != "backend" ] && [ "$ROLE" != "frontend" ]; } ||
      { [[ "$TAREA" != "Solicitud Full-Stack explícita."* ]] &&
        [[ "$TAREA" != "$PREFIJO_CATEGORIZADO"* ]]; }; then
-    echo "Error: el modo Full-Stack solo acepta subtareas internas de backend o frontend generadas por tools/orquestar.sh." >&2
+    echo "Error: el modo Full-Stack solo acepta subtareas internas de backend o frontend generadas por tools/orquestacion/orquestar.sh." >&2
     exit 1
   fi
 fi
@@ -89,4 +89,4 @@ dispatch_args=()
 [ -z "$PROFILE" ] || dispatch_args+=(--profile "$PROFILE")
 [ -z "$REPOSITORY" ] || dispatch_args+=(--repository "$REPOSITORY")
 dispatch_args+=(--dispatch-id "$DISPATCH_ID")
-"$TOOLS_DIR/despachar_vm.sh" "$ROLE" "$PROJECT_DIR" "$TAREA" "${dispatch_args[@]}"
+"$ROOT/tools/despacho/despachar_vm.sh" "$ROLE" "$PROJECT_DIR" "$TAREA" "${dispatch_args[@]}"

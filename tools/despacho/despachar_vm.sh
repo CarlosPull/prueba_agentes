@@ -22,7 +22,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$ROLE" ] || [ -z "$PROJECT_DIR" ] || [ -z "$TAREA" ]; then
-  echo "Uso: ./tools/despachar_vm.sh <rol> <directorio_proyecto> \"Tarea\" [--profile perfil --repository repo --dispatch-id id]" >&2
+  echo "Uso: ./tools/despacho/despachar_vm.sh <rol> <directorio_proyecto> \"Tarea\" [--profile perfil --repository repo --dispatch-id id]" >&2
   exit 1
 fi
 [[ "$ROLE" =~ ^[a-z0-9-]+$ ]] || { echo "Error: rol no válido." >&2; exit 1; }
@@ -51,7 +51,7 @@ fi
 
 if [ "${#perfiles[@]}" -eq 0 ]; then
   echo "Error: no existe una VM Pi habilitada para el rol '$ROLE'." >&2
-  echo "Configura una con ./tools/provisionar_vm_pi.sh <perfil-vm>." >&2
+  echo "Configura una con ./tools/vms/provisionar_vm_pi.sh <perfil-vm>." >&2
   exit 1
 fi
 if [ "${#perfiles[@]}" -gt 1 ]; then
@@ -138,7 +138,7 @@ if [ "$memory_enabled" = "true" ]; then
 fi
 
 # La VM consulta Git antes de ejecutar; la Mac no copia el agente en el despacho.
-"$TOOLS_DIR/sincronizar_agente.sh" "$PROFILE" >&2
+"$ROOT/tools/sincronizacion/sincronizar_agente.sh" "$PROFILE" >&2
 
 SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes)
 [ ! -f "$HOME/.ssh/id_ed25519" ] || SSH_OPTS+=(-i "$HOME/.ssh/id_ed25519")
@@ -234,5 +234,5 @@ echo "▶️ Ejecutando con Pi '$ROLE' mediante '$PROFILE' ($user@$ip)..." >&2
   ssh "${SSH_OPTS[@]}" "$user@$ip" "$REMOTE_CMD" <<< "$TAREA"
 } > "$LOG_FILE" 2>&1
 
-"$TOOLS_DIR/generar_evidencia_agente.sh" "$ROLE" "$PROJECT_DIR" "$DISPATCH_ID" >/dev/null
+"$ROOT/tools/despacho/generar_evidencia_agente.sh" "$ROLE" "$PROJECT_DIR" "$DISPATCH_ID" >/dev/null
 echo "$LOG_FILE"

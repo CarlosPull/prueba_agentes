@@ -43,14 +43,14 @@ Reporte, logs y evidencia en logs/<slug>/
 La entrada normal es:
 
 ```bash
-./tools/orquestar.sh "En comments agrega un endpoint para consultar comentarios y publica su contrato"
+./tools/orquestacion/orquestar.sh "En comments agrega un endpoint para consultar comentarios y publica su contrato"
 ```
 
 Para analizar sin ejecutar agentes:
 
 ```bash
-./tools/orquestar.sh --clasificar "objetivo"
-./tools/orquestar.sh --descomponer "objetivo"
+./tools/orquestacion/orquestar.sh --clasificar "objetivo"
+./tools/orquestacion/orquestar.sh --descomponer "objetivo"
 ```
 
 Cuando un prompt contiene trabajo para más de un destino, los despachos se lanzan en segundo plano y se esperan en conjunto. Un fallo no cancela silenciosamente el resto; el reporte conserva el resultado de cada VM.
@@ -130,7 +130,7 @@ Cada repositorio declara `business_memory` en `vms.json`. El archivo vive única
 Para añadir otro repositorio a una VM provisionada:
 
 ```bash
-./tools/agregar_repositorio_vm.sh \
+./tools/vms/agregar_repositorio_vm.sh \
   backend-comments modulo-extra extra module \
   /ruta/local/modulo-extra \
   /home/serveradmin/modulo-extra \
@@ -140,7 +140,7 @@ Para añadir otro repositorio a una VM provisionada:
 Para crear sin preguntas un perfil backend cuyo repositorio ya existe en la Mac:
 
 ```bash
-./tools/configurar_perfil_backend_local.sh \
+./tools/vms/configurar_perfil_backend_local.sh \
   <perfil> <ip> <usuario> <ruta-local> <core|module> \
   <repo-id> <modulo> 'alias-1,alias-2'
 ```
@@ -152,8 +152,8 @@ Los repositorios `core` deben tener `composer.json` y `artisan`. Los repositorio
 Para un perfil existente o uno nuevo:
 
 ```bash
-./tools/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
-./tools/provisionar_vm_pi.sh <perfil> --solo-verificar
+./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
+./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
 ```
 
 El provisionador configura acceso SSH por llave, paquetes, NVM/Node, Pi, `pi-harness`, PHP/Composer cuando corresponde, proyecto, agente, memoria local y actualización automática del agente. Si el perfil no existe, solicita sus datos y lo agrega atómicamente a `vms.json`.
@@ -164,7 +164,7 @@ Si el repositorio privado se obtiene mediante Git, puede entregarse temporalment
 
 ```bash
 export GITHUB_TOKEN='token-con-acceso-de-lectura'
-./tools/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
+./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
 unset GITHUB_TOKEN
 ```
 
@@ -173,7 +173,7 @@ El token se usa mediante un `GIT_ASKPASS` temporal y no se guarda en la VM ni en
 Para retirar únicamente los artefactos administrados por este orquestador antes de reprovisionar:
 
 ```bash
-./tools/limpiar_vm_pi.sh <perfil> --confirmar-limpieza
+./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza
 ```
 
 La limpieza conserva Ubuntu, PHP, Node, Pi y la sesión autenticada de Pi.
@@ -183,7 +183,7 @@ Los agentes pueden actualizarse de dos maneras:
 - `agent_update_mode: git`: la VM consulta periódicamente `git_branch` y activa `remote_agent/actual` mediante enlace simbólico atómico.
 - `agent_update_mode: local`: el monitor de macOS copia el agente únicamente cuando cambia su hash de contenido.
 
-En modo Git, `tools/instalar_actualizacion_git.sh` instala en la VM un cron por rol. Cron despierta cada minuto y el actualizador ejecuta comprobaciones internas según `agent_poll_seconds` (`10`, `15`, `20`, `30` o `60`). La VM descarga `git_branch`, extrae únicamente `git_agent_path`, versiona por el árbol Git y cambia `remote_agent/actual` mediante un enlace simbólico atómico. Un bloqueo exclusivo impide activar una versión mientras Pi está ejecutándose.
+En modo Git, `tools/sincronizacion/instalar_actualizacion_git.sh` instala en la VM un cron por rol. Cron despierta cada minuto y el actualizador ejecuta comprobaciones internas según `agent_poll_seconds` (`10`, `15`, `20`, `30` o `60`). La VM descarga `git_branch`, extrae únicamente `git_agent_path`, versiona por el árbol Git y cambia `remote_agent/actual` mediante un enlace simbólico atómico. Un bloqueo exclusivo impide activar una versión mientras Pi está ejecutándose.
 
 Por tanto, un cambio local llega a una VM Git sólo después de:
 
@@ -196,7 +196,7 @@ VM consulta origin → descarga git_agent_path → activa nueva versión
 Para solicitar la comprobación inmediatamente, sin esperar al siguiente ciclo:
 
 ```bash
-./tools/sincronizar_agente.sh <perfil>
+./tools/sincronizacion/sincronizar_agente.sh <perfil>
 ```
 
 ## Pi harness y aislamiento
@@ -219,12 +219,12 @@ La extensión valida `read`, `grep`, `find`, `ls`, `write` y `edit`. Las reglas 
 Diagnóstico local del harness:
 
 ```bash
-./tools/pi_harness.sh doctor \
+./tools/despacho/pi_harness.sh doctor \
   --role backend \
   --workspace /ruta/proyecto \
   --agent-dir ./skills/dev-back
 
-./tools/pi_harness.sh start \
+./tools/despacho/pi_harness.sh start \
   --role backend \
   --workspace /ruta/proyecto \
   --agent-dir ./skills/dev-back \
@@ -268,9 +268,9 @@ VMs Pi ── HTTPS/mTLS ── Memory Gateway ── HTTP privado ── Cognee
   192.168.50.31 \
   backend-core backend-comments backend-posts orchestrator-analyst memory-admin
 
-./tools/instalar_identidad_gateway.sh backend-core ./.private/memory-gateway-pki
-./tools/instalar_identidad_gateway.sh backend-comments ./.private/memory-gateway-pki
-./tools/instalar_identidad_gateway.sh backend-posts ./.private/memory-gateway-pki
+./tools/gateway/instalar_identidad_gateway.sh backend-core ./.private/memory-gateway-pki
+./tools/gateway/instalar_identidad_gateway.sh backend-comments ./.private/memory-gateway-pki
+./tools/gateway/instalar_identidad_gateway.sh backend-posts ./.private/memory-gateway-pki
 ```
 
 La CA privada y las llaves deben permanecer fuera de Git.
@@ -327,7 +327,7 @@ node memory-gateway/bin/memory-gateway.mjs
 Para instalarlo como servicio endurecido de `systemd`:
 
 ```bash
-./tools/provisionar_memory_gateway.sh \
+./tools/gateway/provisionar_memory_gateway.sh \
   administrador@192.168.50.10 \
   ./directorio-pki \
   ./clients.json
@@ -338,7 +338,7 @@ El servicio usa un usuario dedicado, filesystem protegido y escritura limitada a
 ### Habilitar memoria en perfiles
 
 ```bash
-./tools/configurar_memory_gateway.sh \
+./tools/gateway/configurar_memory_gateway.sh \
   'https://192.168.50.31:9443' \
   api-monolitic empresa-prueba \
   backend-core backend-comments backend-posts
@@ -362,9 +362,9 @@ export MEMORY_GATEWAY_CLIENT_CERT="$PWD/.private/memory-gateway-pki/clients/memo
 export MEMORY_GATEWAY_CLIENT_KEY="$PWD/.private/memory-gateway-pki/clients/memory-admin.key"
 export MEMORY_GATEWAY_CA="$PWD/.private/memory-gateway-pki/ca.crt"
 
-./tools/memoria_gateway.sh verificar
-./tools/memoria_gateway.sh guardar-negocio empresa-prueba 'Regla privada del negocio'
-./tools/memoria_gateway.sh guardar-empresa 'PHP 8.4, Laravel 13 y convenciones internas'
+./tools/gateway/memoria_gateway.sh verificar
+./tools/gateway/memoria_gateway.sh guardar-negocio empresa-prueba 'Regla privada del negocio'
+./tools/gateway/memoria_gateway.sh guardar-empresa 'PHP 8.4, Laravel 13 y convenciones internas'
 ```
 
 Las VMs nunca se conectan directamente a Cognee. Las credenciales mTLS se entregan a la extensión del harness y se consumen antes de que el agente pueda lanzar herramientas. El Gateway registra publicaciones primero en SQLite/OpenAPI y luego las indexa en Cognee. Si la indexación falla, `outbox` conserva el trabajo para reintento.
@@ -385,8 +385,8 @@ El contexto persistido no contiene la memoria local de negocio ni el registro te
 ## Diagnóstico y pruebas
 
 ```bash
-./tools/probar_vms.sh
-./tools/provisionar_vm_pi.sh <perfil> --solo-verificar
+./tools/vms/probar_vms.sh
+./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
 node tests/probar_memory_gateway.mjs
 bash tests/probar_provisionamiento_pi.sh
 bash tests/probar_enrutamiento_modular.sh
@@ -402,7 +402,7 @@ export MEMORY_GATEWAY_CLIENT_CERT='./.private/memory-gateway-pki/clients/memory-
 export MEMORY_GATEWAY_CLIENT_KEY='./.private/memory-gateway-pki/clients/memory-admin.key'
 export MEMORY_GATEWAY_CA='./.private/memory-gateway-pki/ca.crt'
 
-./tools/memoria_gateway.sh verificar
+./tools/gateway/memoria_gateway.sh verificar
 ```
 
 Consultar el estado autoritativo local:

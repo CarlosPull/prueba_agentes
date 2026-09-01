@@ -8,7 +8,7 @@ estado=0
 
 while IFS= read -r perfil; do
   [ -n "$perfil" ] || continue
-  if ! "$ROOT/tools/sincronizar_agente_local.sh" "$perfil" --silencioso; then
+  if ! "$ROOT/tools/sincronizacion/sincronizar_agente_local.sh" "$perfil" --silencioso; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') Error sincronizando '$perfil'." >&2
     estado=1
   fi

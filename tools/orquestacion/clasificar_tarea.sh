@@ -11,7 +11,7 @@ fi
 TAREA="${1:-}"
 
 if [ -z "$TAREA" ]; then
-  echo "Uso: ./tools/clasificar_tarea.sh [--categorias] \"Tarea\"" >&2
+  echo "Uso: ./tools/orquestacion/clasificar_tarea.sh [--categorias] \"Tarea\"" >&2
   exit 1
 fi
 

@@ -28,7 +28,7 @@ printf '%s\n' \
   '  <key>ProgramArguments</key>' \
   '  <array>' \
   '    <string>/bin/bash</string>' \
-  "    <string>$escaped_root/tools/monitor_agentes_locales.sh</string>" \
+  "    <string>$escaped_root/tools/sincronizacion/monitor_agentes_locales.sh</string>" \
   '  </array>' \
   '  <key>WorkingDirectory</key>' "  <string>$escaped_root</string>" \
   '  <key>EnvironmentVariables</key>' \

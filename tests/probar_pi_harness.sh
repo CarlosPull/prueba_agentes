@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HARNESS="$ROOT_DIR/tools/pi_harness.sh"
+HARNESS="$ROOT_DIR/tools/despacho/pi_harness.sh"
 FIXTURE="$ROOT_DIR/tests/fixtures/pi_harness/fake-command.sh"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/prueba-pi-harness.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT INT TERM
