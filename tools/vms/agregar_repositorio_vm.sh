@@ -108,13 +108,12 @@ echo "✓ Repositorio '$REPOSITORY' registrado en '$PROFILE'; el analista ya pue
 echo "  Tecnología $technology_action: $PRIVATE_TECH_MEMORY"
 
 if [ -f "$ROOT/.private/memory-gateway-pki/clients/memory-admin.crt" ] && [ -f "$ROOT/tools/gateway/memoria_gateway.sh" ]; then
-  tech_list="$(jq -r '.technologies | join(", ")' <<< "$detected_technology")"
-  if [ -n "$tech_list" ]; then
+  if [ "$(jq '.technologies | length' <<< "$detected_technology")" -gt 0 ]; then
     export MEMORY_GATEWAY_URL="${MEMORY_GATEWAY_URL:-https://192.168.50.31:9443}"
     export MEMORY_GATEWAY_CLIENT_CERT="${MEMORY_GATEWAY_CLIENT_CERT:-$ROOT/.private/memory-gateway-pki/clients/memory-admin.crt}"
     export MEMORY_GATEWAY_CLIENT_KEY="${MEMORY_GATEWAY_CLIENT_KEY:-$ROOT/.private/memory-gateway-pki/clients/memory-admin.key}"
     export MEMORY_GATEWAY_CA="${MEMORY_GATEWAY_CA:-$ROOT/.private/memory-gateway-pki/ca.crt}"
-    "$ROOT/tools/gateway/memoria_gateway.sh" guardar-empresa "Repositorio $REPOSITORY ($MODULE): $tech_list. Arquitectura $KIND." >/dev/null 2>&1 || true
+    "$ROOT/tools/gateway/memoria_gateway.sh" guardar-tecnologias "$REPOSITORY" "$detected_technology" >/dev/null 2>&1 || true
     echo "  ✓ Sincronizada tecnología en Memory Gateway (capa company)."
   fi
 fi

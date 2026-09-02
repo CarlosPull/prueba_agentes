@@ -8,6 +8,56 @@ const IDENTIFIER = /^[A-Za-z0-9._:-]{1,100}$/;
 const DATASET_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]);
 
+export const CONTRACT_GRAPH_MODEL = {
+  title: "Repositorio",
+  type: "object",
+  properties: {
+    name: { type: "string", description: "Identificador único del repositorio" },
+    contiene_modulos: { type: "array", items: { $ref: "#/$defs/Modulo" } },
+  },
+  required: ["name", "contiene_modulos"],
+  $defs: {
+    Modulo: {
+      title: "Modulo", type: "object",
+      properties: {
+        name: { type: "string" },
+        expone_endpoints: { type: "array", items: { $ref: "#/$defs/Endpoint" } },
+      },
+      required: ["name", "expone_endpoints"],
+    },
+    Endpoint: {
+      title: "Endpoint", type: "object",
+      properties: {
+        name: { type: "string", description: "Método y ruta; identidad estable del endpoint" },
+        metodo: { type: "string" }, ruta: { type: "string" }, resumen: { type: "string" },
+        autenticacion: { type: "string" }, version_api: { type: "string" }, commit_fuente: { type: "string" },
+      },
+      required: ["name", "metodo", "ruta"],
+    },
+  },
+};
+
+export const TECHNOLOGY_GRAPH_MODEL = {
+  title: "Repositorio",
+  type: "object",
+  properties: {
+    name: { type: "string", description: "Identificador único del repositorio" },
+    arquitectura: { type: "string" },
+    usa_tecnologias: { type: "array", items: { $ref: "#/$defs/Tecnologia" } },
+  },
+  required: ["name", "usa_tecnologias"],
+  $defs: {
+    Tecnologia: {
+      title: "Tecnologia", type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+};
+
+const CONTRACT_GRAPH_PROMPT = "Construye exclusivamente la jerarquía indicada por el JSON: un Repositorio contiene Modulos y cada Modulo expone Endpoints. Conserva método, ruta y propiedades del endpoint; no inventes entidades ni relaciones.";
+const TECHNOLOGY_GRAPH_PROMPT = "Construye exclusivamente la jerarquía indicada por el JSON: un Repositorio usa Tecnologias. Conserva la arquitectura como propiedad; no inventes tecnologías, entidades ni relaciones.";
+
 export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -31,7 +81,7 @@ export function validateEndpoint(input) {
   const method = String(input.method || "").toUpperCase();
   const path = String(input.path || "");
   if (!METHODS.has(method)) throw new HttpError(400, "método HTTP no válido");
-  if (!/^\/[A-Za-z0-9_./{}:-]*$/.test(path) || path.includes("..")) throw new HttpError(400, "ruta de endpoint no válida");
+  if (!/^\/[A-Za-z0-9_./{}:-]*$/.test(path) || path.includes("..") || path.includes("//")) throw new HttpError(400, "ruta de endpoint no válida");
   return {
     method,
     path,
@@ -66,7 +116,8 @@ export class MemoryGatewayCore {
       );
       CREATE TABLE IF NOT EXISTS private_memories (
         id TEXT PRIMARY KEY, layer TEXT NOT NULL, tenant_id TEXT,
-        content TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL
+        content TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+        repository TEXT
       );
       CREATE TABLE IF NOT EXISTS audit (
         id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, identity TEXT NOT NULL,
@@ -74,6 +125,8 @@ export class MemoryGatewayCore {
         status INTEGER NOT NULL, request_id TEXT NOT NULL, detail TEXT
       );
     `);
+    const privateColumns = this.db.prepare("PRAGMA table_info(private_memories)").all().map((column) => column.name);
+    if (!privateColumns.includes("repository")) this.db.exec("ALTER TABLE private_memories ADD COLUMN repository TEXT");
     this.clientsPath = clientsPath;
     this.openapiDir = openapiDir;
     this.cognee = new CogneeClient({
@@ -136,13 +189,52 @@ export class MemoryGatewayCore {
         module=excluded.module, document=excluded.document, revision=excluded.revision,
         updated_by=excluded.updated_by, updated_at=excluded.updated_at
     `).run(coreId, endpoint.repository, endpoint.module, endpoint.method, endpoint.path, JSON.stringify(document), revision, identity, now);
-    this.db.prepare("INSERT INTO outbox(id,entity_type,entity_id,content,metadata,created_at) VALUES(?,?,?,?,?,?)").run(
-      randomUUID(), "agent_id", `core:${coreId}:contracts`,
-      `CONTRATO_ENDPOINT_JSON\n${JSON.stringify(document)}`,
-      JSON.stringify({ layer: "shared_contracts", kind: "endpoint", ...document }), now,
-    );
+    this.enqueueContractRepository(coreId, endpoint.repository, now);
     this.writeOpenApi(coreId, endpoint.repository);
     return { endpoint: document, openapi: this.openapiPath(coreId, endpoint.repository), changed: true };
+  }
+
+  contractEntityId(coreId, repository) { return `v2:contracts:repository:${repository}:core:${coreId}`; }
+
+  companyRepositoryEntityId(repository) { return `v2:company:repository:${repository}`; }
+
+  repositoryContractDocument(coreId, repository) {
+    const rows = this.db.prepare("SELECT document FROM contracts WHERE core_id=? AND repository=? ORDER BY module,path,method").all(coreId, repository);
+    const modules = new Map();
+    for (const row of rows) {
+      const endpoint = JSON.parse(row.document);
+      if (!modules.has(endpoint.module)) modules.set(endpoint.module, []);
+      modules.get(endpoint.module).push({
+        name: `${endpoint.method} ${endpoint.path}`,
+        metodo: endpoint.method,
+        ruta: endpoint.path,
+        resumen: endpoint.summary || "",
+        autenticacion: endpoint.authentication || "",
+        version_api: endpoint.api_version || "",
+        commit_fuente: endpoint.source_commit || "",
+      });
+    }
+    return {
+      name: repository,
+      contiene_modulos: [...modules.entries()].map(([name, expone_endpoints]) => ({ name, expone_endpoints })),
+    };
+  }
+
+  enqueueSnapshot({ entityId, content, metadata, now = new Date().toISOString() }) {
+    this.db.prepare("DELETE FROM outbox WHERE entity_id=?").run(entityId);
+    this.db.prepare("INSERT INTO outbox(id,entity_type,entity_id,content,metadata,created_at) VALUES(?,?,?,?,?,?)").run(
+      randomUUID(), "agent_id", entityId, JSON.stringify(content), JSON.stringify(metadata), now,
+    );
+  }
+
+  enqueueContractRepository(coreId, repository, now = new Date().toISOString()) {
+    const entityId = this.contractEntityId(coreId, repository);
+    this.enqueueSnapshot({
+      entityId,
+      content: this.repositoryContractDocument(coreId, repository),
+      metadata: { layer: "shared_contracts", kind: "repository_contracts_v2", core_id: coreId, repository, graph_model: "repository_contracts_v2", replace_dataset: true },
+      now,
+    });
   }
 
   openapiPath(coreId, repository) { return join(this.openapiDir, coreId, `${repository}.openapi.json`); }
@@ -188,6 +280,11 @@ export class MemoryGatewayCore {
         try {
           await this.cognee.index({
             id: row.id, entityId: row.entity_id, content: row.content, metadata: JSON.parse(row.metadata),
+            graphModel: JSON.parse(row.metadata).graph_model === "repository_contracts_v2" ? CONTRACT_GRAPH_MODEL
+              : JSON.parse(row.metadata).graph_model === "repository_technologies_v2" ? TECHNOLOGY_GRAPH_MODEL : undefined,
+            customPrompt: JSON.parse(row.metadata).graph_model === "repository_contracts_v2" ? CONTRACT_GRAPH_PROMPT
+              : JSON.parse(row.metadata).graph_model === "repository_technologies_v2" ? TECHNOLOGY_GRAPH_PROMPT : "",
+            replaceDataset: JSON.parse(row.metadata).replace_dataset === true,
           });
           this.db.prepare("DELETE FROM outbox WHERE id=?").run(row.id);
           indexed += 1;
@@ -207,23 +304,25 @@ export class MemoryGatewayCore {
     const layer = String(body.layer || "");
     const query = limited(body.query, 4000).trim();
     if (!query) throw new HttpError(400, "query es obligatorio");
-    let entityId;
+    let entityIds;
     if (layer === "shared_contracts") {
       const coreId = identifier(body.core_id, "core_id");
       this.authorize(identity, "contracts:read", { coreId });
-      entityId = `core:${coreId}:contracts`;
+      entityIds = this.db.prepare("SELECT DISTINCT repository FROM contracts WHERE core_id=? ORDER BY repository").all(coreId)
+        .map((row) => this.contractEntityId(coreId, row.repository));
     } else if (layer === "business") {
       const tenantId = identifier(body.tenant_id, "tenant_id");
       this.authorize(identity, "business:read", { tenantId });
-      entityId = `business:${tenantId}`;
+      entityIds = [`business:${tenantId}`];
     } else if (layer === "company") {
       this.authorize(identity, "company:read");
-      entityId = "internal:engineering";
+      const repositories = this.db.prepare("SELECT DISTINCT repository FROM private_memories WHERE layer='company' AND repository IS NOT NULL ORDER BY repository").all();
+      entityIds = ["v2:company:general", ...repositories.map((row) => this.companyRepositoryEntityId(row.repository))];
     } else throw new HttpError(400, "capa de memoria no válida");
     if (this.cognee.configured) {
       try {
-        const result = await this.cognee.search({ entityId, query });
-        return { layer, dataset: result.dataset, result: result.result };
+        const result = await this.cognee.search({ entityIds, query });
+        return { layer, dataset: result.dataset, datasets: result.datasets, result: result.result };
       } catch {
         // Fallback a SQLite si Cognee no responde
       }
@@ -242,6 +341,7 @@ export class MemoryGatewayCore {
 
   writePrivateMemory(identity, body) {
     const layer = String(body.layer || "");
+    if (layer === "company" && body.memory_kind === "repository_technology") return this.writeRepositoryTechnology(identity, body);
     const content = limited(body.content, 12000).trim();
     if (!content) throw new HttpError(400, "content es obligatorio");
     let entityType;
@@ -255,11 +355,11 @@ export class MemoryGatewayCore {
     } else if (layer === "company") {
       this.authorize(identity, "company:write");
       entityType = "agent_id";
-      entityId = "internal:engineering";
+      entityId = "v2:company:general";
     } else throw new HttpError(400, "sólo se administran las capas business y company");
     const id = randomUUID();
     const now = new Date().toISOString();
-    this.db.prepare("INSERT INTO private_memories VALUES(?,?,?,?,?,?)").run(id, layer, tenantId, content, identity, now);
+    this.db.prepare("INSERT INTO private_memories(id,layer,tenant_id,content,created_by,created_at,repository) VALUES(?,?,?,?,?,?,NULL)").run(id, layer, tenantId, content, identity, now);
     this.db.prepare("INSERT INTO outbox(id,entity_type,entity_id,content,metadata,created_at) VALUES(?,?,?,?,?,?)").run(
       randomUUID(), entityType, entityId, `${layer === "business" ? "CAPA_NEGOCIO" : "CAPA_EMPRESA"}: ${content}`,
       JSON.stringify({ layer, gateway_memory_id: id }), now,
@@ -267,17 +367,105 @@ export class MemoryGatewayCore {
     return { id, layer, tenant_id: tenantId, created_at: now };
   }
 
+  writeRepositoryTechnology(identity, body) {
+    this.authorize(identity, "company:write");
+    const repository = identifier(body.repository, "repository");
+    const technologies = Array.isArray(body.technologies)
+      ? [...new Set(body.technologies.map((item) => limited(item, 200).trim()).filter(Boolean))].slice(0, 100)
+      : null;
+    if (!technologies) throw new HttpError(400, "technologies debe ser un arreglo");
+    const architecture = limited(body.architecture, 1000).trim();
+    const document = { name: repository, arquitectura: architecture, usa_tecnologias: technologies.map((name) => ({ name })) };
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.db.prepare("DELETE FROM private_memories WHERE layer='company' AND repository=?").run(repository);
+    this.db.prepare("INSERT INTO private_memories(id,layer,tenant_id,content,created_by,created_at,repository) VALUES(?,'company',NULL,?,?,?,?)").run(
+      id, JSON.stringify(document), identity, now, repository,
+    );
+    this.enqueueSnapshot({
+      entityId: this.companyRepositoryEntityId(repository),
+      content: document,
+      metadata: { layer: "company", kind: "repository_technologies_v2", repository, graph_model: "repository_technologies_v2", replace_dataset: true },
+      now,
+    });
+    return { id, layer: "company", repository, created_at: now };
+  }
+
+  prepareCanonicalRebuild(technologies = {}) {
+    const repairedContracts = this.repairMalformedContractPaths();
+    this.db.exec("DELETE FROM outbox");
+    const contracts = this.db.prepare("SELECT DISTINCT core_id,repository FROM contracts ORDER BY core_id,repository").all();
+    for (const row of contracts) this.enqueueContractRepository(row.core_id, row.repository);
+    for (const [repository, technology] of Object.entries(technologies)) {
+      const normalizedRepository = identifier(repository, "repository");
+      const list = Array.isArray(technology?.technologies) ? technology.technologies : [];
+      const document = {
+        name: normalizedRepository,
+        arquitectura: limited(technology?.architecture, 1000),
+        usa_tecnologias: [...new Set(list.map((item) => limited(item, 200).trim()).filter(Boolean))].map((name) => ({ name })),
+      };
+      const id = randomUUID();
+      const now = new Date().toISOString();
+      this.db.prepare("DELETE FROM private_memories WHERE layer='company' AND repository=?").run(normalizedRepository);
+      this.db.prepare("INSERT INTO private_memories(id,layer,tenant_id,content,created_by,created_at,repository) VALUES(?,'company',NULL,?,'canonical-rebuild',?,?)").run(
+        id, JSON.stringify(document), now, normalizedRepository,
+      );
+      this.enqueueSnapshot({
+        entityId: this.companyRepositoryEntityId(normalizedRepository), content: document,
+        metadata: { layer: "company", kind: "repository_technologies_v2", repository: normalizedRepository, graph_model: "repository_technologies_v2", replace_dataset: true }, now,
+      });
+    }
+    return { contract_repositories: contracts.length, technology_repositories: Object.keys(technologies).length, repaired_contracts: repairedContracts, pending: this.pendingOutbox() };
+  }
+
+  repairMalformedContractPaths() {
+    const malformed = this.db.prepare("SELECT * FROM contracts WHERE path LIKE '//%' ORDER BY repository,path").all();
+    let repaired = 0;
+    for (const row of malformed) {
+      const normalizedPath = `/${row.path.replace(/^\/+/, "")}`;
+      const current = JSON.parse(row.document);
+      const existing = this.db.prepare("SELECT document FROM contracts WHERE core_id=? AND repository=? AND method=? AND path=?").get(
+        row.core_id, row.repository, row.method, normalizedPath,
+      );
+      if (existing) {
+        const normalizedCurrent = { ...current, path: normalizedPath };
+        if (JSON.stringify(normalizedCurrent) !== JSON.stringify(JSON.parse(existing.document))) {
+          throw new Error(`contratos en conflicto para ${row.method} ${normalizedPath}`);
+        }
+        this.db.prepare("DELETE FROM contracts WHERE core_id=? AND repository=? AND method=? AND path=?").run(row.core_id, row.repository, row.method, row.path);
+      } else {
+        current.path = normalizedPath;
+        this.db.prepare("UPDATE contracts SET path=?,document=? WHERE core_id=? AND repository=? AND method=? AND path=?").run(
+          normalizedPath, JSON.stringify(current), row.core_id, row.repository, row.method, row.path,
+        );
+      }
+      this.writeOpenApi(row.core_id, row.repository);
+      repaired += 1;
+    }
+    return repaired;
+  }
+
   async listGraphs(identity) {
     this.authorize(identity, "graphs:read");
     if (!this.cognee.configured) throw new HttpError(503, "Cognee no está configurado");
     const datasets = await this.cognee.datasets();
+    const known = new Map();
+    for (const row of this.db.prepare("SELECT DISTINCT core_id,repository FROM contracts").all()) {
+      known.set(this.cognee.dataset(this.contractEntityId(row.core_id, row.repository)), { layer: "shared_contracts", core_id: row.core_id, repository: row.repository });
+    }
+    for (const row of this.db.prepare("SELECT DISTINCT repository FROM private_memories WHERE layer='company' AND repository IS NOT NULL").all()) {
+      known.set(this.cognee.dataset(this.companyRepositoryEntityId(row.repository)), { layer: "company", repository: row.repository });
+    }
     return datasets
-      .map((dataset) => ({
+      .map((dataset) => {
+        const name = String(dataset.name || dataset.dataset_name || "");
+        return ({
         id: String(dataset.id || dataset.dataset_id || ""),
-        name: String(dataset.name || dataset.dataset_name || ""),
+        name,
         created_at: dataset.created_at || dataset.createdAt || null,
         updated_at: dataset.updated_at || dataset.updatedAt || null,
-      }))
+        ...(known.get(name) || {}),
+      }); })
       .filter((dataset) => DATASET_ID.test(dataset.id) && dataset.name.startsWith("prueba_agentes_"))
       .sort((left, right) => left.name.localeCompare(right.name));
   }
@@ -291,14 +479,47 @@ export class MemoryGatewayCore {
     const query = limited(body.query, 1000).trim();
     const neighborhoodDepth = Math.min(6, Math.max(1, Number(body.neighborhood_depth) || 2));
     const maxNodes = Math.min(1000, Math.max(10, Number(body.max_nodes) || 250));
-    const graph = await this.cognee.visualize({
+    let graph = await this.cognee.visualize({
       datasetId: dataset.id,
       full: body.full === true,
       query,
       neighborhoodDepth,
       maxNodes,
     });
+    if (dataset.repository) graph = this.scopeRepositoryGraph(graph, dataset, body.full === true);
     return { dataset, graph };
+  }
+
+  scopeRepositoryGraph(graph, dataset, includeTechnical = false) {
+    const nodeId = (value) => String(value?.id ?? value?.identifier ?? value ?? "");
+    const relation = (link) => String(link.relation || link.label || link.relationship_name || link.edge_info?.relationship_name || "");
+    const allowed = dataset.layer === "shared_contracts"
+      ? new Set(["contiene_modulos", "expone_endpoints"])
+      : new Set(["usa_tecnologias"]);
+    const roots = graph.nodes.filter((node) => node.type === "Repositorio" && String(node.name || node.nombre || "") === dataset.repository);
+    const selected = new Set();
+    for (const root of roots) {
+      const id = nodeId(root);
+      if (graph.links.some((link) => nodeId(link.source) === id && allowed.has(relation(link)))) selected.add(id);
+    }
+    for (let pass = 0; pass < 3; pass += 1) {
+      for (const link of graph.links) {
+        if (selected.has(nodeId(link.source)) && allowed.has(relation(link))) selected.add(nodeId(link.target));
+      }
+    }
+    if (includeTechnical) {
+      for (let pass = 0; pass < 2; pass += 1) {
+        for (const link of graph.links) {
+          const source = nodeId(link.source); const target = nodeId(link.target);
+          if (selected.has(source) || selected.has(target)) { selected.add(source); selected.add(target); }
+        }
+      }
+    }
+    return {
+      ...graph,
+      nodes: graph.nodes.filter((node) => selected.has(nodeId(node))),
+      links: graph.links.filter((link) => selected.has(nodeId(link.source)) && selected.has(nodeId(link.target))),
+    };
   }
 
   close() { this.db.close(); }

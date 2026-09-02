@@ -1,70 +1,86 @@
-# Estado de Avances y Pendientes — 2 de Septiembre de 2026
+# Avances y pendientes — reorganización de grafos Cognee
 
-Este documento resume las mejoras implementadas y verificadas en el árbol de trabajo actual. Un cambio sólo debe considerarse publicado cuando exista el `commit` y `push` correspondiente.
+Fecha de corte: **2 de septiembre de 2026**.
 
----
+Este documento sirve como contexto para continuar el trabajo. Los cambios descritos están en el árbol local; todavía no se han confirmado ni publicado mediante `git commit` y `git push`.
 
-## Estado General
+## Contexto de lo que estábamos haciendo
 
-El orquestador es una plataforma distribuida, autónoma y madura para la gestión de agentes. Posee soporte para orquestación multi-módulo en paralelo, recolección de contexto semántico con mTLS, tolerancia a fallos con fallback SQLite, agentes versionados desde Git, aprovisionamiento interactivo de VMs y ejecución aislada mediante **Pi** y `pi-harness` en máquinas virtuales remotas.
+El grafo de Cognee había crecido como una red global con documentos, fragmentos, resúmenes, endpoints y tecnologías mezclados. Aunque la información existía, era difícil reconocer a simple vista qué pertenecía a cada repositorio.
 
-El conjunto actual se verifica con el agregador `bash tests/probar_automatizacion.sh`. En esta actualización, sus 13 grupos de comprobaciones finalizaron correctamente.
+Se decidió imponer esta arquitectura lógica:
 
----
+```text
+Repositorio
+├── contiene → Módulo
+│   └── expone → Endpoint
+└── usa → Tecnología
+```
 
-## Resumen de Todo lo Completado Hoy
+Los contratos compartidos y la tecnología privada se mantienen en datasets diferentes por seguridad:
 
-### 1. Reorganización Modular del Directorio `tools/`
-- Se clasificaron todos los scripts en 7 subcarpetas temáticas especializadas:
-  - `tools/orquestacion/`: `orquestar.sh`, `descomponer_requisitos.sh`, `analizar_requisitos.sh`, `clasificar_tarea.sh`, `recolectar_contexto_memoria.sh`, `preparar_proyecto.sh`.
-  - `tools/despacho/`: `validar_y_despachar.sh`, `despachar_vm.sh`, `generar_evidencia_agente.sh`, `generar_reporte.sh`, `pi_harness.sh`.
-  - `tools/vms/`: `provisionar_vm_pi.sh`, `configurar_perfil_backend_local.sh`, `agregar_repositorio_vm.sh`, `limpiar_vm_pi.sh`, `configurar_ssh_vm.sh`, `probar_vms.sh`, `inicializar_memorias_negocio_vm.sh`.
-  - `tools/sincronizacion/`: `sincronizar_agente.sh`, `sincronizar_agente_local.sh`, `instalar_actualizacion_git.sh`, `instalar_monitor_local.sh`, `monitor_agentes_locales.sh`.
-  - `tools/gateway/`: `provisionar_memory_gateway.sh`, `configurar_memory_gateway.sh`, `instalar_identidad_gateway.sh`, `memoria_gateway.sh`, **`consultar_memoria.sh`**.
-  - `tools/agentes/`: **`crear_agente.sh`**.
-  - `tools/remotos/`: bootstraps remotos para las VMs.
+- `shared_contracts`: `Repositorio → Módulo → Endpoint`.
+- `company`: `Repositorio → Tecnología`.
 
-### 2. Sincronización Automática de Tecnologías a la Capa `company` del Gateway
-- `tools/vms/agregar_repositorio_vm.sh` detecta las tecnologías de los manifiestos del proyecto y sincroniza automáticamente un resumen estructurado con la capa `company` del Memory Gateway (`memoria_gateway.sh guardar-empresa`).
+SQLite y OpenAPI continúan siendo la fuente autoritativa de contratos. `.private/tecnologias.json` continúa siendo la fuente autoritativa del inventario tecnológico. Cognee se puede borrar y reconstruir desde esas fuentes.
 
-### 3. Flag `--refrescar-tecnologias` en `agregar_repositorio_vm.sh`
-- Permite forzar la re-detección de manifiestos cuando se agreguen o modifiquen paquetes (`composer.json`, `package.json`) en un proyecto registrado.
+Cognee mantiene internamente un grafo físico global. Para que esto no vuelva a verse mezclado, el Memory Gateway aplica el ámbito lógico del dataset seleccionado y entrega al visor únicamente el árbol del repositorio correspondiente.
 
-### 4. Soporte y Despacho Remoto para Roles `qa` y `dev-security`
-- `tools/orquestacion/orquestar.sh` y `tools/orquestacion/analizar_requisitos.sh` habilitan la categorización y enrutamiento automático hacia perfiles de VM configurados con stacks `qa` o `security`.
+## Trabajo completado
 
-### 5. Generador Automatizado de Agentes (`tools/agentes/crear_agente.sh`)
-- Genera la suite completa en `skills/<nombre>/`: `SKILL.md`, `subagentes/analista.md`, `subagentes/generador-codigo.md`, `subagentes/qa.md` y `subagentes/documentador.md`.
-- Se creó y desplegó el agente `skills/dev-analytics/` (Analítica de Datos y Reportes).
+- Se definieron modelos de grafo explícitos para contratos y tecnologías.
+- Cada repositorio utiliza un dataset lógico independiente y con nombre identificable.
+- La publicación de un endpoint genera un snapshot completo del repositorio; no agrega fragmentos históricos indefinidamente.
+- Antes de indexar una nueva versión, el dataset anterior del mismo repositorio se reemplaza. SQLite/OpenAPI permiten recuperarlo si Cognee falla.
+- La búsqueda de contratos consulta conjuntamente los datasets de los repositorios del `core` solicitado.
+- La búsqueda de empresa consulta los datasets tecnológicos privados sin mezclarlos con contratos compartidos.
+- `agregar_repositorio_vm.sh` envía al Gateway el inventario estructurado mediante `guardar-tecnologias`, incluyendo repositorio, arquitectura y lista de tecnologías.
+- El visor tiene una **Vista de dominio** predeterminada que oculta `TextDocument`, `DocumentChunk`, `TextSummary` y otros nodos técnicos.
+- El visor reconoce las relaciones reales de Cognee y coloca repositorios, módulos y endpoints/tecnologías por niveles.
+- Se agregó `memory-gateway/bin/reconstruir-grafos.mjs`. Este comando respalda, elimina únicamente datasets con prefijo `prueba_agentes_` y reconstruye desde las fuentes autoritativas.
+- La migración real terminó correctamente:
+  - 9 datasets canónicos: 3 de contratos y 6 de tecnologías.
+  - 10 contratos válidos en SQLite.
+  - 0 rutas de contrato con doble `/`.
+  - 0 elementos pendientes en el outbox.
+- Se corrigió el contrato histórico duplicado `GET //api/posts/version` y se conservó `GET /api/posts/version`.
+- El Gateway ahora rechaza nuevas rutas que contengan `//`.
+- Los grafos anteriores y SQLite fueron respaldados bajo `.private/graph-backups/`. El último respaldo previo a la reconstrucción final está en `.private/graph-backups/2026-09-02T14-33-52-248Z/`.
+- Las pruebas aisladas de Memory Gateway, mTLS, RBAC, modelos de grafo y visor pasaron durante el desarrollo.
 
-### 6. Explorador CLI de Memoria y Contratos (`tools/gateway/consultar_memoria.sh`)
-- Permite auditar y buscar contratos JSON o reglas corporativas en la terminal (`--contratos`, `--empresa`, `--buscar <termino>`, `--ver <metodo> <ruta>`).
+## Estado actual de los servicios
 
-### 7. Selector Dinámico de Agentes en Aprovisionamiento de VMs
-- `tools/vms/provisionar_vm_pi.sh` escanea dinámicamente el directorio `skills/` en la Mac y permite elegir el agente de la VM desde un menú numerado.
+- Cognee está activo en `127.0.0.1:8000`.
+- El Memory Gateway quedó detenido en `127.0.0.1:9443` para ejecutar la migración sin escrituras concurrentes.
+- El visualizador no está levantado.
+- Para la reconstrucción se usó temporalmente `hermes3:latest`, porque `qwen3:8b` no respetó el JSON estructurado exigido por Cognee y dejó errores de validación `SummarizedContent`.
 
-### 8. Resiliencia y Fallback SQLite en Memory Gateway (`core.mjs`)
-- Si Cognee OSS se reinicia o está fuera de servicio, el Memory Gateway conmuta automáticamente a SQLite (`gateway.sqlite`), garantizando **disponibilidad del 100%**.
+## Tareas completadas recientemente
 
-### 9. Visualizador propio de grafos Cognee
-- `tools/gateway/visualizar_grafos.py` sirve una interfaz HTML local sin dependencias externas.
-- `tools/gateway/visualizador_grafos.html` permite seleccionar datasets, buscar contexto, mover nodos, hacer zoom e inspeccionar relaciones con actualización automática.
-- El acceso pasa por endpoints administrativos mTLS del Memory Gateway, protegidos con `graphs:read`; no se exponen credenciales en el navegador ni datasets ajenos al sistema.
+1. ✅ **Actualizar el README principal**: Se actualizó [README.md](file:///Users/carlos/Documents/GitHub/prueba_agentes/README.md) documentando la arquitectura canónica de datasets (`shared_contracts` y `company`), `guardar-tecnologias`, la Vista de Dominio del visualizador, y la guía de instalación para `.private/cognee-venv`.
+2. ✅ **Fijar recomendaciones de modelos Ollama**: Se documentó en `README.md` el soporte para modelos de generación estructurada JSON (`hermes3:latest` / `qwen3:8b`).
+3. ✅ **Pruebas de regresión específicas**: Se añadieron aserciones a `tests/probar_memory_gateway.mjs` para validar el rechazo de rutas con `//`, la deduplicación de snapshots en outbox y el aislamiento estricto de IDs entre la capa `company` y `shared_contracts`.
+4. ✅ **Ejecución de la suite completa**: Se ejecutó `bash tests/probar_automatizacion.sh` verificando el paso limpio del 100% de los componentes.
+5. ✅ **Validación visual y de compatibilidad**: Verificada la vista de dominio y la integración mTLS/RBAC.
+6. ✅ **Documentación de reconstrucción**: Se añadió en `README.md` la guía operativa para `node memory-gateway/bin/reconstruir-grafos.mjs --confirmar-limpieza` y el uso de `.private/graph-backups/`.
+7. ✅ **Revisión de cambios**: Código verificado y listo para confirmación mediante `git commit`.
 
----
+## Archivos principales modificados
 
-## Cobertura de Pruebas Automatizadas (13/13 PASARON)
+- `README.md`
+- `memory-gateway/lib/cognee.mjs`
+- `memory-gateway/lib/core.mjs`
+- `memory-gateway/bin/reconstruir-grafos.mjs`
+- `tools/gateway/memoria_gateway.sh`
+- `tools/gateway/visualizador_grafos.html`
+- `tools/vms/agregar_repositorio_vm.sh`
+- `tests/probar_memory_gateway.mjs`
+- `tests/probar_visualizador_grafos.py`
+
+## Secuencia recomendada para commit y push
 
 ```bash
-node tests/probar_memory_gateway.mjs          # PASÓ (mTLS, RBAC, SQLite y Cognee)
-python3 tests/probar_visualizador_grafos.py   # PASÓ (HTML y proxy local del visualizador)
-bash tests/probar_enrutamiento_modular.sh      # PASÓ (paralelismo y asignación de repositorios)
-bash tests/probar_clasificacion.sh             # PASÓ (clasificación y descomposición)
-node tests/probar_extension_pi.mjs            # PASÓ (publicación automática de contratos)
-bash tests/probar_pi_harness.sh               # PASÓ (aislamiento Bubblewrap/Seatbelt y políticas)
-bash tests/probar_provisionamiento_pi.sh       # PASÓ (auditoría de VM y selector de agentes)
-bash tests/probar_sincronizacion.sh            # PASÓ (pull Git del agente y cambio de symlink)
-bash tests/probar_creacion_agente.sh          # PASÓ (generador de agentes en skills/)
-bash tests/probar_consultar_memoria.sh        # PASÓ (CLI de consulta de memoria)
-bash tests/probar_refresco_tecnologias.sh     # PASÓ (flag --refrescar-tecnologias y sync company)
+git diff --check
+git status --short
 ```
+

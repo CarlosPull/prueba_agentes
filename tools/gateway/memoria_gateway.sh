@@ -17,5 +17,10 @@ case "$ACTION" in
     content="${1:-}"; [ -n "$content" ] || exit 1
     CALL -H 'Content-Type: application/json' -X POST "$URL/v1/admin/memories" \
       --data "$(jq -cn --arg content "$content" '{layer:"company",content:$content}')" | jq . ;;
-  *) echo "Uso: memoria_gateway.sh verificar|guardar-negocio <tenant> <texto>|guardar-empresa <texto>" >&2; exit 1 ;;
+  guardar-tecnologias)
+    repository="${1:-}"; technology_json="${2:-}"; [ -n "$repository" ] && [ -n "$technology_json" ] || exit 1
+    jq -e '.technologies | type == "array"' <<< "$technology_json" >/dev/null || { echo "Error: inventario tecnológico inválido." >&2; exit 1; }
+    CALL -H 'Content-Type: application/json' -X POST "$URL/v1/admin/memories" \
+      --data "$(jq -cn --arg repository "$repository" --argjson technology "$technology_json" '{layer:"company",memory_kind:"repository_technology",repository:$repository,technologies:($technology.technologies // []),architecture:($technology.architecture // "")}')" | jq . ;;
+  *) echo "Uso: memoria_gateway.sh verificar|guardar-negocio <tenant> <texto>|guardar-empresa <texto>|guardar-tecnologias <repositorio> <json>" >&2; exit 1 ;;
 esac

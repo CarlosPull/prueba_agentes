@@ -139,15 +139,24 @@ En este laboratorio, **Ollama, Cognee y el Memory Gateway se ejecutan en la Mac*
 
 Todos los comandos siguientes deben ejecutarse desde la raíz de `prueba_agentes`.
 
+> **Nota para nuevos desarrolladores**: Si la carpeta `.private/cognee-venv` no existe en tu máquina (por estar ignorada en `.gitignore`), puedes inicializar el entorno virtual e instalar las dependencias con:
+> ```bash
+> python3 -m venv .private/cognee-venv
+> .private/cognee-venv/bin/pip install --upgrade pip
+> .private/cognee-venv/bin/pip install cognee uvicorn fastembed
+> ```
+> *Nota*: Si no necesitas ejecutar el servidor semántico Cognee localmente, el `Memory Gateway` conmuta automáticamente a SQLite (`gateway.sqlite`), por lo que los agentes pueden seguir ejecutándose sin interrupción.
+
+
 ### 1. Comprobar Ollama
 
-Cognee utiliza el modelo local `qwen3:8b`. Ollama debe estar activo antes de iniciar Cognee:
+Cognee utiliza un modelo Ollama con soporte de generación estructurada JSON (`hermes3:latest` o `qwen3:8b`). Ollama debe estar activo antes de iniciar Cognee:
 
 ```bash
 curl --fail --silent http://127.0.0.1:11434/api/tags | jq '.models[].name'
 ```
 
-Si no responde, abre la aplicación Ollama o inicia su servicio local. La lista debe incluir `qwen3:8b`.
+Si no responde, abre la aplicación Ollama o inicia su servicio local. La lista debe incluir el modelo configurado (`hermes3:latest` o `qwen3:8b`).
 
 ### 2. Levantar Cognee — terminal 1
 
@@ -167,7 +176,7 @@ env \
   DYLD_LIBRARY_PATH="$PROJECT_ROOT/.private/openssl-3.6.3/lib" \
   VECTOR_DB_PROVIDER=lancedb \
   LLM_PROVIDER=ollama \
-  LLM_MODEL=qwen3:8b \
+  LLM_MODEL=hermes3:latest \
   LLM_ENDPOINT=http://127.0.0.1:11434 \
   LLM_API_KEY=ollama \
   EMBEDDING_PROVIDER=fastembed \
@@ -244,6 +253,24 @@ lsof -nP -iTCP:8765 -sTCP:LISTEN   # Visualizador
 ```
 
 Si `8765` está ocupado y deseas conservar la instancia existente, abre `http://127.0.0.1:8765`. Para iniciar otra instancia deliberadamente, usa `--port 8766`.
+
+### Reconstrucción segura de grafos (`reconstruir-grafos.mjs`)
+
+Si necesitas borrar y regenerar todos los datasets de memoria semántica en Cognee a partir de las fuentes autoritativas (SQLite/OpenAPI para contratos y `.private/tecnologias.json` para tecnologías):
+
+> **IMPORTANTE**: El Memory Gateway debe estar detenido durante este proceso para evitar escrituras concurrentes.
+
+```bash
+# 1. Crear respaldo y reconstruir datasets en Cognee
+node memory-gateway/bin/reconstruir-grafos.mjs --confirmar-limpieza
+```
+
+El proceso realiza lo siguiente de forma segura:
+- Genera automáticamente un respaldo completo con timestamp en `.private/graph-backups/YYYY-MM-DDTHH-MM-SS-sssZ/`.
+- Elimina únicamente los datasets que inician con el prefijo `prueba_agentes_`.
+- Indexa los modelos canónicos:
+  - **Contratos compartidos** (`shared_contracts`): `Repositorio → Módulo → Endpoint`.
+  - **Tecnologías privadas** (`company`): `Repositorio → Tecnología`.
 
 ---
 
@@ -353,7 +380,7 @@ Si ya existe una entrada tecnológica para ese `repo-id`, por defecto se conserv
 ```
 
 #### Sincronización Automática a la Capa `company` del Gateway
-Al registrar o refrescar la tecnología de un repositorio, el sistema sincroniza automáticamente un resumen estructurado con la capa `company` del Memory Gateway (`memoria_gateway.sh guardar-empresa`). Esto permite que el analista orquestador recupere la información tecnológica centralizada mediante mTLS.
+Al registrar o refrescar la tecnología de un repositorio, el sistema sincroniza automáticamente un resumen estructurado con la capa `company` del Memory Gateway (`memoria_gateway.sh guardar-tecnologias`). Esto permite que el analista orquestador recupere la información tecnológica centralizada mediante mTLS.
 
 La detección también puede ejecutarse en consola sin registrar el repositorio:
 

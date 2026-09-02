@@ -42,12 +42,39 @@ export class CogneeClient {
     return `prueba_agentes_${readable}_${fingerprint}`;
   }
 
-  async index({ id, entityId, content, metadata }) {
+  async datasetByName(name) {
+    const datasets = await this.datasets();
+    return datasets.find((item) => String(item.name || item.dataset_name || "") === name) || null;
+  }
+
+  async deleteDatasetByName(name) {
+    const current = await this.datasetByName(name);
+    if (!current) return false;
+    const datasetId = String(current.id || current.dataset_id || "");
+    await this.deleteDataset(datasetId);
+    return true;
+  }
+
+  async deleteDataset(datasetId) {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/v1/datasets/${encodeURIComponent(datasetId)}`, {
+      method: "DELETE", headers: this.headers(), signal: AbortSignal.timeout(this.visualizationTimeoutMs),
+    });
+    const raw = await response.text();
+    if (!response.ok) throw new Error(errorBody(response, raw));
+  }
+
+  async index({ id, entityId, content, metadata, graphModel, customPrompt = "", replaceDataset = false }) {
     if (!this.configured) throw new Error("Cognee no está configurado");
     const dataset = this.dataset(entityId);
-    const document = JSON.stringify({ memory_id: id, content, metadata });
+    if (replaceDataset) await this.deleteDatasetByName(dataset);
+    let sourceContent = content;
+    if (graphModel && typeof content === "string") {
+      try { sourceContent = JSON.parse(content); } catch {}
+    }
+    const document = JSON.stringify(graphModel ? sourceContent : { memory_id: id, content: sourceContent, metadata });
     const form = new FormData();
-    form.append("data", new Blob([document], { type: "application/json" }), `memoria-${id}.json`);
+    const fingerprint = createHash("sha256").update(String(entityId)).digest("hex").slice(0, 16);
+    form.append("data", new Blob([document], { type: "application/json" }), `grafo-${fingerprint}.json`);
     form.append("datasetName", dataset);
     const addResponse = await this.fetchImpl(`${this.baseUrl}/api/v1/add`, {
       method: "POST", headers: this.headers(), body: form, signal: AbortSignal.timeout(this.addTimeoutMs),
@@ -58,7 +85,12 @@ export class CogneeClient {
     const cognifyResponse = await this.fetchImpl(`${this.baseUrl}/api/v1/cognify`, {
       method: "POST",
       headers: this.headers({ "content-type": "application/json" }),
-      body: JSON.stringify({ datasets: [dataset], run_in_background: false }),
+      body: JSON.stringify({
+        datasets: [dataset],
+        run_in_background: false,
+        ...(graphModel ? { graph_model: graphModel } : {}),
+        ...(customPrompt ? { custom_prompt: customPrompt } : {}),
+      }),
       signal: AbortSignal.timeout(this.cognifyTimeoutMs),
     });
     const cognifyBody = await cognifyResponse.text();
@@ -66,18 +98,20 @@ export class CogneeClient {
     return { dataset };
   }
 
-  async search({ entityId, query, topK = 15 }) {
+  async search({ entityId, entityIds, query, topK = 15 }) {
     if (!this.configured) throw new Error("Cognee no está configurado");
-    const dataset = this.dataset(entityId);
+    const ids = entityIds || [entityId];
+    const datasets = [...new Set(ids.filter(Boolean).map((item) => this.dataset(item)))];
+    if (datasets.length === 0) throw new Error("no hay datasets para consultar");
     const response = await this.fetchImpl(`${this.baseUrl}/api/v1/search`, {
       method: "POST",
       headers: this.headers({ "content-type": "application/json" }),
-      body: JSON.stringify({ query, search_type: this.searchType, datasets: [dataset], top_k: topK }),
+      body: JSON.stringify({ query, search_type: this.searchType, datasets, top_k: topK }),
       signal: AbortSignal.timeout(this.searchTimeoutMs),
     });
     const raw = await response.text();
     if (!response.ok) throw new Error(errorBody(response, raw));
-    return { dataset, result: jsonBody(raw, "buscar") };
+    return { dataset: datasets.length === 1 ? datasets[0] : null, datasets, result: jsonBody(raw, "buscar") };
   }
 
   async datasets() {

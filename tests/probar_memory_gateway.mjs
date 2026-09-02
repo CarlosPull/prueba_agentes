@@ -93,12 +93,20 @@ try {
   assert(ready, "el Gateway no inició");
 
   const endpoint = { method: "POST", path: "/api/users", repository: "usuarios", module: "core", summary: "Crear usuario", response_schema: { type: "object" } };
+  const malformedEndpoint = { method: "GET", path: "//api/users/version", repository: "usuarios", module: "core", summary: "Ruta malformada" };
+  const malformedPublish = await gatewayCall({ port: gatewayPort, ...identity("backend-test"), path: "/v1/contracts/endpoints", body: { core_id: "core-prueba", endpoint: malformedEndpoint } });
+  assert(malformedPublish.status === 400, "el Gateway debía rechazar rutas de contrato con //");
+
   const published = await gatewayCall({ port: gatewayPort, ...identity("backend-test"), path: "/v1/contracts/endpoints", body: { core_id: "core-prueba", endpoint } });
   assert(published.status === 200 && published.body.endpoint.revision === 1, "backend no publicó el contrato versionado");
   assert(readFileSync(join(temporary, "openapi", "core-prueba", "usuarios.openapi.json"), "utf8").includes("/api/users"), "no se generó OpenAPI canónico");
   assert(upstreamRequests.every((item) => !item.key), "la instalación local de Cognee no debía exigir una clave cloud");
   assert(upstreamRequests.some((item) => item.path === "/api/v1/add"), "el Gateway no agregó la memoria a Cognee");
   assert(upstreamRequests.some((item) => item.path === "/api/v1/cognify"), "el Gateway no ejecutó cognify");
+  const contractCognify = upstreamRequests.find((item) => item.path === "/api/v1/cognify" && item.body.graph_model?.title === "Repositorio");
+  assert(contractCognify?.body.graph_model?.$defs?.Modulo && contractCognify?.body.graph_model?.$defs?.Endpoint, "Cognee no recibió el modelo Repositorio → Módulo → Endpoint");
+  const contractAdd = upstreamRequests.find((item) => item.path === "/api/v1/add" && item.body.includes('contiene_modulos'));
+  assert(contractAdd?.body.includes('expone_endpoints') && contractAdd.body.includes('POST /api/users'), "Cognee no recibió el snapshot canónico completo del repositorio");
   const indexedBeforeDuplicate = upstreamRequests.filter((item) => item.path === "/api/v1/add").length;
   const duplicate = await gatewayCall({ port: gatewayPort, ...identity("backend-test"), path: "/v1/contracts/endpoints", body: { core_id: "core-prueba", endpoint } });
   assert(duplicate.body.endpoint.revision === 1 && duplicate.body.changed === false, "una publicación idéntica creó otra revisión");
@@ -111,8 +119,10 @@ try {
 
   const adminWrite = await gatewayCall({ port: gatewayPort, ...identity("memory-admin"), path: "/v1/admin/memories", body: { layer: "business", tenant_id: "empresa-a", content: "regla privada" } });
   assert(adminWrite.status === 200, "el administrador no pudo registrar memoria privada");
-  const technologyWrite = await gatewayCall({ port: gatewayPort, ...identity("memory-admin"), path: "/v1/admin/memories", body: { layer: "company", content: "El repositorio usuarios utiliza PHP 8.4 y Laravel 13" } });
+  const technologyWrite = await gatewayCall({ port: gatewayPort, ...identity("memory-admin"), path: "/v1/admin/memories", body: { layer: "company", memory_kind: "repository_technology", repository: "usuarios", technologies: ["PHP 8.4", "Laravel 13"], architecture: "módulo Laravel" } });
   assert(technologyWrite.status === 200, "el administrador no pudo registrar tecnología privada");
+  const technologyCognify = upstreamRequests.find((item) => item.path === "/api/v1/cognify" && item.body.graph_model?.$defs?.Tecnologia);
+  assert(technologyCognify?.body.custom_prompt?.includes("Repositorio usa Tecnologias"), "Cognee no recibió el modelo Repositorio → Tecnología");
   const analystTechnology = await gatewayCall({ port: gatewayPort, ...identity("orchestrator-analyst"), path: "/v1/memory/search", body: { layer: "company", query: "tecnología del repositorio usuarios" } });
   assert(analystTechnology.status === 200, "el analista no pudo recolectar la tecnología privada");
   const analystCannotWrite = await gatewayCall({ port: gatewayPort, ...identity("orchestrator-analyst"), path: "/v1/admin/memories", body: { layer: "company", content: "no autorizado" } });
@@ -152,6 +162,8 @@ try {
   assert(!process.env.PI_MEMORY_TLS_KEY_FD, "la extensión no eliminó los descriptores secretos del entorno");
   const search = await tools.get("memoria_buscar").execute("test", { layer: "shared_contracts", query: "usuarios" });
   assert(search.content[0].text.includes("contrato encontrado"), "Pi no consultó Cognee mediante el Gateway");
+  const sharedSearch = upstreamRequests.find((item) => item.path === "/api/v1/search" && item.body.query === "usuarios");
+  assert(sharedSearch?.body.datasets?.length === 1 && sharedSearch.body.datasets[0].includes("repository_usuarios"), "la búsqueda no consultó los grafos por repositorio");
 
   Object.assign(process.env, {
     PI_HARNESS_READ_ONLY: "1",

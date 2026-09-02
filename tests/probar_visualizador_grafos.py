@@ -38,6 +38,7 @@ base = f"http://127.0.0.1:{server.server_port}"
 try:
     page = urlopen(f"{base}/", timeout=2).read().decode("utf-8")
     assert "Mapa vivo de memoria" in page
+    assert "Vista de dominio" in page and "raw.relation" in page
     datasets = json.load(urlopen(f"{base}/api/datasets", timeout=2))
     assert datasets["datasets"][0]["name"] == "prueba_agentes_demo"
     graph = json.load(urlopen(f"{base}/api/graph?dataset_id=11111111-1111-4111-8111-111111111111&max_nodes=100&query=Laravel", timeout=2))
