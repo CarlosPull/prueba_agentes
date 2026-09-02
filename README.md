@@ -133,20 +133,48 @@ tools/
 
 ---
 
-## Levantar la memoria local en macOS
+## Guía de Instalación del Entorno Local
 
-En este laboratorio, **Ollama, Cognee y el Memory Gateway se ejecutan en la Mac**. Los tres procesos se inician en terminales separadas y permanecen en primer plano, lo que permite detenerlos de forma segura con `Ctrl+C`.
+Esta sección permite configurar la máquina de un nuevo desarrollador desde cero para dejar operativo todo el entorno local (Ollama, Cognee, Memory Gateway y el Visualizador de Grafos).
 
-Todos los comandos siguientes deben ejecutarse desde la raíz de `prueba_agentes`.
+### Paso 1: Requisitos Previos
 
-> **Nota para nuevos desarrolladores**: Si la carpeta `.private/cognee-venv` no existe en tu máquina (por estar ignorada en `.gitignore`), puedes inicializar el entorno virtual e instalar las dependencias con:
-> ```bash
-> python3 -m venv .private/cognee-venv
-> .private/cognee-venv/bin/pip install --upgrade pip
-> .private/cognee-venv/bin/pip install cognee uvicorn fastembed
-> ```
-> *Nota*: Si no necesitas ejecutar el servidor semántico Cognee localmente, el `Memory Gateway` conmuta automáticamente a SQLite (`gateway.sqlite`), por lo que los agentes pueden seguir ejecutándose sin interrupción.
+Asegúrate de contar con las siguientes herramientas en tu equipo:
+- **Node.js**: `v24.0.0` o superior (`node -v`).
+- **Python**: `3.10` o superior (`python3 --version`).
+- **Ollama**: Servicio activo con el modelo estructurado instalado:
+  ```bash
+  ollama pull hermes3:latest
+  ```
 
+### Paso 2: Inicializar la carpeta `.private/` (Ejecutar una sola vez)
+
+La carpeta `.private/` está ignorada en `.gitignore` para proteger credenciales y datos locales. En un equipo nuevo, ejecuta este bloque desde la raíz del proyecto (`prueba_agentes`):
+
+```bash
+# 1. Crear el entorno virtual e instalar dependencias de Cognee
+python3 -m venv .private/cognee-venv
+.private/cognee-venv/bin/pip install --upgrade pip
+.private/cognee-venv/bin/pip install cognee uvicorn fastembed
+
+# 2. Generar la PKI local mTLS para el Memory Gateway
+./memory-gateway/bin/generar_pki.sh .private/memory-gateway-pki 127.0.0.1 backend frontend orchestrator-analyst memory-admin
+cp .private/memory-gateway-pki/server.key .private/memory-gateway-pki/server-local.key
+cp .private/memory-gateway-pki/server.crt .private/memory-gateway-pki/server-local.crt
+
+# 3. Crear directorios de datos, clientes de gateway e inventario inicial
+mkdir -p .private/memory-gateway-data .private/memory-gateway-data/openapi
+cp memory-gateway/config/clients.example.json .private/memory-gateway-clients.json
+cp memoria/tecnologias.example.json .private/tecnologias.json
+```
+
+---
+
+## Levantar los Servicios Locales en macOS
+
+En este laboratorio, **Ollama, Cognee y el Memory Gateway se ejecutan en la Mac**. Los tres procesos se inician en terminales separadas y permanecen en primer plano (`Ctrl+C` para detenerlos).
+
+Todos los comandos siguientes deben ejecutarse desde la raíz del repositorio.
 
 ### 1. Comprobar Ollama
 
@@ -162,6 +190,8 @@ Si no responde, abre la aplicación Ollama o inicia su servicio local. La lista 
 
 Este comando utiliza explícitamente `.private/cognee-system` y `.private/cognee-data`, donde vive la memoria existente. No se deben omitir estas rutas porque Cognee utilizaría sus directorios predeterminados y parecería que el grafo está vacío.
 
+> *Nota*: Si no dispones de la biblioteca nativa `ladybug-v0.19.0`, omite las líneas de `GRAPH_DATABASE_PROVIDER`, `LBUG_C_API_LIB_PATH` y `DYLD_LIBRARY_PATH` para que Cognee utilice su proveedor por defecto (Kuzu/NetworkX).
+
 ```bash
 PROJECT_ROOT="$PWD"
 
@@ -171,9 +201,6 @@ env \
   COGNEE_LOGS_DIR="$PROJECT_ROOT/.private/cognee-logs" \
   REQUIRE_AUTHENTICATION=false \
   ENABLE_BACKEND_ACCESS_CONTROL=false \
-  GRAPH_DATABASE_PROVIDER=ladybug \
-  LBUG_C_API_LIB_PATH="$PROJECT_ROOT/.private/ladybug-v0.19.0/liblbug.dylib" \
-  DYLD_LIBRARY_PATH="$PROJECT_ROOT/.private/openssl-3.6.3/lib" \
   VECTOR_DB_PROVIDER=lancedb \
   LLM_PROVIDER=ollama \
   LLM_MODEL=hermes3:latest \
