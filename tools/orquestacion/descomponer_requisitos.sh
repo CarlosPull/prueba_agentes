@@ -38,6 +38,10 @@ printf '%s\n' "$TAREA" |
 /g' \
     -e 's/[[:space:]]+[Dd]espu[eé]s[[:space:]]+/\
 /g' \
+    -e 's/,[[:space:]]+[yEe][[:space:]]+/\
+/g' \
+    -e 's/[[:space:]]+[yEe][[:space:]]+(dise[nñ]a|dise[nñ]ar|crea|crear|agrega|agregar|construye|construir|implementa|implementar|desarrolla|desarrollar|realiza|realizar|configura|configurar|muestra|mostrar|integra|integrar|haz|hacer|en[[:space:]]+el|en[[:space:]]+la|en[[:space:]]+los|en[[:space:]]+las|para[[:space:]]+el|para[[:space:]]+la)/\
+\1/g' \
     -e 's/^[[:space:]]*([-*]|[0-9]+[.)])[[:space:]]*//' \
     -e 's/^[[:space:]]+//' \
     -e 's/[[:space:]]+$//' |
