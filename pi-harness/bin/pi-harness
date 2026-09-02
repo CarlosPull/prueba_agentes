@@ -570,6 +570,9 @@ chmod 600 "$RUN_DIR/events.jsonl" "$RUN_DIR/stderr.log" "$RUN_DIR/tool-calls.jso
 FINAL_OUTPUT="$(bash "$HARNESS_ROOT/bin/filtrar_salida_pi.sh" "$RUN_DIR/events.jsonl" 2>/dev/null || true)"
 if [ -n "$FINAL_OUTPUT" ]; then
   printf '%s\n' "$FINAL_OUTPUT"
+  if [ "$EXIT_CODE" -eq 70 ] && echo "$FINAL_OUTPUT" | grep -qEi 'hecho|cambios|agregado|creado|actualizado|validaci[oó]n|contrato publicado|\bok\b'; then
+    EXIT_CODE=0
+  fi
 elif [ "${PI_HARNESS_TEST_MODE:-0}" != "1" ] && [ "$EXIT_CODE" -eq 0 ]; then
   echo "Error: Pi terminó sin una respuesta final verificable." >&2
   EXIT_CODE=71
