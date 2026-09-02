@@ -42,10 +42,17 @@ technology_semantic='[]'
 enabled_memory_count="$(jq '[to_entries[] | select(.value.engine == "pi" and .value.dispatch_enabled == true and (.value.memory.enabled // false))] | length' "$VMS_CONF")"
 if [ "$enabled_memory_count" -gt 0 ]; then
   gateway_status="unavailable"
-  gateway_url="$(jq -r '[to_entries[] | select(.value.engine == "pi" and .value.dispatch_enabled == true and (.value.memory.enabled // false)) | .value.memory.gateway_url] | unique | if length == 1 then .[0] else "" end' "$VMS_CONF")"
-  collector_cert="${MEMORY_GATEWAY_COLLECTOR_CERT:-}"
-  collector_key="${MEMORY_GATEWAY_COLLECTOR_KEY:-}"
-  collector_ca="${MEMORY_GATEWAY_CA:-}"
+  gateway_url="${MEMORY_GATEWAY_URL:-$(jq -r '[to_entries[] | select(.value.engine == "pi" and .value.dispatch_enabled == true and (.value.memory.enabled // false)) | .value.memory.gateway_url] | unique | if length == 1 then .[0] else "" end' "$VMS_CONF")}"
+  collector_cert="${MEMORY_GATEWAY_COLLECTOR_CERT:-$ROOT/.private/memory-gateway-pki/clients/orchestrator-analyst.crt}"
+  collector_key="${MEMORY_GATEWAY_COLLECTOR_KEY:-$ROOT/.private/memory-gateway-pki/clients/orchestrator-analyst.key}"
+  collector_ca="${MEMORY_GATEWAY_CA:-$ROOT/.private/memory-gateway-pki/ca.crt}"
+  if [ -n "$gateway_url" ] && [ -s "$collector_cert" ] && [ -s "$collector_key" ] && [ -s "$collector_ca" ]; then
+    if ! curl --fail-with-body --silent --connect-timeout 2 --cacert "$collector_ca" --cert "$collector_cert" --key "$collector_key" "$gateway_url/health" >/dev/null 2>&1; then
+      if curl --fail-with-body --silent --connect-timeout 2 --cacert "$collector_ca" --cert "$collector_cert" --key "$collector_key" "https://127.0.0.1:9443/health" >/dev/null 2>&1; then
+        gateway_url="https://127.0.0.1:9443"
+      fi
+    fi
+  fi
   if [ -n "$gateway_url" ] && [ -s "$collector_cert" ] && [ -s "$collector_key" ] && [ -s "$collector_ca" ]; then
     tmp_contracts="$tmp_dir/contratos.ndjson"
     while IFS= read -r core_id; do

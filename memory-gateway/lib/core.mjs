@@ -472,6 +472,41 @@ export class MemoryGatewayCore {
 
   async visualizeGraph(identity, body) {
     const datasetId = String(body.dataset_id || "");
+    if (datasetId.toUpperCase() === "ALL_DATASETS") {
+      const datasets = await this.listGraphs(identity);
+      const query = limited(body.query, 1000).trim();
+      const neighborhoodDepth = Math.min(6, Math.max(1, Number(body.neighborhood_depth) || 2));
+      const maxNodes = Math.min(1000, Math.max(10, Number(body.max_nodes) || 250));
+      const allNodes = new Map();
+      const allLinks = new Map();
+      for (const dataset of datasets) {
+        try {
+          let graph = await this.cognee.visualize({
+            datasetId: dataset.id,
+            full: body.full === true,
+            query,
+            neighborhoodDepth,
+            maxNodes,
+          });
+          if (dataset.repository) graph = this.scopeRepositoryGraph(graph, dataset, body.full === true);
+          for (const node of graph.nodes || []) {
+            const id = String(node.id ?? node.identifier ?? node.name ?? "");
+            if (id && !allNodes.has(id)) allNodes.set(id, node);
+          }
+          for (const link of graph.links || []) {
+            const src = String(link.source?.id ?? link.source ?? "");
+            const tgt = String(link.target?.id ?? link.target ?? "");
+            const label = String(link.relation || link.label || link.relationship_name || link.edge_info?.relationship_name || "");
+            const key = `${src}->${label}->${tgt}`;
+            if (src && tgt && !allLinks.has(key)) allLinks.set(key, link);
+          }
+        } catch {}
+      }
+      return {
+        dataset: { id: "ALL_DATASETS", name: "prueba_agentes_VISTA_GENERAL_GLOBAL" },
+        graph: this.unifyGraphNodes({ nodes: Array.from(allNodes.values()), links: Array.from(allLinks.values()) })
+      };
+    }
     if (!DATASET_ID.test(datasetId)) throw new HttpError(400, "dataset_id no válido");
     const datasets = await this.listGraphs(identity);
     const dataset = datasets.find((candidate) => candidate.id.toLowerCase() === datasetId.toLowerCase());
@@ -479,23 +514,90 @@ export class MemoryGatewayCore {
     const query = limited(body.query, 1000).trim();
     const neighborhoodDepth = Math.min(6, Math.max(1, Number(body.neighborhood_depth) || 2));
     const maxNodes = Math.min(1000, Math.max(10, Number(body.max_nodes) || 250));
-    let graph = await this.cognee.visualize({
-      datasetId: dataset.id,
-      full: body.full === true,
-      query,
-      neighborhoodDepth,
-      maxNodes,
-    });
-    if (dataset.repository) graph = this.scopeRepositoryGraph(graph, dataset, body.full === true);
-    return { dataset, graph };
+
+    const targetRepo = dataset.repository;
+    const repoDatasets = targetRepo
+      ? datasets.filter((candidate) => candidate.repository === targetRepo)
+      : [dataset];
+
+    const mergedNodes = new Map();
+    const mergedLinks = new Map();
+
+    for (const item of repoDatasets) {
+      try {
+        let g = await this.cognee.visualize({
+          datasetId: item.id,
+          full: body.full === true,
+          query,
+          neighborhoodDepth,
+          maxNodes,
+        });
+        if (item.repository) g = this.scopeRepositoryGraph(g, item, body.full === true);
+        for (const node of g.nodes || []) {
+          const id = String(node.id ?? node.identifier ?? node.name ?? "");
+          if (id && !mergedNodes.has(id)) mergedNodes.set(id, node);
+        }
+        for (const link of g.links || []) {
+          const src = String(link.source?.id ?? link.source ?? "");
+          const tgt = String(link.target?.id ?? link.target ?? "");
+          const label = String(link.relation || link.label || link.relationship_name || link.edge_info?.relationship_name || "");
+          const key = `${src}->${label}->${tgt}`;
+          if (src && tgt && !mergedLinks.has(key)) mergedLinks.set(key, link);
+        }
+      } catch {}
+    }
+
+    return {
+      dataset,
+      graph: this.unifyGraphNodes({ nodes: Array.from(mergedNodes.values()), links: Array.from(mergedLinks.values()) }),
+    };
+  }
+
+  unifyGraphNodes(graph) {
+    if (!graph || !Array.isArray(graph.nodes) || !graph.nodes.length) return graph || { nodes: [], links: [] };
+    const nodeId = (value) => String(value?.id ?? value?.identifier ?? value ?? "");
+    const nodeMapping = new Map();
+    const canonicalNodes = new Map();
+
+    for (const node of graph.nodes) {
+      const origId = nodeId(node);
+      const nodeType = String(node.type || node.node_type || node.kind || "");
+      const nodeName = String(node.name || node.nombre || node.label || node.title || origId);
+
+      let canonicalId = origId;
+      if (nodeType === "Repositorio" && nodeName) {
+        canonicalId = `repo:${nodeName}`;
+      }
+
+      nodeMapping.set(origId, canonicalId);
+      if (!canonicalNodes.has(canonicalId)) {
+        canonicalNodes.set(canonicalId, { ...node, id: canonicalId, label: node.label || nodeName, name: nodeName });
+      }
+    }
+
+    const canonicalLinks = new Map();
+    for (const link of graph.links || graph.edges || []) {
+      const origSrc = nodeId(link.source);
+      const origTgt = nodeId(link.target);
+      const src = nodeMapping.get(origSrc) || origSrc;
+      const tgt = nodeMapping.get(origTgt) || origTgt;
+      const label = String(link.relation || link.label || link.relationship_name || link.edge_info?.relationship_name || "");
+      const key = `${src}->${label}->${tgt}`;
+      if (src && tgt && !canonicalLinks.has(key)) {
+        canonicalLinks.set(key, { ...link, source: src, target: tgt, label });
+      }
+    }
+
+    return {
+      nodes: Array.from(canonicalNodes.values()),
+      links: Array.from(canonicalLinks.values()),
+    };
   }
 
   scopeRepositoryGraph(graph, dataset, includeTechnical = false) {
     const nodeId = (value) => String(value?.id ?? value?.identifier ?? value ?? "");
     const relation = (link) => String(link.relation || link.label || link.relationship_name || link.edge_info?.relationship_name || "");
-    const allowed = dataset.layer === "shared_contracts"
-      ? new Set(["contiene_modulos", "expone_endpoints"])
-      : new Set(["usa_tecnologias"]);
+    const allowed = new Set(["contiene_modulos", "expone_endpoints", "usa_tecnologias"]);
     const roots = graph.nodes.filter((node) => node.type === "Repositorio" && String(node.name || node.nombre || "") === dataset.repository);
     const selected = new Set();
     for (const root of roots) {

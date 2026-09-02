@@ -66,9 +66,28 @@
     const identity=value=>String(value?.id??value?.identifier??value?.name??value??'');
     function normalize(graph){
       const technical=new Set(['textdocument','documentchunk','textsummary','entitytype','document','chunk']);
-      const nodes=(graph.nodes||[]).map((raw,index)=>{const id=identity(raw)||`n-${index}`;return {id,label:String(raw.label??raw.name??raw.title??id),type:String(raw.type??raw.node_type??raw.kind??'Entidad'),raw,x:0,y:0,vx:0,vy:0};}).filter(node=>!$('domain').checked||!technical.has(node.type.toLowerCase().replaceAll('_','')));
+      const nodeMap=new Map(), idMap=new Map();
+      (graph.nodes||[]).forEach((raw,index)=>{
+        const origId=identity(raw)||`n-${index}`;
+        const type=String(raw.type??raw.node_type??raw.kind??'Entidad');
+        const label=String(raw.label??raw.name??raw.title??origId);
+        if($('domain').checked&&technical.has(type.toLowerCase().replaceAll('_','')))return;
+        const canonicalId=(type.toLowerCase()==='repositorio'&&label)?`repo:${label}`:origId;
+        idMap.set(origId,canonicalId);
+        if(!nodeMap.has(canonicalId)){
+          nodeMap.set(canonicalId,{id:canonicalId,label,type,raw,x:0,y:0,vx:0,vy:0});
+        }
+      });
+      const nodes=Array.from(nodeMap.values());
       const known=new Set(nodes.map(n=>n.id));
-      const links=(graph.links||graph.edges||[]).map(raw=>({source:identity(raw.source??raw.source_id??raw.from),target:identity(raw.target??raw.target_id??raw.to),label:String(raw.label??raw.relation??raw.relationship_name??raw.edge_info?.relationship_name??raw.type??''),raw})).filter(link=>known.has(link.source)&&known.has(link.target));
+      const links=(graph.links||graph.edges||[]).map(raw=>{
+        const origSrc=identity(raw.source??raw.source_id??raw.from);
+        const origTgt=identity(raw.target??raw.target_id??raw.to);
+        const source=idMap.get(origSrc)||origSrc;
+        const target=idMap.get(origTgt)||origTgt;
+        const label=String(raw.label??raw.relation??raw.relationship_name??raw.edge_info?.relationship_name??raw.type??'');
+        return {source,target,label,raw};
+      }).filter(link=>known.has(link.source)&&known.has(link.target));
       const level=new Map(nodes.map(node=>[node.id,0]));for(let pass=0;pass<3;pass+=1)for(const link of links){const relation=link.label.toLowerCase();if(relation.includes('modulo')||relation.includes('module'))level.set(link.target,Math.max(level.get(link.target)||0,1));if(relation.includes('endpoint')||relation.includes('tecnolog')||relation.includes('technology'))level.set(link.target,Math.max(level.get(link.target)||0,2));}
       const groups=[0,1,2,3].map(value=>nodes.filter(node=>(level.get(node.id)||0)===value));for(const [value,group] of groups.entries())group.forEach((node,index)=>{node.level=value;node.x=(innerWidth*.72)*(index+1)/(group.length+1);node.y=100+value*180;});
       return {nodes,links};
@@ -84,7 +103,7 @@
     }
     function showNode(node){$('hint').textContent=`${node.label} · ${node.type}`;$('details').textContent=JSON.stringify(node.raw,null,2);}
     async function json(url){const response=await fetch(url,{cache:'no-store'}),payload=await response.json().catch(()=>({error:'respuesta inválida'}));if(!response.ok)throw new Error(payload.error||`HTTP ${response.status}`);return payload;}
-    async function loadDatasets(){try{const payload=await json('/api/datasets'),select=$('dataset'),previous=select.value;select.replaceChildren();for(const item of payload.datasets||[]){const option=document.createElement('option');option.value=item.id;option.textContent=item.name.replace(/^prueba_agentes_/,'');select.append(option);}if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;if(!select.value){status('No hay grafos indexados todavía');render({nodes:[],links:[]});return;}await loadGraph();}catch(error){status(error.message,true);}}
+    async function loadDatasets(){try{const payload=await json('/api/datasets'),select=$('dataset'),previous=select.value;select.replaceChildren();const allOpt=document.createElement('option');allOpt.value='ALL_DATASETS';allOpt.textContent='🌐 Vista General del Proyecto (Todos los Datasets)';select.append(allOpt);for(const item of payload.datasets||[]){const option=document.createElement('option');option.value=item.id;option.textContent=item.name.replace(/^prueba_agentes_/,'');select.append(option);}if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;if(!select.value){status('No hay grafos indexados todavía');render({nodes:[],links:[]});return;}await loadGraph();}catch(error){status(error.message,true);}}
     async function loadGraph(){const id=$('dataset').value;if(!id)return;$('refresh').classList.add('busy');try{const params=new URLSearchParams({dataset_id:id,query:$('query').value,max_nodes:$('maxNodes').value,neighborhood_depth:'2'}),payload=await json('/api/graph?'+params),graph=payload.graph||{};render(graph);status(`${state.nodes.length} nodos · ${state.links.length} relaciones · ${new Date().toLocaleTimeString()}`);}catch(error){status(error.message,true);}finally{$('refresh').classList.remove('busy');}}
     $('refresh').addEventListener('click',loadGraph);$('dataset').addEventListener('change',loadGraph);$('domain').addEventListener('change',loadGraph);$('query').addEventListener('keydown',e=>{if(e.key==='Enter')loadGraph()});
     const svg=$('graph'),viewport=$('viewport');function transform(){viewport.setAttribute('transform',`translate(${state.tx} ${state.ty}) scale(${state.scale})`)}svg.addEventListener('wheel',e=>{e.preventDefault();state.scale=Math.max(.25,Math.min(4,state.scale*(e.deltaY<0?1.1:.9)));transform()},{passive:false});svg.addEventListener('pointerdown',e=>{if(e.target===svg)state.pan={x:e.clientX-state.tx,y:e.clientY-state.ty}});svg.addEventListener('pointermove',e=>{if(state.drag){const rect=svg.getBoundingClientRect();state.drag.x=(e.clientX-rect.left-state.tx)/state.scale;state.drag.y=(e.clientY-rect.top-state.ty)/state.scale;}else if(state.pan){state.tx=e.clientX-state.pan.x;state.ty=e.clientY-state.pan.y;transform();}});svg.addEventListener('pointerup',()=>{state.drag=null;state.pan=null});svg.addEventListener('pointercancel',()=>{state.drag=null;state.pan=null});

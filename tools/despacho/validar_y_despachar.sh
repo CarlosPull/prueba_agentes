@@ -46,10 +46,11 @@ if [ "$MODO_FULLSTACK" = "--fullstack-confirmado" ]; then
 fi
 
 TAREA_LOWER=$(echo "$TAREA" | tr '[:upper:]' '[:lower:]')
+REQUISITOS_ONLY=$(echo "$TAREA_LOWER" | grep -v "restricciones tecnológicas" | grep -v "política de ejecución")
 
 # 1. PRE-VALIDACIÓN DETERMINISTA DE DOMINIO (Barrera en el Script)
 if [ -z "$MODO_FULLSTACK" ] && { [ "$ROLE" = "frontend" ] || [ "$ROLE" = "dev-front" ]; }; then
-  if echo "$TAREA_LOWER" | grep -qE "php|artisan|laravel|eloquent|migration|migración|routes/api|composer|app/models|app/http"; then
+  if echo "$REQUISITOS_ONLY" | grep -qE "php|artisan|laravel|eloquent|migration|migración|routes/api|composer|app/models|app/http"; then
     echo "------------------------------------------------------------" >&2
     echo "❌ TAREA RECHAZADA: INCOMPATIBILIDAD DE DOMINIO DETECTADA" >&2
     echo "El agente asignado '$ROLE' es estrictamente de Frontend (Vue 3 / UI)." >&2
@@ -61,7 +62,7 @@ if [ -z "$MODO_FULLSTACK" ] && { [ "$ROLE" = "frontend" ] || [ "$ROLE" = "dev-fr
 fi
 
 if [ -z "$MODO_FULLSTACK" ] && { [ "$ROLE" = "backend" ] || [ "$ROLE" = "dev-back" ]; }; then
-  if echo "$TAREA_LOWER" | grep -qE "vue|\.vue|vite|tailwind|npm run|vitest|components/ui|src/views|src/components"; then
+  if echo "$REQUISITOS_ONLY" | grep -qE "vue|\.vue|vite|tailwind|npm run|vitest|components/ui|src/views|src/components"; then
     echo "------------------------------------------------------------" >&2
     echo "❌ TAREA RECHAZADA: INCOMPATIBILIDAD DE DOMINIO DETECTADA" >&2
     echo "El agente asignado '$ROLE' es estrictamente de Backend (PHP 8 / Laravel 13)." >&2

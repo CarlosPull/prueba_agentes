@@ -208,7 +208,7 @@
     "pi_model": "gpt-5.4-mini",
     "memory": {
       "enabled": true,
-      "gateway_url": "https://192.168.50.31:9443",
+      "gateway_url": "https://192.168.50.61:9443",
       "core_id": "api-monolitic",
       "tenant_id": "empresa-prueba",
       "read_business": false,
@@ -258,7 +258,7 @@
     "pi_model": "gpt-5.4-mini",
     "memory": {
       "enabled": true,
-      "gateway_url": "https://192.168.50.31:9443",
+      "gateway_url": "https://192.168.50.61:9443",
       "core_id": "api-monolitic",
       "tenant_id": "empresa-prueba",
       "read_business": false,
@@ -308,7 +308,7 @@
     "pi_model": "gpt-5.4-mini",
     "memory": {
       "enabled": true,
-      "gateway_url": "https://192.168.50.31:9443",
+      "gateway_url": "https://192.168.50.61:9443",
       "core_id": "api-monolitic",
       "tenant_id": "empresa-prueba",
       "read_business": false,

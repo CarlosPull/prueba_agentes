@@ -166,6 +166,9 @@ cp .private/memory-gateway-pki/server.crt .private/memory-gateway-pki/server-loc
 mkdir -p .private/memory-gateway-data .private/memory-gateway-data/openapi
 cp memory-gateway/config/clients.example.json .private/memory-gateway-clients.json
 cp memoria/tecnologias.example.json .private/tecnologias.json
+
+# 4. Sincronizar/Instalar certificados mTLS en las VMs remotas
+./tools/vms/sincronizar_mtls_vm.sh
 ```
 
 ---
@@ -340,7 +343,7 @@ Puedes explorar los contratos JSON registrados y las reglas corporativas directa
 
 ### Visualizador web del grafo de Cognee
 
-El visor propio muestra los datasets, nodos y relaciones que Cognee va generando. Se actualiza automáticamente cada 15 segundos, permite buscar por significado, seleccionar una memoria, mover nodos, hacer zoom y revisar los datos de una entidad.
+El visor propio muestra los datasets, nodos y relaciones que Cognee va generando. Se actualiza automáticamente cada 15 segundos, permite buscar por significado y **consolida en un único grafo por repositorio tanto las tecnologías como los módulos y endpoints** naciendo del nodo raíz del `Repositorio`. También permite seleccionar **🌐 Vista General del Proyecto (Todos los Datasets)** para consolidar todo el sistema en un único mapa global.
 
 El navegador **no recibe certificados ni credenciales de Cognee**. Se conecta al servidor Python local; Python usa la identidad administrativa mTLS para consultar dos endpoints protegidos del Memory Gateway, y el Gateway sólo entrega datasets cuyo nombre comienza con `prueba_agentes_`.
 
