@@ -54,13 +54,13 @@ while IFS= read -r requirement; do
     continue
   fi
 
-  text_lower="$(jq -r '.text | ascii_downcase' <<< "$requirement")"
+  text_lower="$(jq -r '.text | ascii_downcase | gsub("[áàäâ]"; "a") | gsub("[éèëê]"; "e") | gsub("[íìïî]"; "i") | gsub("[óòöô]"; "o") | gsub("[úùüû]"; "u")' <<< "$requirement")"
   jq -c --arg stack "$category" --arg text "$text_lower" '
-    (.shared_contracts.results | tostring | ascii_downcase) as $contracts
+    (.shared_contracts.results | tostring | ascii_downcase | gsub("[áàäâ]"; "a") | gsub("[éèëê]"; "e") | gsub("[íìïî]"; "i") | gsub("[óòöô]"; "o") | gsub("[úùüû]"; "u")) as $contracts
     | [.inventory[] | select(.stack == $stack)
       | . as $candidate
       | (([.aliases[]?, .repository, .module]
-          | map(ascii_downcase) | unique
+          | map(ascii_downcase | gsub("[áàäâ]"; "a") | gsub("[éèëê]"; "e") | gsub("[íìïî]"; "i") | gsub("[óòöô]"; "o") | gsub("[úùüû]"; "u")) | unique
           | map(select(. as $signal | ["api","backend","frontend","laravel","php","vue","interfaz","panel","componente","pantalla"] | index($signal) | not)))) as $signals
       | ([$signals[] as $signal | select(($signal | length) > 0 and ($text | contains($signal))) | ($signal | length)] | add // 0) as $requirement_score
       | (if (($contracts | contains(($candidate.repository | ascii_downcase))) or ($contracts | contains(($candidate.module | ascii_downcase)))) then 1 else 0 end) as $contract_score
