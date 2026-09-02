@@ -49,7 +49,8 @@ while IFS= read -r requirement; do
   fi
 
   has_candidates="$(jq -r --arg stack "$category" '[.inventory[] | select(.stack == $stack)] | length' "$tmp/context.json")"
-  if [ "$has_candidates" -eq 0 ] && { [ "$category" = "qa" ] || [ "$category" = "security" ]; }; then
+  if [ "$has_candidates" -eq 0 ]; then
+    echo "⚠️ Omitiendo sub-requisito para el rol '$category': no hay VM habilitada en vms.json para este rol." >&2
     jq -c '. + {target_profile:null,repository:null,module:null,repository_kind:null,workspace:null,technology_constraints:null,depends_on:[]}' <<< "$requirement" >> "$tmp/enriched.ndjson"
     continue
   fi
