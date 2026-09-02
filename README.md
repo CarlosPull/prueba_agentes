@@ -167,8 +167,9 @@ mkdir -p .private/memory-gateway-data .private/memory-gateway-data/openapi
 cp memory-gateway/config/clients.example.json .private/memory-gateway-clients.json
 cp memoria/tecnologias.example.json .private/tecnologias.json
 
-# 4. Sincronizar/Instalar certificados mTLS en las VMs remotas
-./tools/vms/sincronizar_mtls_vm.sh
+# 4. Provisionar la VM e instalar sus certificados mTLS
+./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
+./tools/vms/sincronizar_mtls_vm.sh <perfil>
 ```
 
 ---
@@ -455,8 +456,11 @@ Para aprovisionar una máquina virtual nueva de extremo a extremo:
 # Paso 1: Copiar tu llave SSH a la VM
 ./tools/vms/configurar_ssh_vm.sh usuario@ip_de_la_vm
 
-# Paso 2: Provisionar la VM con el asistente interactivo (incluye menú de selección de agentes en skills/)
+# Paso 2: Provisionar la VM con el asistente interactivo (paquetes del sistema, Pi, workspace y agente)
 ./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
+
+# Paso 3: Sincronizar e instalar los certificados mTLS del Memory Gateway en la VM
+./tools/vms/sincronizar_mtls_vm.sh <perfil>
 
 # Auditar o verificar un perfil en cualquier momento sin reinstalar
 ./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
