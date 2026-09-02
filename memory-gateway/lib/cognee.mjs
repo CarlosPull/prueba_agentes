@@ -88,6 +88,7 @@ export class CogneeClient {
       body: JSON.stringify({
         datasets: [dataset],
         run_in_background: false,
+        skip_connection_test: true,
         ...(graphModel ? { graph_model: graphModel } : {}),
         ...(customPrompt ? { custom_prompt: customPrompt } : {}),
       }),

@@ -8,6 +8,7 @@ export MEMORY_GATEWAY_DB="${MEMORY_GATEWAY_DB:-$ROOT/.private/memory-gateway-dat
 export MEMORY_GATEWAY_CLIENTS="${MEMORY_GATEWAY_CLIENTS:-$ROOT/.private/memory-gateway-clients.json}"
 export MEMORY_GATEWAY_OPENAPI_DIR="${MEMORY_GATEWAY_OPENAPI_DIR:-$ROOT/.private/memory-gateway-data/openapi}"
 export COGNEE_BASE_URL="${COGNEE_BASE_URL:-http://127.0.0.1:8000}"
+export COGNEE_SKIP_CONNECTION_TEST="${COGNEE_SKIP_CONNECTION_TEST:-true}"
 
 command -v node >/dev/null 2>&1 || { echo "Error: node es necesario para sincronizar los grafos." >&2; exit 1; }
 
