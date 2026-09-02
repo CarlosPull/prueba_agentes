@@ -99,7 +99,7 @@
     ],
     "stack": "frontend",
     "engine": "pi",
-    "dispatch_enabled": false,
+    "dispatch_enabled": true,
     "pi_harness": "/home/serveradmin/.local/bin/pi-harness",
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
