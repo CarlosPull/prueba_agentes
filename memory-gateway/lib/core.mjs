@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { CogneeClient } from "./cognee.mjs";
 
 const IDENTIFIER = /^[A-Za-z0-9._:-]{1,100}$/;
+const DATASET_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]);
 
 export class HttpError extends Error {
@@ -46,7 +47,7 @@ export function validateEndpoint(input) {
 }
 
 export class MemoryGatewayCore {
-  constructor({ databasePath, clientsPath, openapiDir, cogneeBaseUrl = "", cogneeApiKey = "", cogneeBearerToken = "", cogneeSearchType = "CHUNKS", cogneeAddTimeoutMs = 60_000, cogneeCognifyTimeoutMs = 600_000, cogneeSearchTimeoutMs = 300_000, fetchImpl = fetch }) {
+  constructor({ databasePath, clientsPath, openapiDir, cogneeBaseUrl = "", cogneeApiKey = "", cogneeBearerToken = "", cogneeSearchType = "CHUNKS", cogneeAddTimeoutMs = 60_000, cogneeCognifyTimeoutMs = 600_000, cogneeSearchTimeoutMs = 300_000, cogneeVisualizationTimeoutMs = 60_000, fetchImpl = fetch }) {
     mkdirSync(dirname(databasePath), { recursive: true });
     mkdirSync(openapiDir, { recursive: true });
     this.db = new DatabaseSync(databasePath, { timeout: 5000 });
@@ -79,6 +80,7 @@ export class MemoryGatewayCore {
       baseUrl: cogneeBaseUrl, apiKey: cogneeApiKey, bearerToken: cogneeBearerToken,
       searchType: cogneeSearchType, addTimeoutMs: cogneeAddTimeoutMs,
       cognifyTimeoutMs: cogneeCognifyTimeoutMs, searchTimeoutMs: cogneeSearchTimeoutMs,
+      visualizationTimeoutMs: cogneeVisualizationTimeoutMs,
       fetchImpl,
     });
     this.flushing = false;
@@ -263,6 +265,40 @@ export class MemoryGatewayCore {
       JSON.stringify({ layer, gateway_memory_id: id }), now,
     );
     return { id, layer, tenant_id: tenantId, created_at: now };
+  }
+
+  async listGraphs(identity) {
+    this.authorize(identity, "graphs:read");
+    if (!this.cognee.configured) throw new HttpError(503, "Cognee no está configurado");
+    const datasets = await this.cognee.datasets();
+    return datasets
+      .map((dataset) => ({
+        id: String(dataset.id || dataset.dataset_id || ""),
+        name: String(dataset.name || dataset.dataset_name || ""),
+        created_at: dataset.created_at || dataset.createdAt || null,
+        updated_at: dataset.updated_at || dataset.updatedAt || null,
+      }))
+      .filter((dataset) => DATASET_ID.test(dataset.id) && dataset.name.startsWith("prueba_agentes_"))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async visualizeGraph(identity, body) {
+    const datasetId = String(body.dataset_id || "");
+    if (!DATASET_ID.test(datasetId)) throw new HttpError(400, "dataset_id no válido");
+    const datasets = await this.listGraphs(identity);
+    const dataset = datasets.find((candidate) => candidate.id.toLowerCase() === datasetId.toLowerCase());
+    if (!dataset) throw new HttpError(404, "dataset no encontrado o fuera del ámbito del Gateway");
+    const query = limited(body.query, 1000).trim();
+    const neighborhoodDepth = Math.min(6, Math.max(1, Number(body.neighborhood_depth) || 2));
+    const maxNodes = Math.min(1000, Math.max(10, Number(body.max_nodes) || 250));
+    const graph = await this.cognee.visualize({
+      datasetId: dataset.id,
+      full: body.full === true,
+      query,
+      neighborhoodDepth,
+      maxNodes,
+    });
+    return { dataset, graph };
   }
 
   close() { this.db.close(); }

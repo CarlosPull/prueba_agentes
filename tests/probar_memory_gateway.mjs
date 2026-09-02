@@ -25,13 +25,33 @@ function gatewayCall({ port, ca, cert, key, method = "POST", path, body }) {
 const temporary = mkdtempSync(join(tmpdir(), "prueba-memory-gateway."));
 const pki = join(temporary, "pki");
 const upstreamRequests = [];
+const gatewayDatasetId = "11111111-1111-4111-8111-111111111111";
+const unrelatedDatasetId = "22222222-2222-4222-8222-222222222222";
+let forceGraphFallback = false;
 const cognee = createServer(async (request, response) => {
   let raw = "";
   for await (const chunk of request) raw += chunk;
   const isJson = String(request.headers["content-type"] || "").includes("application/json");
   upstreamRequests.push({ path: request.url, key: request.headers["x-api-key"], body: isJson ? JSON.parse(raw || "{}") : raw });
+  if (forceGraphFallback && request.url.startsWith("/api/v1/visualize/json?")) {
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ detail: "ruta no disponible" }));
+    return;
+  }
   response.writeHead(200, { "content-type": "application/json" });
-  response.end(JSON.stringify(request.url === "/api/v1/search" ? [{ content: "contrato encontrado" }] : { status: "ok" }));
+  if (request.url === "/api/v1/search") response.end(JSON.stringify([{ content: "contrato encontrado" }]));
+  else if (request.url === "/api/v1/datasets") response.end(JSON.stringify([
+    { id: gatewayDatasetId, name: "prueba_agentes_internal_engineering_0123456789ab" },
+    { id: unrelatedDatasetId, name: "dataset_de_otro_sistema" },
+  ]));
+  else if (request.url.startsWith("/api/v1/visualize/json?")) response.end(JSON.stringify({
+    nodes: [{ id: "empresa", label: "Empresa", type: "Entidad" }, { id: "laravel", label: "Laravel", type: "Tecnología" }],
+    links: [{ source: "empresa", target: "laravel", label: "utiliza" }],
+  }));
+  else if (request.url === `/api/v1/datasets/${gatewayDatasetId}/graph`) response.end(JSON.stringify({
+    nodes: [{ id: "fallback", label: "Grafo oficial", type: "Entidad" }], edges: [],
+  }));
+  else response.end(JSON.stringify({ status: "ok" }));
 });
 
 await new Promise((done) => cognee.listen(0, "127.0.0.1", done));
@@ -42,7 +62,7 @@ writeFileSync(clientsPath, JSON.stringify({ version: 1, clients: {
   "backend-test": { enabled: true, permissions: ["contracts:read", "contracts:write", "business:read", "company:read"], core_ids: ["core-prueba"], tenant_ids: ["empresa-a"] },
   "frontend-test": { enabled: true, permissions: ["contracts:read", "business:read"], core_ids: ["core-prueba"], tenant_ids: ["empresa-a"] },
   "orchestrator-analyst": { enabled: true, permissions: ["contracts:read", "company:read"], core_ids: ["core-prueba"], tenant_ids: [] },
-  "memory-admin": { enabled: true, permissions: ["business:write", "company:write"], core_ids: [], tenant_ids: ["empresa-a"] },
+  "memory-admin": { enabled: true, permissions: ["business:write", "company:write", "graphs:read"], core_ids: [], tenant_ids: ["empresa-a"] },
 } }));
 
 const gatewayPort = 19443 + Math.floor(Math.random() * 1000);
@@ -98,6 +118,22 @@ try {
   const analystCannotWrite = await gatewayCall({ port: gatewayPort, ...identity("orchestrator-analyst"), path: "/v1/admin/memories", body: { layer: "company", content: "no autorizado" } });
   assert(analystCannotWrite.status === 403, "el analista pudo escribir la memoria tecnológica privada");
 
+  const analystCannotListGraphs = await gatewayCall({ port: gatewayPort, ...identity("orchestrator-analyst"), path: "/v1/admin/graphs/datasets", body: {} });
+  assert(analystCannotListGraphs.status === 403, "el analista pudo enumerar los grafos administrativos");
+  const datasets = await gatewayCall({ port: gatewayPort, ...identity("memory-admin"), path: "/v1/admin/graphs/datasets", body: {} });
+  assert(datasets.status === 200 && datasets.body.datasets.length === 1, "el Gateway no filtró sus datasets de Cognee");
+  assert(datasets.body.datasets[0].id === gatewayDatasetId, "el Gateway expuso un dataset ajeno");
+  const graph = await gatewayCall({ port: gatewayPort, ...identity("memory-admin"), path: "/v1/admin/graphs/view", body: { dataset_id: gatewayDatasetId, max_nodes: 100 } });
+  assert(graph.status === 200 && graph.body.graph.nodes.length === 2 && graph.body.graph.links.length === 1, "el administrador no pudo visualizar el grafo");
+  forceGraphFallback = true;
+  const fallbackGraph = await gatewayCall({ port: gatewayPort, ...identity("memory-admin"), path: "/v1/admin/graphs/view", body: { dataset_id: gatewayDatasetId } });
+  forceGraphFallback = false;
+  assert(fallbackGraph.status === 200 && fallbackGraph.body.graph.nodes[0].id === "fallback" && fallbackGraph.body.graph.links.length === 0, "falló la compatibilidad con el endpoint oficial de grafo");
+  const unrelatedGraph = await gatewayCall({ port: gatewayPort, ...identity("memory-admin"), path: "/v1/admin/graphs/view", body: { dataset_id: unrelatedDatasetId } });
+  assert(unrelatedGraph.status === 404, "el Gateway permitió visualizar un dataset ajeno");
+  const visualizeRequest = upstreamRequests.find((item) => item.path.startsWith("/api/v1/visualize/json?"));
+  assert(visualizeRequest?.path.includes(`dataset_id=${gatewayDatasetId}`), "el Gateway no consultó el endpoint JSON de Cognee");
+
   const workspace = join(temporary, "workspace"); mkdirSync(workspace);
   const policyPath = join(temporary, "policy.json"); const auditPath = join(temporary, "audit.jsonl");
   writeFileSync(policyPath, JSON.stringify({ version: 1, role: "backend", read: [], write: [], deny_read: [], deny_write: [], memory: { shared_contracts: ["read", "write"], business: ["read"], company: ["read"] } }));
@@ -133,4 +169,4 @@ try {
   gateway.kill("SIGTERM"); cognee.close(); rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log("OK: mTLS, RBAC, analista de solo lectura, tenants, SQLite/OpenAPI, auditoría y Cognee OSS verificados.");
+console.log("OK: mTLS, RBAC, analista de solo lectura, tenants, SQLite/OpenAPI, auditoría y visualización Cognee OSS verificados.");

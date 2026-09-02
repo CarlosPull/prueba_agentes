@@ -22,5 +22,6 @@ done
 
 node "$ROOT/tests/probar_extension_pi.mjs"
 node "$ROOT/tests/probar_memory_gateway.mjs"
+python3 "$ROOT/tests/probar_visualizador_grafos.py"
 
 echo "✓ Automatización local completa verificada."

@@ -1,6 +1,6 @@
-# Estado de Avances y Pendientes — 1 de Septiembre de 2026
+# Estado de Avances y Pendientes — 2 de Septiembre de 2026
 
-Este documento confirma que **el 100% de las tareas y mejoras pendientes han sido completadas, verificadas con pruebas automatizadas, committeadas y subidas a GitHub**.
+Este documento resume las mejoras implementadas y verificadas en el árbol de trabajo actual. Un cambio sólo debe considerarse publicado cuando exista el `commit` y `push` correspondiente.
 
 ---
 
@@ -8,7 +8,7 @@ Este documento confirma que **el 100% de las tareas y mejoras pendientes han sid
 
 El orquestador es una plataforma distribuida, autónoma y madura para la gestión de agentes. Posee soporte para orquestación multi-módulo en paralelo, recolección de contexto semántico con mTLS, tolerancia a fallos con fallback SQLite, agentes versionados desde Git, aprovisionamiento interactivo de VMs y ejecución aislada mediante **Pi** y `pi-harness` en máquinas virtuales remotas.
 
-Todos los cambios han sido **verificados al 100% con 10 suites de pruebas automatizadas, committeados y subidos (`push`) a GitHub** en la rama de sincronización (`implementacion_pi` / `prueba_memoria`).
+El conjunto actual se verifica con el agregador `bash tests/probar_automatizacion.sh`. En esta actualización, sus 13 grupos de comprobaciones finalizaron correctamente.
 
 ---
 
@@ -46,12 +46,18 @@ Todos los cambios han sido **verificados al 100% con 10 suites de pruebas automa
 ### 8. Resiliencia y Fallback SQLite en Memory Gateway (`core.mjs`)
 - Si Cognee OSS se reinicia o está fuera de servicio, el Memory Gateway conmuta automáticamente a SQLite (`gateway.sqlite`), garantizando **disponibilidad del 100%**.
 
+### 9. Visualizador propio de grafos Cognee
+- `tools/gateway/visualizar_grafos.py` sirve una interfaz HTML local sin dependencias externas.
+- `tools/gateway/visualizador_grafos.html` permite seleccionar datasets, buscar contexto, mover nodos, hacer zoom e inspeccionar relaciones con actualización automática.
+- El acceso pasa por endpoints administrativos mTLS del Memory Gateway, protegidos con `graphs:read`; no se exponen credenciales en el navegador ni datasets ajenos al sistema.
+
 ---
 
-## Cobertura de Pruebas Automatizadas (10/10 PASARON)
+## Cobertura de Pruebas Automatizadas (13/13 PASARON)
 
 ```bash
 node tests/probar_memory_gateway.mjs          # PASÓ (mTLS, RBAC, SQLite y Cognee)
+python3 tests/probar_visualizador_grafos.py   # PASÓ (HTML y proxy local del visualizador)
 bash tests/probar_enrutamiento_modular.sh      # PASÓ (paralelismo y asignación de repositorios)
 bash tests/probar_clasificacion.sh             # PASÓ (clasificación y descomposición)
 node tests/probar_extension_pi.mjs            # PASÓ (publicación automática de contratos)

@@ -4,10 +4,16 @@ function errorBody(response, body) {
   return `HTTP ${response.status}: ${String(body || "").slice(0, 1000)}`;
 }
 
+function jsonBody(raw, operation) {
+  try { return JSON.parse(raw); }
+  catch { throw new Error(`Cognee devolvió una respuesta JSON inválida al ${operation}`); }
+}
+
 export class CogneeClient {
   constructor({
     baseUrl = "", apiKey = "", bearerToken = "", searchType = "CHUNKS",
     addTimeoutMs = 60_000, cognifyTimeoutMs = 600_000, searchTimeoutMs = 300_000,
+    visualizationTimeoutMs = 60_000,
     fetchImpl = fetch,
   }) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
@@ -17,6 +23,7 @@ export class CogneeClient {
     this.addTimeoutMs = addTimeoutMs;
     this.cognifyTimeoutMs = cognifyTimeoutMs;
     this.searchTimeoutMs = searchTimeoutMs;
+    this.visualizationTimeoutMs = visualizationTimeoutMs;
     this.fetchImpl = fetchImpl;
   }
 
@@ -70,7 +77,47 @@ export class CogneeClient {
     });
     const raw = await response.text();
     if (!response.ok) throw new Error(errorBody(response, raw));
-    try { return { dataset, result: JSON.parse(raw) }; }
-    catch { throw new Error("Cognee devolvió una respuesta JSON inválida"); }
+    return { dataset, result: jsonBody(raw, "buscar") };
+  }
+
+  async datasets() {
+    if (!this.configured) throw new Error("Cognee no está configurado");
+    const response = await this.fetchImpl(`${this.baseUrl}/api/v1/datasets`, {
+      method: "GET", headers: this.headers(), signal: AbortSignal.timeout(this.visualizationTimeoutMs),
+    });
+    const raw = await response.text();
+    if (!response.ok) throw new Error(errorBody(response, raw));
+    const parsed = jsonBody(raw, "listar datasets");
+    const datasets = Array.isArray(parsed) ? parsed : parsed?.datasets;
+    if (!Array.isArray(datasets)) throw new Error("Cognee devolvió una lista de datasets inválida");
+    return datasets;
+  }
+
+  async visualize({ datasetId, full = false, query = "", neighborhoodDepth = 2, maxNodes = 250 }) {
+    if (!this.configured) throw new Error("Cognee no está configurado");
+    const parameters = new URLSearchParams({
+      dataset_id: datasetId,
+      full: String(full),
+      neighborhood_depth: String(neighborhoodDepth),
+      max_nodes: String(maxNodes),
+    });
+    if (query) parameters.set("query", query);
+    let response = await this.fetchImpl(`${this.baseUrl}/api/v1/visualize/json?${parameters}`, {
+      method: "GET", headers: this.headers(), signal: AbortSignal.timeout(this.visualizationTimeoutMs),
+    });
+    let raw = await response.text();
+    if ([404, 405, 422].includes(response.status)) {
+      response = await this.fetchImpl(`${this.baseUrl}/api/v1/datasets/${encodeURIComponent(datasetId)}/graph`, {
+        method: "GET", headers: this.headers(), signal: AbortSignal.timeout(this.visualizationTimeoutMs),
+      });
+      raw = await response.text();
+    }
+    if (!response.ok) throw new Error(errorBody(response, raw));
+    const graph = jsonBody(raw, "visualizar el grafo");
+    const links = graph?.links || graph?.edges;
+    if (!graph || typeof graph !== "object" || !Array.isArray(graph.nodes) || !Array.isArray(links)) {
+      throw new Error("Cognee devolvió un grafo inválido");
+    }
+    return { ...graph, links };
   }
 }

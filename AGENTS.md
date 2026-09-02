@@ -2,7 +2,7 @@
 
 ## Qué es este repo
 
-Orquestador local distribuido (shell scripts puros, sin Python). Coordina agentes especializados definidos en Markdown dentro de `skills/`. Ejecuta Pi mediante `pi-harness` sobre VMs remotas vía SSH.
+Orquestador local distribuido (flujo de ejecución en shell scripts, sin Python). Coordina agentes especializados definidos en Markdown dentro de `skills/`. Ejecuta Pi mediante `pi-harness` sobre VMs remotas vía SSH. Python se usa únicamente para el visualizador administrativo local de grafos; no participa en la orquestación ni en las VMs.
 
 > **Nota sobre el README**: el `README.md` ya describe la arquitectura actual basada en shell, Pi y `tools/*/*.sh`. El flujo Python/OpenCode anterior está retirado.
 
@@ -50,6 +50,7 @@ Utilidades auxiliares:
 ./tools/despacho/despachar_vm.sh <rol> <dir> "tarea"           # despacho directo (sin lock; usar validar_y_despachar en su lugar)
 ./tools/despacho/pi_harness.sh doctor ...                      # auditar localmente la futura ejecución con Pi
 ./tools/despacho/pi_harness.sh start ...                       # probar el harness de Pi sin pasar por el despachador
+python3 tools/gateway/visualizar_grafos.py --abrir              # visor local de los grafos Cognee mediante el Gateway
 ```
 
 > **Importante**: `despachar_vm.sh` invoca primero `sincronizar_agente.sh`, que ordena a la VM consultar Git; no copia archivos desde la Mac. Cada rol declara en `vms.json` su `git_branch`, `git_agent_path` y `remote_agent`. La VM construye el prompt leyendo `remote_agent/actual/SKILL.md` y los recursos Markdown asociados.
@@ -75,7 +76,7 @@ tools/                         # herramientas organizadas en subcarpetas temáti
 ├── despacho/                  # validación, candados de ejecución física y reportes
 ├── vms/                       # provisionamiento, perfiles y mantenimiento de VMs
 ├── sincronizacion/            # actualización Git de agentes y monitores
-├── gateway/                   # servidor mTLS y CLI de consulta de memoria (consultar_memoria.sh)
+├── gateway/                   # servidor mTLS, CLI y visor Python/HTML administrativo de memoria
 ├── agentes/                   # generador de nuevos agentes (crear_agente.sh)
 └── remotos/                   # bootstraps remotos ejecutados en VMs
 ```
@@ -98,6 +99,7 @@ tools/                         # herramientas organizadas en subcarpetas temáti
 - `validar_y_despachar.sh` crea un candado por identificador de despacho; impide repetir el mismo destino sin bloquear módulos distintos que se ejecutan en paralelo.
 - Cada despacho guarda `EVIDENCIA_AGENTES.md` dentro del proyecto con el perfil, VM, agente resuelto, versión, commit, hash de `SKILL.md`, Pi, workspace, `run_id` y manifiesto remoto utilizados.
 - El Memory Gateway conserva SQLite/OpenAPI como fuente autoritativa e indexa el contexto semántico en Cognee OSS self-hosted mediante `add → cognify → search`; las VMs nunca se conectan directamente a Cognee.
+- El visualizador Python/HTML sólo se sirve en localhost por defecto y usa el Gateway con una identidad administrativa `graphs:read`; el navegador nunca recibe credenciales mTLS ni acceso directo a Cognee.
 - La configuración de VMs se lee de `vms.json`. Las claves son perfiles de VM y `stack` indica el rol; esto permite perfiles adicionales como `backend-prueba` sin reemplazar `backend`.
 - `agregar_repositorio_vm.sh` detecta tecnologías desde los manifiestos del repositorio local y registra atómicamente una entrada por `repo-id` en `.private/tecnologias.json`. Las entradas preexistentes se conservan y nunca se ejecuta código del proyecto durante la detección.
 - Las políticas en `pi-harness/policies/*.json` limitan lectura y escritura por rol; el harness selecciona el aislamiento según el sistema operativo.

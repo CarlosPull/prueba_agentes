@@ -20,6 +20,7 @@ const core = new MemoryGatewayCore({
   cogneeAddTimeoutMs: Number(process.env.COGNEE_ADD_TIMEOUT_MS || 60_000),
   cogneeCognifyTimeoutMs: Number(process.env.COGNEE_COGNIFY_TIMEOUT_MS || 600_000),
   cogneeSearchTimeoutMs: Number(process.env.COGNEE_SEARCH_TIMEOUT_MS || 300_000),
+  cogneeVisualizationTimeoutMs: Number(process.env.COGNEE_VISUALIZATION_TIMEOUT_MS || 60_000),
 });
 
 function send(response, status, body, requestId) {
@@ -71,6 +72,16 @@ const server = createServer({
       const indexing = await core.flushOutbox(1);
       core.audit({ identity, operation, resource: payload.layer, allowed: true, status: 200, requestId });
       return send(response, 200, { ...result, indexing }, requestId);
+    }
+    if (request.url === "/v1/admin/graphs/datasets") {
+      const datasets = await core.listGraphs(identity);
+      core.audit({ identity, operation, resource: "cognee:datasets", allowed: true, status: 200, requestId });
+      return send(response, 200, { datasets }, requestId);
+    }
+    if (request.url === "/v1/admin/graphs/view") {
+      const result = await core.visualizeGraph(identity, payload);
+      core.audit({ identity, operation, resource: `cognee:dataset:${payload.dataset_id}`, allowed: true, status: 200, requestId });
+      return send(response, 200, result, requestId);
     }
     throw new HttpError(404, "ruta no encontrada");
   } catch (error) {

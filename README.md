@@ -95,12 +95,14 @@ tools/
 │   ├── instalar_actualizacion_git.sh
 │   ├── instalar_monitor_local.sh
 │   └── monitor_agentes_locales.sh
-├── gateway/                   # Servidor mTLS y explorador CLI de memoria del Memory Gateway
+├── gateway/                   # Servidor mTLS y exploradores CLI/visual de memoria
 │   ├── provisionar_memory_gateway.sh
 │   ├── configurar_memory_gateway.sh
 │   ├── instalar_identidad_gateway.sh
 │   ├── memoria_gateway.sh
-│   └── consultar_memoria.sh
+│   ├── consultar_memoria.sh
+│   ├── visualizar_grafos.py
+│   └── visualizador_grafos.html
 ├── agentes/                   # Generación automatizada de nuevos agentes/skills
 │   └── crear_agente.sh
 └── remotos/                   # Bootstraps remotos ejecutados en VMs
@@ -120,6 +122,7 @@ tools/
 | Orquestador `tools/*/*.sh` | Mac | Contexto, análisis, enrutamiento, SSH y consolidación |
 | Generador de Agentes | Mac | `tools/agentes/crear_agente.sh` (crea automáticamente la suite en `skills/`) |
 | Explorador de Memoria | Mac | `tools/gateway/consultar_memoria.sh` (CLI interactivo de contratos y memoria) |
+| Visualizador de grafos | Mac | Python sirve el HTML local y consulta Cognee únicamente a través del Gateway |
 | Agentes `skills/*` | Git y copia versionada en cada VM | Instrucciones especializadas por rol (`dev-back`, `dev-front`, `dev-analytics`, `dev-security`, `qa`) |
 | Pi y `pi-harness` | Cada VM | Ejecución del agente y aislamiento del workspace |
 | Memoria de negocio | Cada VM | Reglas privadas del repositorio seleccionado |
@@ -127,6 +130,120 @@ tools/
 | SQLite + OpenAPI | Servidor del Gateway | Fuente autoritativa de contratos compartidos |
 | Cognee OSS | Servidor de memoria | Grafo de conocimiento y búsqueda semántica |
 | Ollama | Servidor de memoria en esta prueba | LLM local utilizado por Cognee; no ejecuta los agentes |
+
+---
+
+## Levantar la memoria local en macOS
+
+En este laboratorio, **Ollama, Cognee y el Memory Gateway se ejecutan en la Mac**. Los tres procesos se inician en terminales separadas y permanecen en primer plano, lo que permite detenerlos de forma segura con `Ctrl+C`.
+
+Todos los comandos siguientes deben ejecutarse desde la raíz de `prueba_agentes`.
+
+### 1. Comprobar Ollama
+
+Cognee utiliza el modelo local `qwen3:8b`. Ollama debe estar activo antes de iniciar Cognee:
+
+```bash
+curl --fail --silent http://127.0.0.1:11434/api/tags | jq '.models[].name'
+```
+
+Si no responde, abre la aplicación Ollama o inicia su servicio local. La lista debe incluir `qwen3:8b`.
+
+### 2. Levantar Cognee — terminal 1
+
+Este comando utiliza explícitamente `.private/cognee-system` y `.private/cognee-data`, donde vive la memoria existente. No se deben omitir estas rutas porque Cognee utilizaría sus directorios predeterminados y parecería que el grafo está vacío.
+
+```bash
+PROJECT_ROOT="$PWD"
+
+env \
+  SYSTEM_ROOT_DIRECTORY="$PROJECT_ROOT/.private/cognee-system" \
+  DATA_ROOT_DIRECTORY="$PROJECT_ROOT/.private/cognee-data" \
+  COGNEE_LOGS_DIR="$PROJECT_ROOT/.private/cognee-logs" \
+  REQUIRE_AUTHENTICATION=false \
+  ENABLE_BACKEND_ACCESS_CONTROL=false \
+  GRAPH_DATABASE_PROVIDER=ladybug \
+  LBUG_C_API_LIB_PATH="$PROJECT_ROOT/.private/ladybug-v0.19.0/liblbug.dylib" \
+  DYLD_LIBRARY_PATH="$PROJECT_ROOT/.private/openssl-3.6.3/lib" \
+  VECTOR_DB_PROVIDER=lancedb \
+  LLM_PROVIDER=ollama \
+  LLM_MODEL=qwen3:8b \
+  LLM_ENDPOINT=http://127.0.0.1:11434 \
+  LLM_API_KEY=ollama \
+  EMBEDDING_PROVIDER=fastembed \
+  EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2 \
+  EMBEDDING_DIMENSIONS=384 \
+  "$PROJECT_ROOT/.private/cognee-venv/bin/uvicorn" \
+  cognee.api.client:app --host 127.0.0.1 --port 8000
+```
+
+Cognee estará listo cuando muestre `Application startup complete`. Desde otra terminal se puede comprobar sin modificar la memoria:
+
+```bash
+curl --fail --silent http://127.0.0.1:8000/api/v1/datasets | jq 'map({id, name})'
+```
+
+### 3. Levantar el Memory Gateway — terminal 2
+
+El Gateway es la única puerta de entrada a Cognee para el orquestador y el visor. Conserva SQLite/OpenAPI como fuente autoritativa y protege el acceso mediante mTLS y permisos.
+
+```bash
+PROJECT_ROOT="$PWD"
+
+env \
+  MEMORY_GATEWAY_HOST=127.0.0.1 \
+  MEMORY_GATEWAY_PORT=9443 \
+  MEMORY_GATEWAY_DB="$PROJECT_ROOT/.private/memory-gateway-data/gateway.sqlite" \
+  MEMORY_GATEWAY_CLIENTS="$PROJECT_ROOT/.private/memory-gateway-clients.json" \
+  MEMORY_GATEWAY_OPENAPI_DIR="$PROJECT_ROOT/.private/memory-gateway-data/openapi" \
+  MEMORY_GATEWAY_TLS_KEY="$PROJECT_ROOT/.private/memory-gateway-pki/server-local.key" \
+  MEMORY_GATEWAY_TLS_CERT="$PROJECT_ROOT/.private/memory-gateway-pki/server-local.crt" \
+  MEMORY_GATEWAY_TLS_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt" \
+  COGNEE_BASE_URL=http://127.0.0.1:8000 \
+  node memory-gateway/bin/memory-gateway.mjs
+```
+
+El Gateway estará listo cuando muestre `Memory Gateway escuchando en https://127.0.0.1:9443`. Para comprobarlo con la identidad administrativa:
+
+```bash
+PROJECT_ROOT="$PWD"
+export MEMORY_GATEWAY_URL='https://127.0.0.1:9443'
+export MEMORY_GATEWAY_CLIENT_CERT="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.crt"
+export MEMORY_GATEWAY_CLIENT_KEY="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.key"
+export MEMORY_GATEWAY_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt"
+
+./tools/gateway/memoria_gateway.sh verificar
+```
+
+La respuesta correcta contiene `"status":"ok"` y `"semantic_backend":"cognee-oss"`. Al iniciar, el Gateway también reintenta gradualmente los elementos pendientes de su outbox; por eso Cognee puede comenzar a procesar memoria aunque no se envíe un prompt nuevo.
+
+### 4. Levantar el visualizador — terminal 3
+
+Las variables se deben exportar nuevamente porque cada terminal tiene su propio entorno:
+
+```bash
+PROJECT_ROOT="$PWD"
+export MEMORY_GATEWAY_URL='https://127.0.0.1:9443'
+export MEMORY_GATEWAY_CLIENT_CERT="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.crt"
+export MEMORY_GATEWAY_CLIENT_KEY="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.key"
+export MEMORY_GATEWAY_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt"
+
+.private/cognee-venv/bin/python tools/gateway/visualizar_grafos.py --abrir
+```
+
+El visor estará disponible en `http://127.0.0.1:8765`. Se usa el Python del entorno Cognee porque el Python del sistema incluido en macOS puede utilizar LibreSSL sin soporte TLS 1.3.
+
+### Detener y diagnosticar
+
+Para detener cada componente, presiona `Ctrl+C` en su terminal, comenzando por el visor, luego el Gateway y finalmente Cognee. Para saber si ya existe una instancia y evitar `Address already in use`:
+
+```bash
+lsof -nP -iTCP:8000 -sTCP:LISTEN   # Cognee
+lsof -nP -iTCP:9443 -sTCP:LISTEN   # Memory Gateway
+lsof -nP -iTCP:8765 -sTCP:LISTEN   # Visualizador
+```
+
+Si `8765` está ocupado y deseas conservar la instancia existente, abre `http://127.0.0.1:8765`. Para iniciar otra instancia deliberadamente, usa `--port 8766`.
 
 ---
 
@@ -166,6 +283,31 @@ Puedes explorar los contratos JSON registrados y las reglas corporativas directa
 # Listar las reglas de memoria corporativa (capa company)
 ./tools/gateway/consultar_memoria.sh --empresa
 ```
+
+### Visualizador web del grafo de Cognee
+
+El visor propio muestra los datasets, nodos y relaciones que Cognee va generando. Se actualiza automáticamente cada 15 segundos, permite buscar por significado, seleccionar una memoria, mover nodos, hacer zoom y revisar los datos de una entidad.
+
+El navegador **no recibe certificados ni credenciales de Cognee**. Se conecta al servidor Python local; Python usa la identidad administrativa mTLS para consultar dos endpoints protegidos del Memory Gateway, y el Gateway sólo entrega datasets cuyo nombre comienza con `prueba_agentes_`.
+
+La identidad usada debe incluir el permiso `graphs:read` en `clients.json`. Tanto `memory-gateway/config/clients.example.json` como la configuración privada actual contienen ese permiso. Para iniciar únicamente el visor cuando Cognee y el Gateway ya están activos:
+
+```bash
+PROJECT_ROOT="$PWD"
+export MEMORY_GATEWAY_URL='https://127.0.0.1:9443'
+export MEMORY_GATEWAY_CLIENT_CERT="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.crt"
+export MEMORY_GATEWAY_CLIENT_KEY="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.key"
+export MEMORY_GATEWAY_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt"
+
+./tools/gateway/memoria_gateway.sh verificar
+.private/cognee-venv/bin/python tools/gateway/visualizar_grafos.py --abrir
+```
+
+Ejecuta el bloque desde la raíz de este repositorio. La guía **Levantar la memoria local en macOS** documenta el arranque completo. Se utiliza el Python del entorno Cognee porque incluye OpenSSL con soporte TLS 1.3; el Python del sistema de macOS puede estar enlazado con una versión antigua de LibreSSL. La comprobación `verificar` debe responder antes de abrir el visor.
+
+El visualizador permanece en primer plano. Para detenerlo, vuelve a su terminal y presiona `Ctrl+C`. Si el puerto quedó ocupado por otra instancia, comprueba qué proceso lo usa con `lsof -nP -iTCP:8765 -sTCP:LISTEN`; también puedes iniciar una instancia independiente con `--port 8766`.
+
+Sin `--abrir`, visita `http://127.0.0.1:8765`. El servidor se enlaza sólo a localhost de forma predeterminada y no requiere paquetes Python externos. Cuando se agrega y procesa nueva memoria con `add → cognify`, la siguiente actualización refleja el crecimiento del grafo. Si Cognee está caído, la búsqueda normal conserva el fallback SQLite, pero el grafo no puede representarse porque SQLite no contiene las relaciones semánticas generadas por Cognee.
 
 ---
 
@@ -241,6 +383,7 @@ Cada repositorio declara `business_memory` en `config/vms.json`. El archivo vive
 - Cada VM posee certificado y llave mTLS propios. El `CN` identifica el perfil.
 - El Gateway aplica permisos, `core_id` y `tenant_id` desde `clients.json`.
 - Las VMs nunca reciben credenciales directas de Cognee.
+- La visualización requiere una identidad administrativa con `graphs:read`; el Gateway filtra los datasets ajenos al sistema.
 - `pi-harness/policies/backend.json` y `frontend.json` definen rutas y comandos permitidos.
 - En Linux se usa Bubblewrap; macOS usa Seatbelt y Windows requiere `pi-appcontainer`.
 - El flujo es *fail-closed*: si falla la política, sincronización o memoria requerida, Pi no se ejecuta reutilizando estado antiguo.
@@ -370,6 +513,7 @@ bash tests/probar_ciclo_actualizacion.sh
 bash tests/probar_monitor_local.sh
 bash tests/probar_creacion_agente.sh
 bash tests/probar_consultar_memoria.sh
+python3 tests/probar_visualizador_grafos.py
 ```
 
 ---
@@ -380,6 +524,9 @@ bash tests/probar_consultar_memoria.sh
 - `backend-comments`: `192.168.50.40`, repositorio `api-monolitic-comments`.
 - `backend-posts`: `192.168.50.231`, repositorio `api-monolitic-posts`.
 - Las tres VMs responden por SSH, tienen Pi, `pi-harness`, identidad mTLS y memoria habilitada.
-- El Gateway escucha en `https://192.168.50.31:9443` con fallback SQLite activo.
+- Cognee y el Gateway se ejecutan en la Mac. Para administración local, Cognee escucha en `127.0.0.1:8000` y el Gateway mTLS en `https://127.0.0.1:9443`.
+- Cognee 1.5.3 reutiliza la memoria persistente de `.private/cognee-system`; Ollama aporta `qwen3:8b` y FastEmbed genera los embeddings locales.
+- El Gateway local utiliza un certificado `server-local` válido para localhost. La identidad `memory-admin` dispone de `graphs:read`, sin entregar credenciales de Cognee al navegador.
+- El visor Python/HTML fue probado con los datasets reales `contracts` y `company`; durante la comprobación mostró 56 nodos y 110 relaciones en el grafo de contratos.
 - **100% de las suites de pruebas pasando de forma limpia.**
 - Ejecución distribuida paralela verificada en vivo enviando tareas simultáneas a los módulos `posts` y `comments`.

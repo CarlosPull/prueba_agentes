@@ -3,7 +3,7 @@
   "clients": {
     "memory-admin": {
       "enabled": true,
-      "permissions": ["business:write", "company:write"],
+      "permissions": ["business:write", "company:write", "graphs:read"],
       "core_ids": [],
       "tenant_ids": ["empresa-a"]
     },
