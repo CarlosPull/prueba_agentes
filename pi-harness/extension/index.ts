@@ -153,8 +153,9 @@ export default function piHarnessPolicy(pi: ExtensionAPI) {
   const gatewayUrl = process.env.PI_MEMORY_GATEWAY_URL || "";
   const coreId = process.env.PI_MEMORY_CORE_ID || "";
   const tenantId = process.env.PI_MEMORY_TENANT_ID || "";
+  const memoryEnabled = process.env.PI_MEMORY_ENABLED === "1";
   let gatewayCredentials: GatewayCredentials | null = null;
-  if (gatewayUrl) {
+  if (memoryEnabled && gatewayUrl) {
     gatewayCredentials = {
       key: consumeCredential("PI_MEMORY_TLS_KEY_FD", "PI_MEMORY_TLS_KEY_FILE"),
       cert: consumeCredential("PI_MEMORY_TLS_CERT_FD", "PI_MEMORY_TLS_CERT_FILE"),

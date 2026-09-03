@@ -37,7 +37,7 @@ if [ -z "$PROFILE" ]; then
   profiles=()
   while IFS= read -r p; do
     [ -n "$p" ] && profiles+=("$p")
-  done < <(jq -r 'to_entries | map(select(.value.repositories and (.value.repositories | length) > 0)) | .[].key' "$VMS_CONF")
+  done < <(jq -r 'to_entries | map(select(.value.repositories and (.value.repositories | length) > 0 and (.value.dispatch_enabled != false))) | .[].key' "$VMS_CONF")
 
   if [ "${#profiles[@]}" -eq 0 ]; then
     echo "Error: No se encontraron perfiles con repositorios configurados en vms.json." >&2

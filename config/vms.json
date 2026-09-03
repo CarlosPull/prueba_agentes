@@ -77,16 +77,16 @@
     "agent_poll_seconds": 30
   },
   "frontend": {
-    "ip": "192.168.50.40",
-    "user": "serveradmin",
-    "workspace": "/home/serveradmin/vue-dev",
+    "ip": "192.168.50.30",
+    "user": "carlos",
+    "workspace": "/home/carlos/vue-dev",
     "repositories": [
       {
         "id": "vue-dev",
         "module": "frontend",
         "kind": "frontend",
-        "path": "/home/serveradmin/vue-dev",
-        "business_memory": "/home/serveradmin/.local/share/prueba-agentes/business/vue-dev.md",
+        "path": "/home/carlos/vue-dev",
+        "business_memory": "/home/carlos/.local/share/prueba-agentes/business/vue-dev.md",
         "aliases": [
           "frontend",
           "interfaz",
@@ -100,7 +100,7 @@
     "stack": "frontend",
     "engine": "pi",
     "dispatch_enabled": true,
-    "pi_harness": "/home/serveradmin/.local/bin/pi-harness",
+    "pi_harness": "/home/carlos/.local/bin/pi-harness",
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
     "memory": {
@@ -110,9 +110,9 @@
       "tenant_id": "",
       "read_business": false,
       "read_company": false,
-      "tls_key": "",
-      "tls_cert": "",
-      "tls_ca": ""
+      "tls_key": "/home/carlos/.config/prueba-agentes/memory-gateway/client.key",
+      "tls_cert": "/home/carlos/.config/prueba-agentes/memory-gateway/client.crt",
+      "tls_ca": "/home/carlos/.config/prueba-agentes/memory-gateway/ca.crt"
     },
     "source_mode": "local",
     "agent_update_mode": "git",
@@ -120,7 +120,7 @@
     "pi_version": "latest",
     "install_dependencies": true,
     "local_agent": "skills/dev-front",
-    "remote_agent": "/home/serveradmin/agentes/frontend",
+    "remote_agent": "/home/carlos/agentes/frontend",
     "project_local_path": "/Users/carlos/Documents/GitHub/vue-dev",
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "implementacion_pi",
@@ -207,7 +207,7 @@
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
     "memory": {
-      "enabled": true,
+      "enabled": false,
       "gateway_url": "https://192.168.50.61:9443",
       "core_id": "api-monolitic",
       "tenant_id": "empresa-prueba",
@@ -257,7 +257,7 @@
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
     "memory": {
-      "enabled": true,
+      "enabled": false,
       "gateway_url": "https://192.168.50.61:9443",
       "core_id": "api-monolitic",
       "tenant_id": "empresa-prueba",
@@ -307,7 +307,7 @@
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
     "memory": {
-      "enabled": true,
+      "enabled": false,
       "gateway_url": "https://192.168.50.61:9443",
       "core_id": "api-monolitic",
       "tenant_id": "empresa-prueba",
