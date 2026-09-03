@@ -241,4 +241,6 @@ echo "▶️ Ejecutando con Pi '$ROLE' mediante '$PROFILE' ($user@$ip)..." >&2
 } > "$LOG_FILE" 2>&1
 
 "$ROOT/tools/despacho/generar_evidencia_agente.sh" "$ROLE" "$PROJECT_DIR" "$DISPATCH_ID" >/dev/null
+"$ROOT/tools/despacho/generar_reporte.sh" "$PROJECT_DIR" "$TAREA" --actualizar "$DISPATCH_ID" >/dev/null 2>&1 || true
 echo "$LOG_FILE"
+
