@@ -171,6 +171,10 @@ q_memory_tls_cert="$(SHELL_QUOTE "$memory_tls_cert")"
 q_memory_tls_ca="$(SHELL_QUOTE "$memory_tls_ca")"
 q_read_only="$(SHELL_QUOTE "$READ_ONLY")"
 
+FEATURE_BRANCH="feature/tarea-${DISPATCH_ID}-$(date +%Y%m%d_%H%M%S)"
+q_dispatch_id="$(SHELL_QUOTE "$DISPATCH_ID")"
+q_feature_branch="$(SHELL_QUOTE "$FEATURE_BRANCH")"
+
 REMOTE_CMD="set -eu;
 AGENT_DIR=$q_agent_dir;
 AGENT_BASE=$q_agent_base;
@@ -194,6 +198,8 @@ PI_MEMORY_TLS_KEY=$q_memory_tls_key;
 PI_MEMORY_TLS_CERT=$q_memory_tls_cert;
 PI_MEMORY_TLS_CA=$q_memory_tls_ca;
 PI_HARNESS_READ_ONLY=$q_read_only;
+DISPATCH_ID=$q_dispatch_id;
+FEATURE_BRANCH=$q_feature_branch;
 exec 8>\"\$AGENT_BASE/.actualizacion.lock\";
 flock -s 8;
 test -z \"\$BUSINESS_MEMORY\" || test -r \"\$BUSINESS_MEMORY\" || { printf 'Error: falta memoria de negocio local en %s.\n' \"\$BUSINESS_MEMORY\" >&2; exit 1; };
@@ -208,6 +214,19 @@ export PATH=$q_node_path:\"\$PATH\";
 export PI_MEMORY_ENABLED PI_MEMORY_GATEWAY_URL PI_MEMORY_CORE_ID PI_MEMORY_TENANT_ID PI_MEMORY_ALLOW_BUSINESS PI_MEMORY_ALLOW_COMPANY PI_MEMORY_TLS_KEY PI_MEMORY_TLS_CERT PI_MEMORY_TLS_CA PI_HARNESS_READ_ONLY;
 PI_BIN=\$(command -v pi || true);
 PI_VERSION=\$(pi --version 2>/dev/null | head -n 1 || true);
+
+if [ \"\$PI_HARNESS_READ_ONLY\" != 1 ] && [ -d \"\$WORKSPACE/.git\" ]; then
+  export GIT_TERMINAL_PROMPT=0;
+  export GIT_SSH_COMMAND=\"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null\";
+  current_origin=\"\$(git -C \"\$WORKSPACE\" remote get-url origin 2>/dev/null || true)\";
+  if [[ \"\$current_origin\" =~ ^https://github\.com/([^/]+)/([^/]+)(\.git)?$ ]]; then
+    ssh_origin=\"git@github.com:\${BASH_REMATCH[1]}/\${BASH_REMATCH[2]%.git}.git\";
+    git -C \"\$WORKSPACE\" remote set-url origin \"\$ssh_origin\" 2>/dev/null || true;
+  fi
+  git -C \"\$WORKSPACE\" checkout -B \"\$FEATURE_BRANCH\" 2>/dev/null || true;
+  printf 'RAMA_TAREA: %s\n' \"\$FEATURE_BRANCH\" >&2;
+fi
+
 printf 'REPOSITORIO: %s\n' \"\$REPOSITORY\" >&2;
 printf 'MODULO: %s\n' \"\$MODULE\" >&2;
 printf 'TIPO_REPOSITORIO: %s\n' \"\$REPOSITORY_KIND\" >&2;
@@ -228,7 +247,57 @@ if [ -n \"\$BUSINESS_MEMORY\" ]; then
   printf '%s\n' \"\$TAREA\" | \"\$PI_HARNESS\" start --role \"\$ROLE\" --workspace \"\$WORKSPACE\" --agent-dir \"\$AGENT_DIR\" --business-memory \"\$BUSINESS_MEMORY\" --backend auto --provider \"\$PROVIDER\" --model \"\$MODEL\" \$READ_ONLY_ARG --task -;
 else
   printf '%s\n' \"\$TAREA\" | \"\$PI_HARNESS\" start --role \"\$ROLE\" --workspace \"\$WORKSPACE\" --agent-dir \"\$AGENT_DIR\" --backend auto --provider \"\$PROVIDER\" --model \"\$MODEL\" \$READ_ONLY_ARG --task -;
+fi
+
+if [ \"\$PI_HARNESS_READ_ONLY\" != 1 ] && [ -d \"\$WORKSPACE/.git\" ]; then
+  export GIT_TERMINAL_PROMPT=0;
+  export GIT_SSH_COMMAND=\"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null\";
+  current_origin=\"\$(git -C \"\$WORKSPACE\" remote get-url origin 2>/dev/null || true)\";
+  if [[ \"\$current_origin\" =~ ^https://github\.com/([^/]+)/([^/]+)(\.git)?$ ]]; then
+    ssh_origin=\"git@github.com:\${BASH_REMATCH[1]}/\${BASH_REMATCH[2]%.git}.git\";
+    git -C \"\$WORKSPACE\" remote set-url origin \"\$ssh_origin\" 2>/dev/null || true;
+  fi
+  if [ -n \"\$(git -C \"\$WORKSPACE\" status --porcelain 2>/dev/null)\" ]; then
+    git -C \"\$WORKSPACE\" add -A;
+    git -C \"\$WORKSPACE\" commit -m \"feat(\$MODULE): \$TAREA\" 2>/dev/null || true;
+  fi
+  if git -C \"\$WORKSPACE\" push -u origin \"\$FEATURE_BRANCH\" >&2 2>&1; then
+    NEW_COMMIT=\$(git -C \"\$WORKSPACE\" rev-parse HEAD 2>/dev/null || true);
+    printf 'RAMA_PUBLICADA: %s\n' \"\$FEATURE_BRANCH\" >&2;
+    printf 'COMMIT_PUBLICADO: %s\n' \"\$NEW_COMMIT\" >&2;
+
+    DEFAULT_BRANCH=\$(git -C \"\$WORKSPACE\" rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's@origin/@@' || echo 'main');
+    [ -n \"\$DEFAULT_BRANCH\" ] || DEFAULT_BRANCH='main';
+
+    RAW_ORIGIN=\$(git -C \"\$WORKSPACE\" remote get-url origin 2>/dev/null || true);
+    REPO_OWNER=''; REPO_NAME='';
+    if [[ \"\$RAW_ORIGIN\" =~ git@github\.com:([^/]+)/([^/]+)(\.git)?$ ]]; then
+      REPO_OWNER=\"\${BASH_REMATCH[1]}\"; REPO_NAME=\"\${BASH_REMATCH[2]%.git}\";
+    elif [[ \"\$RAW_ORIGIN\" =~ ^https://github\.com/([^/]+)/([^/]+)(\.git)?$ ]]; then
+      REPO_OWNER=\"\${BASH_REMATCH[1]}\"; REPO_NAME=\"\${BASH_REMATCH[2]%.git}\";
+    fi
+
+    PR_URL='';
+    if [ -n \"\${PROVISION_GITHUB_TOKEN:-}\" ] && [ -n \"\$REPO_OWNER\" ] && [ -n \"\$REPO_NAME\" ]; then
+      PR_RES=\$(curl -s -X POST -H \"Authorization: token \$PROVISION_GITHUB_TOKEN\" \
+        -H \"Accept: application/vnd.github.v3+json\" \
+        \"https://api.github.com/repos/\$REPO_OWNER/\$REPO_NAME/pulls\" \
+        -d \"{\\\"title\\\":\\\"feat(\$MODULE): \$TAREA\\\",\\\"head\\\":\\\"\$FEATURE_BRANCH\\\",\\\"base\\\":\\\"\$DEFAULT_BRANCH\\\",\\\"body\\\":\\\"Pull Request automático generado por el agente Pi (\$ROLE) para la tarea: \$TAREA\\\"}\" 2>/dev/null || true);
+      PR_URL=\$(echo \"\$PR_RES\" | jq -r '.html_url // empty' 2>/dev/null || true);
+    fi
+
+    if [ -z \"\$PR_URL\" ] && command -v gh >/dev/null 2>&1 && [ -n \"\$REPO_OWNER\" ] && [ -n \"\$REPO_NAME\" ]; then
+      PR_URL=\$(gh pr create --repo \"\$REPO_OWNER/\$REPO_NAME\" --head \"\$FEATURE_BRANCH\" --base \"\$DEFAULT_BRANCH\" --title \"feat(\$MODULE): \$TAREA\" --body \"Pull Request automático generado por el agente Pi (\$ROLE) para la tarea: \$TAREA\" 2>/dev/null || true);
+    fi
+
+    if [ -z \"\$PR_URL\" ] && [ -n \"\$REPO_OWNER\" ] && [ -n \"\$REPO_NAME\" ]; then
+      PR_URL=\"https://github.com/\$REPO_OWNER/\$REPO_NAME/compare/\$DEFAULT_BRANCH...\$FEATURE_BRANCH?expand=1\";
+    fi
+
+    [ -z \"\$PR_URL\" ] || printf 'PULL_REQUEST_URL: %s\n' \"\$PR_URL\" >&2;
+  fi
 fi"
+
 
 LOG_FILE="$PROJECT_DIR/${DISPATCH_ID}_output.log"
 echo "▶️ Ejecutando con Pi '$ROLE' mediante '$PROFILE' ($user@$ip)..." >&2

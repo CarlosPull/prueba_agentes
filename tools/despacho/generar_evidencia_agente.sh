@@ -52,8 +52,13 @@ pi_bin="$(VALOR_LOG "PI_BIN")"
 pi_version="$(VALOR_LOG "PI_VERSION")"
 run_id="$(VALOR_LOG "run_id")"
 manifest="$(VALOR_LOG "manifest")"
+rama_publicada="$(VALOR_LOG "RAMA_PUBLICADA")"
+[ -n "$rama_publicada" ] || rama_publicada="$(VALOR_LOG "RAMA_TAREA")"
+commit_publicado="$(VALOR_LOG "COMMIT_PUBLICADO")"
+pull_request_url="$(VALOR_LOG "PULL_REQUEST_URL")"
 
 if [ -z "$agente" ] || [ -z "$version" ] || [ -z "$run_id" ]; then
+
   echo "Error: la salida remota no contiene agente, versión y run_id suficientes para demostrar la ejecución." >&2
   exit 1
 fi
@@ -73,6 +78,10 @@ fi
   echo "- Repositorio: \`${repository:-no disponible}\`"
   echo "- Módulo: \`${module:-no disponible}\`"
   echo "- Tipo de repositorio: \`${repository_kind:-no disponible}\`"
+  echo "- Rama Git de la Tarea: \`${rama_publicada:-no creada}\`"
+  echo "- Commit Git de la Tarea: \`${commit_publicado:-sin cambios nuevos}\`"
+  echo "- Pull Request GitHub: [${pull_request_url:-no disponible}](${pull_request_url:-#})"
+
   echo "- Memoria de negocio local: \`${business_memory:-no configurada}\`"
   echo "- Pi Harness remoto: \`${pi_harness:-no disponible}\`"
   echo "- Pi remoto: \`${pi_bin:-no disponible}\`"
@@ -82,5 +91,6 @@ fi
   echo "- Bitácora local: \`${DISPATCH_ID}_output.log\`"
   echo ""
 } > "$EVIDENCE_FILE"
+
 
 echo "$EVIDENCE_FILE"

@@ -331,5 +331,54 @@
     "git_branch": "implementacion_pi",
     "git_agent_path": "skills/dev-back",
     "agent_poll_seconds": 30
+  },
+  "backend-prueba-config": {
+    "ip": "192.168.50.64",
+    "user": "pruebaconfig",
+    "workspace": "/home/pruebaconfig/laravel-dev",
+    "stack": "backend",
+    "repositories": [
+      {
+        "id": "laravel-dev",
+        "module": "laravel-dev",
+        "kind": "core",
+        "path": "/home/pruebaconfig/laravel-dev",
+        "business_memory": "/home/pruebaconfig/.local/share/prueba-agentes/business/laravel-dev.md",
+        "aliases": [
+          "laravel-dev"
+        ]
+      }
+    ],
+    "engine": "pi",
+    "dispatch_enabled": true,
+    "pi_harness": "/home/pruebaconfig/.local/bin/pi-harness",
+    "pi_provider": "openai-codex",
+    "pi_model": "gpt-5.4-mini",
+    "memory": {
+      "enabled": true,
+      "gateway_url": "https://192.168.50.61:9443",
+      "core_id": "laravel-dev",
+      "tenant_id": "empresa-prueba",
+      "read_business": true,
+      "read_company": false,
+      "tls_key": "/home/pruebaconfig/.config/prueba-agentes/memory-gateway/client.key",
+      "tls_cert": "/home/pruebaconfig/.config/prueba-agentes/memory-gateway/client.crt",
+      "tls_ca": "/home/pruebaconfig/.config/prueba-agentes/memory-gateway/ca.crt"
+    },
+    "source_mode": "git",
+    "agent_update_mode": "git",
+    "node_version": "24.19.0",
+    "pi_version": "latest",
+    "install_dependencies": true,
+    "local_agent": "skills/dev-back",
+    "remote_agent": "/home/pruebaconfig/agentes/dev-back",
+    "project_git_url": "https://github.com/Felix-Pull/laravel-dev.git",
+    "project_git_branch": "main",
+    "php_version": "8.4",
+    "php_min_version": "8.4.1",
+    "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
+    "git_branch": "mejoras_flujo",
+    "git_agent_path": "skills/dev-back",
+    "agent_poll_seconds": 30
   }
 }

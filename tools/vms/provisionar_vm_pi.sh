@@ -48,8 +48,31 @@ CONFIGURAR_PERFIL_NUEVO() {
   }
 
   echo "🧭 El perfil '$VM_PROFILE' no existe; iniciando configuración inicial."
+
+  local pub_key_file="$HOME/.ssh/id_ed25519.pub"
+  local gh_check=""
+  if [ -f "$pub_key_file" ]; then
+    gh_check="$(ssh -T -o StrictHostKeyChecking=no -o ConnectTimeout=4 git@github.com 2>&1 || true)"
+    if ! printf '%s\n' "$gh_check" | grep -q "successfully authenticated"; then
+      echo ""
+      echo "------------------------------------------------------------"
+      echo "⚠️ ATENCIÓN: Tu llave SSH aún no está registrada en tu cuenta de GitHub."
+      echo "Para que la VM pueda clonar repositorios privados automáticamente:"
+      echo "------------------------------------------------------------"
+      cat "$pub_key_file"
+      echo "------------------------------------------------------------"
+      echo "👉 Agrégala en: https://github.com/settings/keys (New SSH key)"
+      echo "------------------------------------------------------------"
+      read -r -p "Presiona ENTER una vez que la hayas agregado a tu cuenta de GitHub..." _
+      echo ""
+    fi
+  fi
+
+
+
   read -r -p "IP de la VM: " ip_nuevo
   read -r -p "Usuario de Ubuntu: " user_nuevo
+
 
   [[ "$ip_nuevo" =~ ^[A-Za-z0-9.:-]+$ ]] || { echo "Error: IP no válida." >&2; exit 1; }
   [[ "$user_nuevo" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Error: usuario no válido." >&2; exit 1; }
@@ -102,13 +125,16 @@ CONFIGURAR_PERFIL_NUEVO() {
     project_local_nuevo="$(cd "$project_local_nuevo" && pwd -P)"
     default_repository="$(basename "$project_local_nuevo")"
     detected_technology="$($ROOT/tools/vms/detectar_tecnologias_repositorio.sh "$project_local_nuevo" module)"
+    project_git_url_nuevo="$(git -C "$project_local_nuevo" remote get-url origin 2>/dev/null || true)"
+    project_git_branch_nuevo="$(git -C "$project_local_nuevo" branch --show-current 2>/dev/null || echo "main")"
   else
-    read -r -p "URL Git HTTPS del proyecto: " project_git_url_nuevo
-    read -r -p "Rama Git del proyecto: " project_git_branch_nuevo
-    [[ "$project_git_url_nuevo" =~ ^https://github\.com/[A-Za-z0-9._/-]+\.git$ ]] || { echo "Error: URL Git no válida." >&2; exit 1; }
-    [[ "$project_git_branch_nuevo" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Error: rama Git no válida." >&2; exit 1; }
+    read -r -p "URL Git del proyecto: " project_git_url_nuevo
+    read -r -p "Rama Git del proyecto (main): " project_git_branch_nuevo
+    project_git_branch_nuevo="${project_git_branch_nuevo:-main}"
+    [ -n "$project_git_url_nuevo" ] || { echo "Error: URL Git obligatoria." >&2; exit 1; }
     default_repository="$(basename "${project_git_url_nuevo%.git}")"
   fi
+
 
   stack_default="backend"
   if [ -n "$detected_technology" ] && jq -e '
@@ -147,6 +173,7 @@ CONFIGURAR_PERFIL_NUEVO() {
   local agentes_disponibles=()
   local i=1
   local default_agent_name="dev-back"
+  local default_index=1
   [ "$stack_nuevo" = "backend" ] || default_agent_name="dev-front"
 
   echo ""
@@ -155,13 +182,19 @@ CONFIGURAR_PERFIL_NUEVO() {
     if [ -d "$s" ] && [ -f "$s/SKILL.md" ]; then
       local name="$(basename "$s")"
       agentes_disponibles+=("$name")
-      echo "  [$i] $name"
+      if [ "$name" = "$default_agent_name" ]; then
+        default_index=$i
+      fi
+      printf '  [%d] %s\n' "$i" "$name"
       i=$((i+1))
     fi
   done
 
-  read -r -p "Selecciona el agente que habitará esta VM ($default_agent_name): " seleccion_agente
+  echo ""
+  read -r -p "Selecciona el agente [1-${#agentes_disponibles[@]}] ($default_index - $default_agent_name): " seleccion_agente
   local agente_elegido="$default_agent_name"
+
+
   if [ -n "${seleccion_agente:-}" ]; then
     if [[ "$seleccion_agente" =~ ^[0-9]+$ ]] && [ "$seleccion_agente" -ge 1 ] && [ "$seleccion_agente" -le "${#agentes_disponibles[@]}" ]; then
       agente_elegido="${agentes_disponibles[$((seleccion_agente-1))]}"
@@ -171,6 +204,7 @@ CONFIGURAR_PERFIL_NUEVO() {
       echo "Error: el agente '$seleccion_agente' no existe en skills/." >&2; exit 1;
     fi
   fi
+
 
   local_agent_nuevo="skills/$agente_elegido"
   git_agent_path_nuevo="skills/$agente_elegido"
@@ -219,7 +253,32 @@ CONFIGURAR_PERFIL_NUEVO() {
     php_min_version_nuevo="${php_min_version_nuevo:-8.4.1}"
   fi
 
+  echo ""
+  echo "🔐 Configuración de Memoria Contextual mTLS (Memory Gateway):"
+  read -r -p "¿Deseas habilitar Memory Gateway (mTLS) para esta VM? [s/N]: " enable_memory_ans
+  memory_enabled_nuevo=false
+  memory_gateway_url_nuevo="https://192.168.50.61:9443"
+  memory_core_id_nuevo="$repository_id_nuevo"
+  memory_tenant_id_nuevo="empresa-prueba"
+
+  case "${enable_memory_ans:-n}" in
+    s|S|si|Si|SI|y|Y|yes|Yes)
+      memory_enabled_nuevo=true
+      read -r -p "URL del Memory Gateway ($memory_gateway_url_nuevo): " ans_url
+      memory_gateway_url_nuevo="${ans_url:-$memory_gateway_url_nuevo}"
+      read -r -p "Core ID del Memory Gateway ($memory_core_id_nuevo): " ans_core
+      memory_core_id_nuevo="${ans_core:-$memory_core_id_nuevo}"
+      read -r -p "Tenant ID del Memory Gateway ($memory_tenant_id_nuevo): " ans_tenant
+      memory_tenant_id_nuevo="${ans_tenant:-$memory_tenant_id_nuevo}"
+      echo "✓ Memory Gateway mTLS habilitado."
+      ;;
+    *)
+      echo "✓ Memory Gateway mTLS deshabilitado."
+      ;;
+  esac
+
   technology_tmp=""
+
   technology_action=""
   if [ "$source_mode_nuevo" = "local" ]; then
     private_parent="${PRIVATE_TECH_MEMORY%/*}"
@@ -259,7 +318,9 @@ CONFIGURAR_PERFIL_NUEVO() {
     --arg remote_agent "$remote_agent_nuevo" --arg git_url "$git_url_nuevo" \
     --arg git_branch "$git_branch_nuevo" --arg git_agent_path "$git_agent_path_nuevo" \
     --arg agent_poll_seconds "$poll_nuevo" --arg repository_id "$repository_id_nuevo" \
-    --arg module "$module_nuevo" --arg repository_kind "$repository_kind_nuevo" --argjson aliases "$aliases_json" '
+    --arg module "$module_nuevo" --arg repository_kind "$repository_kind_nuevo" --argjson aliases "$aliases_json" \
+    --arg memory_enabled "$memory_enabled_nuevo" --arg memory_gateway_url "$memory_gateway_url_nuevo" \
+    --arg memory_core_id "$memory_core_id_nuevo" --arg memory_tenant_id "$memory_tenant_id_nuevo" '
       .[$profile] = {
         ip:$ip, user:$user, workspace:$workspace, stack:$stack,
         repositories:[{
@@ -270,7 +331,17 @@ CONFIGURAR_PERFIL_NUEVO() {
         engine:"pi", dispatch_enabled:false,
         pi_harness:("/home/" + $user + "/.local/bin/pi-harness"),
         pi_provider:"openai-codex", pi_model:"gpt-5.4-mini",
-        memory:{enabled:false,gateway_url:"",core_id:"",tenant_id:"",read_business:false,read_company:false,tls_key:"",tls_cert:"",tls_ca:""},
+        memory:{
+          enabled:($memory_enabled == "true"),
+          gateway_url:$memory_gateway_url,
+          core_id:$memory_core_id,
+          tenant_id:$memory_tenant_id,
+          read_business:($memory_enabled == "true"),
+          read_company:false,
+          tls_key:("/home/" + $user + "/.config/prueba-agentes/memory-gateway/client.key"),
+          tls_cert:("/home/" + $user + "/.config/prueba-agentes/memory-gateway/client.crt"),
+          tls_ca:("/home/" + $user + "/.config/prueba-agentes/memory-gateway/ca.crt")
+        },
         source_mode:$source_mode, agent_update_mode:$agent_update_mode,
         node_version:$node_version, pi_version:$pi_version,
         install_dependencies:($repository_kind != "module"), local_agent:$local_agent,
@@ -286,6 +357,7 @@ CONFIGURAR_PERFIL_NUEVO() {
           .[$profile].agent_poll_seconds = ($agent_poll_seconds | tonumber)
         else . end
     ' "$VMS_CONF" > "$config_tmp"
+
   chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"
   [ -z "$technology_tmp" ] || mv "$technology_tmp" "$PRIVATE_TECH_MEMORY"
   mv "$config_tmp" "$VMS_CONF"
@@ -497,7 +569,11 @@ ENVIAR_CONFIG() {
     "$remote_pi_harness" "${GITHUB_TOKEN:-}"
 }
 
+# Asegurar llaves SSH e identidad Git en la VM antes del bootstrap remoto
+"$ROOT/tools/vms/configurar_git_vms.sh" "$VM_PROFILE" || true
+
 if ENVIAR_CONFIG | ssh "${SSH_OPTS[@]}" "$target" "'$remote_bootstrap' '$modo'"; then
+
   :
 else
   codigo=$?
@@ -518,6 +594,12 @@ fi
 ENVIAR_CONFIG | ssh "${SSH_OPTS[@]}" "$target" "'$remote_bootstrap' verificar"
 "$ROOT/tools/vms/inicializar_memorias_negocio_vm.sh" "$VM_PROFILE"
 [ "$agent_update_mode" != "local" ] || "$ROOT/tools/sincronizacion/instalar_monitor_local.sh"
+
+if [ "$(jq -r --arg p "$VM_PROFILE" '.[$p].memory.enabled // false' "$VMS_CONF")" = "true" ]; then
+  "$ROOT/tools/vms/sincronizar_mtls_vm.sh" "$VM_PROFILE" || true
+fi
+"$ROOT/tools/vms/configurar_git_vms.sh" "$VM_PROFILE" || true
+
 
 # Solo se habilita este perfil después de una verificación correcta. Pueden
 # coexistir varias VMs backend; el analista elige perfil y repositorio.

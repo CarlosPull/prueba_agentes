@@ -472,37 +472,96 @@ Cada repositorio declara `business_memory` en `config/vms.json`. El archivo vive
 
 ## Provisionamiento de una VM Pi
 
-Para aprovisionar una máquina virtual nueva de extremo a extremo:
+Guía completa paso a paso para preparar una nueva Máquina Virtual de extremo a extremo:
+
+### Paso 0: Registrar tu clave pública SSH en tu cuenta de GitHub (Solo 1 vez)
+
+Para que las VMs puedan clonar y actualizar repositorios privados de GitHub automáticamente mediante SSH:
+
+> ℹ️ **Verificación automática**: Los scripts `./tools/vms/configurar_ssh_vm.sh` y `./tools/vms/provisionar_vm_pi.sh` comprueban automáticamente si tu clave SSH ya está vinculada con GitHub. Si no lo está, **imprimirán en pantalla tu clave pública y la URL directa** (`https://github.com/settings/keys`), haciendo una pausa hasta que presiones ENTER.
+
+Si deseas agregarla manualmente con anticipación:
+1. Muestra la clave pública SSH de tu Mac ejecutando en la terminal:
+   ```bash
+   cat ~/.ssh/id_ed25519.pub
+   ```
+2. Copia todo el contenido del texto (comienza con `ssh-ed25519 AAAAC3Nza...`).
+3. Ve a tu navegador ingresando a **GitHub.com → Settings → SSH and GPG keys**.
+4. Haz clic en **New SSH key**:
+   - **Title**: `Mi Mac`
+   - **Key type**: `Authentication Key`
+   - **Key**: Pega la clave pública copiada.
+5. Guarda con **Add SSH key**. *(Esta clave servirá para todas tus VMs presentes y futuras).*
+
+
+### Paso 1: Preparación del servidor SSH en la VM (Si es una VM recién creada)
+
+Si al intentar conectar obtienes un error del tipo `Connection refused (port 22)` o problemas de dependencias en `apt`:
+
+1. Abre la consola directamente dentro de la VM e instala/repara el servidor SSH:
+   ```bash
+   # 1. Reparar paquetes e índices de apt si hay caché corrupto o dependencias rotas
+   sudo apt clean && sudo rm -rf /var/cache/apt/archives/*.deb
+   sudo dpkg --configure -a
+   sudo apt --fix-broken install -y
+   sudo apt update
+
+   # 2. Instalar el servidor SSH y activar el servicio
+   sudo apt install -y openssh-server openssh-sftp-server
+   sudo systemctl enable --now ssh
+   sudo ufw allow ssh
+   ```
+
+### Paso 2: Configurar la conexión SSH sin contraseña hacia la VM
 
 ```bash
-# Paso 1: Copiar tu llave SSH a la VM
 ./tools/vms/configurar_ssh_vm.sh usuario@ip_de_la_vm
+# Ejemplo: ./tools/vms/configurar_ssh_vm.sh pruebaconfig@192.168.50.64
+```
 
-# Paso 2: Provisionar la VM con el asistente interactivo (paquetes del sistema, Pi, workspace y agente)
+### Paso 3: Aprovisionar la VM con el asistente interactivo de extremo a extremo
+
+```bash
 ./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
+# Ejemplo: ./tools/vms/provisionar_vm_pi.sh backend-prueba-config --con-sudo-interactivo
+```
 
-# Paso 3: Sincronizar e instalar los certificados mTLS del Memory Gateway en la VM
+El flujo interactivo:
+1. Solicita la IP, usuario y el origen del proyecto (`local` o `git`).
+2. Detecta la URL remota de GitHub oficial del repositorio del proyecto (`https://github.com/...`) y su rama por defecto.
+3. Solicita de forma interactiva la configuración de **Memory Gateway (mTLS)** (URL, Core ID, Tenant ID).
+4. Registra el perfil en `config/vms.json` y las tecnologías en `.private/tecnologias.json`.
+5. Muestra una lista numerada limpia de los agentes en `skills/` para su selección.
+6. Instala los paquetes del sistema, Node, Pi y `pi-harness`.
+7. Genera y transfiere automáticamente las credenciales mTLS (`client.crt`, `client.key`, `ca.crt`).
+8. Ejecuta la vinculación del repositorio oficial Git dentro de la VM.
+
+### Paso 4: Vinculación o restablecimiento automatizado de Git en las VMs
+
+
+Puedes configurar o restablecer la identidad Git y la rama de trabajo en todas tus VMs con un solo comando sin entrar manualmente a cada una:
+
+```bash
+# Configurar la identidad Git y vincular los repositorios oficiales de GitHub en todas las VMs
+./tools/vms/configurar_git_vms.sh --name "Tu Nombre" --email "tu-email@ejemplo.com"
+
+# Desvincular y resetear Git desde cero en todas las VMs
+./tools/vms/configurar_git_vms.sh --reset --name "Tu Nombre" --email "tu-email@ejemplo.com"
+```
+
+### Comandos de Utilidad y Mantenimiento de VMs:
+
+```bash
+# Sincronizar únicamente los certificados mTLS del Memory Gateway
 ./tools/vms/sincronizar_mtls_vm.sh <perfil>
 
 # Auditar o verificar un perfil en cualquier momento sin reinstalar
 ./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
-```
 
-Cuando el perfil todavía no existe, el flujo interactivo:
-
-1. Solicita la IP, el usuario y el origen del proyecto.
-2. Busca repositorios en el directorio padre de este proyecto —normalmente `/Users/carlos/Documents/GitHub`— y muestra una lista numerada. Se puede definir otra raíz con `PRUEBA_AGENTES_REPOSITORIES_ROOT` o elegir una ruta manual.
-3. Detecta las tecnologías del repositorio seleccionado, propone `backend` o `frontend` y usa el nombre de la carpeta como `repo-id` predeterminado.
-4. Registra el perfil en `config/vms.json` y la tecnología en `.private/tecnologias.json`.
-5. Continúa con el agente de `skills/`, workspace, actualización, rama, intervalo y versiones.
-
-La selección y detección local también se ejecutan con `--solo-configurar`, por lo que es posible preparar y revisar el perfil sin conectarse todavía a la VM. Para proyectos configurados exclusivamente mediante una URL Git no existe una copia local que inspeccionar durante esta fase; su tecnología debe registrarse cuando haya una copia local disponible.
-
-Para retirar los artefactos administrados por este orquestador antes de reprovisionar:
-
-```bash
+# Retirar los artefactos administrados por este orquestador antes de reprovisionar
 ./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza
 ```
+
 
 ---
 

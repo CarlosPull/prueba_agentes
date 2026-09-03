@@ -50,16 +50,26 @@ command -v tar >/dev/null 2>&1 || {
 }
 
 mkdir -p "$BASE" "$VERSIONES"
+export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 exec 9>"$LOCK"
 flock -x 9
+
 
 if [ ! -d "$REPO" ]; then
   repo_tmp="$BASE/.repositorio.git.tmp.$$"
   trap 'rm -rf "${repo_tmp:-}" "${version_tmp:-}"' EXIT
   rm -rf "$repo_tmp"
-  git clone --bare --filter=blob:none --single-branch --branch "$GIT_BRANCH" "$GIT_URL" "$repo_tmp"
+  if ! git clone --bare --filter=blob:none --single-branch --branch "$GIT_BRANCH" "$GIT_URL" "$repo_tmp" 2>/dev/null; then
+    if [[ "$GIT_URL" =~ ^https://github\.com/([^/]+)/([^/]+)(\.git)?$ ]]; then
+      ssh_git_url="git@github.com:${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}.git"
+      git clone --bare --filter=blob:none --single-branch --branch "$GIT_BRANCH" "$ssh_git_url" "$repo_tmp"
+    else
+      exit 1
+    fi
+  fi
   mv "$repo_tmp" "$REPO"
 fi
+
 
 git --git-dir="$REPO" fetch --quiet --prune origin \
   "+refs/heads/$GIT_BRANCH:refs/remotes/origin/$GIT_BRANCH"

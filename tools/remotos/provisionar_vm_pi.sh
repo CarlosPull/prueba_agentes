@@ -102,6 +102,13 @@ LIMPIAR() {
 trap LIMPIAR EXIT
 
 CONFIGURAR_GIT_PRIVADO() {
+  mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+  if ! grep -q 'Host github.com' "$HOME/.ssh/config" 2>/dev/null; then
+    printf 'Host github.com\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' >> "$HOME/.ssh/config"
+    chmod 600 "$HOME/.ssh/config"
+  fi
+  export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
   if [ -z "$GITHUB_TOKEN" ]; then
     export GIT_TERMINAL_PROMPT=0
     return
@@ -114,14 +121,29 @@ CONFIGURAR_GIT_PRIVADO() {
   export GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 PROVISION_GITHUB_TOKEN="$GITHUB_TOKEN"
 }
 
+
 ACTUALIZAR_REPOSITORIO() {
   local url="$1" rama="$2" destino="$3"
   if [ ! -d "$destino/.git" ]; then
-    git clone --branch "$rama" --single-branch "$url" "$destino"
+    mkdir -p "$(dirname "$destino")"
+    if ! git clone --branch "$rama" --single-branch "$url" "$destino" 2>/dev/null; then
+      if [[ "$url" =~ ^https://github\.com/([^/]+)/([^/]+)(\.git)?$ ]]; then
+        local ssh_url="git@github.com:${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}.git"
+        echo "ℹ️ Clonación HTTPS requirió autenticación; reintentando por SSH ($ssh_url)..."
+        git clone --branch "$rama" --single-branch "$ssh_url" "$destino"
+      else
+        echo "Error: no se pudo clonar el repositorio '$url'." >&2
+        exit 1
+      fi
+    fi
     return
   fi
+
   remote_actual="$(git -C "$destino" remote get-url origin 2>/dev/null || true)"
-  [ "$remote_actual" = "$url" ] || { echo "Error: origin inesperado en '$destino': '$remote_actual'." >&2; exit 1; }
+  if [ "$(NORMALIZAR_URL_GIT "$remote_actual")" != "$(NORMALIZAR_URL_GIT "$url")" ]; then
+    echo "Error: origin inesperado en '$destino': '$remote_actual' (esperado: '$url')." >&2
+    exit 1
+  fi
   if [ -n "$(git -C "$destino" status --porcelain)" ]; then
     echo "⚠️ El proyecto tiene cambios locales; no se hace pull."
     return
@@ -129,6 +151,14 @@ ACTUALIZAR_REPOSITORIO() {
   git -C "$destino" fetch --prune origin "$rama"
   [ "$(git -C "$destino" branch --show-current)" = "$rama" ] || git -C "$destino" checkout "$rama"
   git -C "$destino" pull --ff-only origin "$rama"
+}
+
+NORMALIZAR_URL_GIT() {
+  local u="$1"
+  u="${u#git@github.com:}"
+  u="${u#https://github.com/}"
+  u="${u%.git}"
+  printf '%s' "$u"
 }
 
 VERIFICAR() {
@@ -155,10 +185,11 @@ VERIFICAR() {
 
   if [ "$SOURCE_MODE" = "git" ] && [ -d "$WORKSPACE/.git" ]; then
     valor="$(git -C "$WORKSPACE" remote get-url origin 2>/dev/null || true)"
-    [ "$valor" = "$PROJECT_GIT_URL" ] || { echo "❌ Origin inesperado: $valor"; errores=1; }
+    [ "$(NORMALIZAR_URL_GIT "$valor")" = "$(NORMALIZAR_URL_GIT "$PROJECT_GIT_URL")" ] || { echo "❌ Origin inesperado: $valor"; errores=1; }
     valor="$(git -C "$WORKSPACE" branch --show-current 2>/dev/null || true)"
     [ "$valor" = "$PROJECT_GIT_BRANCH" ] || { echo "❌ Rama inesperada: $valor"; errores=1; }
   fi
+
 
   if [ "$AGENT_UPDATE_MODE" = "git" ]; then
     test -x "$REMOTE_AGENT/actualizar_desde_git.sh" || { echo "❌ Falta actualizador Git del agente"; errores=1; }

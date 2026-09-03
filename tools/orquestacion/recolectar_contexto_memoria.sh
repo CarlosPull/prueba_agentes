@@ -52,32 +52,36 @@ if [ "$enabled_memory_count" -gt 0 ]; then
         gateway_url="https://127.0.0.1:9443"
       fi
     fi
-  fi
-  if [ -n "$gateway_url" ] && [ -s "$collector_cert" ] && [ -s "$collector_key" ] && [ -s "$collector_ca" ]; then
-    tmp_contracts="$tmp_dir/contratos.ndjson"
-    while IFS= read -r core_id; do
-      [ -n "$core_id" ] || continue
-      response="$(curl --fail-with-body --silent --show-error --cacert "$collector_ca" --cert "$collector_cert" --key "$collector_key" \
+
+    if curl --fail-with-body --silent --connect-timeout 2 --cacert "$collector_ca" --cert "$collector_cert" --key "$collector_key" "$gateway_url/health" >/dev/null 2>&1; then
+      tmp_contracts="$tmp_dir/contratos.ndjson"
+      while IFS= read -r core_id; do
+        [ -n "$core_id" ] || continue
+        response="$(curl --fail-with-body --silent --connect-timeout 3 --cacert "$collector_ca" --cert "$collector_cert" --key "$collector_key" \
+          -H 'Content-Type: application/json' -X POST "$gateway_url/v1/memory/search" \
+          --data "$(jq -cn --arg query "$PROMPT" --arg core "$core_id" '{layer:"shared_contracts",query:$query,core_id:$core}')" 2>/dev/null || true)"
+        [ -z "$response" ] || jq -cn --arg core_id "$core_id" --argjson response "$response" '{core_id:$core_id,response:$response}' >> "$tmp_contracts" 2>/dev/null || true
+      done < <(jq -r '[to_entries[] | select(.value.engine == "pi" and .value.dispatch_enabled == true and (.value.memory.enabled // false)) | .value.memory.core_id] | unique[]' "$VMS_CONF")
+      [ ! -f "$tmp_contracts" ] || contracts="$(jq -s '.' "$tmp_contracts" 2>/dev/null || echo '[]')"
+
+      technology_response="$(curl --fail-with-body --silent --connect-timeout 3 --cacert "$collector_ca" --cert "$collector_cert" --key "$collector_key" \
         -H 'Content-Type: application/json' -X POST "$gateway_url/v1/memory/search" \
-        --data "$(jq -cn --arg query "$PROMPT" --arg core "$core_id" '{layer:"shared_contracts",query:$query,core_id:$core}')")" || {
-          echo "Error: el Memory Gateway está habilitado pero falló la recolección de contratos." >&2; exit 1;
-        }
-      jq -cn --arg core_id "$core_id" --argjson response "$response" '{core_id:$core_id,response:$response}' >> "$tmp_contracts"
-    done < <(jq -r '[to_entries[] | select(.value.engine == "pi" and .value.dispatch_enabled == true and (.value.memory.enabled // false)) | .value.memory.core_id] | unique[]' "$VMS_CONF")
-    contracts="$(jq -s '.' "$tmp_contracts")"
-    technology_response="$(curl --fail-with-body --silent --show-error --cacert "$collector_ca" --cert "$collector_cert" --key "$collector_key" \
-      -H 'Content-Type: application/json' -X POST "$gateway_url/v1/memory/search" \
-      --data "$(jq -cn --arg query "$PROMPT" '{layer:"company",query:("Tecnologías, arquitectura y convenciones relevantes para: " + $query)}')")" || {
-        echo "Error: el Gateway está habilitado pero falló la recolección de tecnología privada." >&2; exit 1;
-      }
-    technology_semantic="$(jq -cn --argjson response "$technology_response" '[{source:"memory-gateway",response:$response}]')"
-    if [ "$private_status" = "loaded" ]; then private_status="hybrid"; else private_status="loaded_gateway"; fi
-    gateway_status="loaded"
+        --data "$(jq -cn --arg query "$PROMPT" '{layer:"company",query:("Tecnologías, arquitectura y convenciones relevantes para: " + $query)}')" 2>/dev/null || true)"
+      if [ -n "$technology_response" ]; then
+        technology_semantic="$(jq -cn --argjson response "$technology_response" '[{source:"memory-gateway",response:$response}]' 2>/dev/null || echo '[]')"
+      fi
+      if [ "$private_status" = "loaded" ]; then private_status="hybrid"; else private_status="loaded_gateway"; fi
+      gateway_status="loaded"
+    else
+      echo "⚠️ Memory Gateway no disponible en $gateway_url; continuando con el inventario de tecnología local." >&2
+      gateway_status="unavailable"
+    fi
   else
-    echo "Error: el Gateway está habilitado; configura las credenciales mTLS del recolector en la Mac." >&2
-    exit 1
+    echo "⚠️ Credenciales mTLS del Memory Gateway no configuradas localmente; usando inventario local." >&2
+    gateway_status="disabled"
   fi
 fi
+
 
 jq -n --arg prompt "$PROMPT" --arg private_status "$private_status" --arg private_source "$PRIVATE_MEMORY" \
   --arg gateway_status "$gateway_status" --argjson inventory "$inventory" --argjson contracts "$contracts" \

@@ -182,6 +182,22 @@ CONSTRUIR_REPORTE() {
         echo "- **Workspace**: \`$work\`"
         echo "- **Repositorio**: \`$repo\`"
         echo "- **Estado**: $st_badge"
+
+        local log_file="$PROJECT_DIR/${d_id}_output.log"
+        if [ -f "$log_file" ]; then
+          local branch_pub commit_pub pr_url
+          branch_pub="$(sed -n 's/^RAMA_PUBLICADA: //p' "$log_file" | head -n 1)"
+          [ -n "$branch_pub" ] || branch_pub="$(sed -n 's/^RAMA_TAREA: //p' "$log_file" | head -n 1)"
+          commit_pub="$(sed -n 's/^COMMIT_PUBLICADO: //p' "$log_file" | head -n 1)"
+          pr_url="$(sed -n 's/^PULL_REQUEST_URL: //p' "$log_file" | head -n 1)"
+          if [ -n "$branch_pub" ]; then
+            echo "- **Rama Git de la Tarea**: \`$branch_pub\`"
+            [ -z "$commit_pub" ] || echo "- **Commit Git Publicado**: \`$commit_pub\`"
+            [ -z "$pr_url" ] || echo "- **Pull Request**: [$pr_url]($pr_url)"
+          fi
+
+        fi
+
         echo "- **Tareas asignadas**:"
         while IFS= read -r req_json; do
           [ -n "$req_json" ] || continue
@@ -206,6 +222,7 @@ CONSTRUIR_REPORTE() {
         fi
         echo ""
       done < <(jq -c '.[]' "$DESPACHOS_FILE")
+
     else
       # Si aún no existe DESPACHOS.json, iterar sobre bitácoras sueltas creadas
       for log_file in "$PROJECT_DIR"/*_output.log; do
