@@ -51,9 +51,9 @@ pagos_con_alias_generico="$($ROOT/tools/orquestacion/orquestar.sh --descomponer 
 [ "$(jq '[.targets[] | select(.profile == "backend-pagos")] | length' <<< "$pagos_con_alias_generico")" = "1" ]
 [ "$(jq '[.targets[] | select(.profile == "backend-core")] | length' <<< "$pagos_con_alias_generico")" = "0" ]
 
-# Las conjunciones conservan la acción y su módulo en un requisito atómico.
+# Las conjunciones con verbos de acción dividen la oración en sub-requisitos asignados al mismo módulo.
 pagos_fragmentado="$($ROOT/tools/orquestacion/orquestar.sh --descomponer 'En pagos crea un endpoint Laravel y agrega validación PHP')"
-[ "$(jq '[.requirements[] | select(.category == "backend" and .target_profile == "backend-pagos" and .repository == "modulo-pagos")] | length' <<< "$pagos_fragmentado")" = "1" ]
+[ "$(jq '[.requirements[] | select(.category == "backend" and .target_profile == "backend-pagos" and .repository == "modulo-pagos")] | length' <<< "$pagos_fragmentado")" = "2" ]
 
 multimodulo="$($ROOT/tools/orquestacion/orquestar.sh --descomponer 'Realiza una auditoría técnica integral de solo lectura y sin modificar archivos sobre los contratos API entre core, pagos y comments. En cada repositorio identifica endpoints y relaciones relevantes.')"
 [ "$(jq -r '.execution_policy.read_only' <<< "$multimodulo")" = "true" ]

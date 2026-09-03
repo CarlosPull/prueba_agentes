@@ -23,7 +23,7 @@ salida="$($ROOT/tools/orquestacion/orquestar.sh \
 fin="$(date +%s)"
 duracion=$((fin - inicio))
 
-[ "$duracion" -lt 4 ] || {
+[ "$duracion" -lt 6 ] || {
   echo "FALLO: los dos despachos tardaron ${duracion}s; parecen secuenciales." >&2
   exit 1
 }

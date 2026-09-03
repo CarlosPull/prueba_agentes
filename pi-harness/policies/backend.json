@@ -8,6 +8,7 @@
   },
   "read": [
     "app/**",
+    "src/**",
     "routes/**",
     "database/**",
     "tests/**",
@@ -23,6 +24,7 @@
   ],
   "write": [
     "app/**",
+    "src/**",
     "routes/**",
     "database/**",
     "tests/**",

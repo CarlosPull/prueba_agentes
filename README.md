@@ -88,7 +88,8 @@ tools/
 │   ├── limpiar_vm_pi.sh
 │   ├── configurar_ssh_vm.sh
 │   ├── probar_vms.sh
-│   └── inicializar_memorias_negocio_vm.sh
+│   ├── inicializar_memorias_negocio_vm.sh
+│   └── actualizar_memoria_negocio_vm.sh
 ├── sincronizacion/            # Sincronización Git de agentes y monitores de versión
 │   ├── sincronizar_agente.sh
 │   ├── sincronizar_agente_local.sh
@@ -433,6 +434,27 @@ SQLite y OpenAPI son autoritativos. Cognee ofrece recuperación semántica. El M
 ### 3. Memoria de negocio local
 
 Cada repositorio declara `business_memory` en `config/vms.json`. El archivo vive únicamente en la VM, con permisos `0600`; no vuelve a la Mac, no aparece en los logs y no se guarda en el reporte. `pi-harness` lo incorpora sólo después de elegir el destino.
+
+#### Gestión y Actualización de la Memoria de Negocio:
+
+- **Modo Interactivo (despliega menú de selección de VM/repo y selección de modo)**:
+  ```bash
+  ./tools/vms/actualizar_memoria_negocio_vm.sh
+  ```
+
+- **Sobrescribir por completo el archivo existente en la VM**:
+  ```bash
+  ./tools/vms/actualizar_memoria_negocio_vm.sh <perfil> <repo_id> "/ruta/archivo.md"
+  # O por pipe:
+  echo "Regla totalmente nueva" | ./tools/vms/actualizar_memoria_negocio_vm.sh <perfil> <repo_id>
+  ```
+
+- **Anexar / Agregar al final (preservando las reglas existentes)**:
+  ```bash
+  ./tools/vms/actualizar_memoria_negocio_vm.sh --anexar <perfil> <repo_id> "- Regla adicional 2: ..."
+  # O por pipe:
+  cat nueva_regla.md | ./tools/vms/actualizar_memoria_negocio_vm.sh --anexar <perfil> <repo_id>
+  ```
 
 ---
 

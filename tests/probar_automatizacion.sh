@@ -16,7 +16,8 @@ for prueba in \
   probar_ciclo_actualizacion.sh \
   probar_monitor_local.sh \
   probar_creacion_agente.sh \
-  probar_consultar_memoria.sh; do
+  probar_consultar_memoria.sh \
+  probar_actualizar_memoria_negocio.sh; do
   bash "$ROOT/tests/$prueba"
 done
 

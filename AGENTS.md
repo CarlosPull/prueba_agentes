@@ -37,6 +37,7 @@ Utilidades auxiliares:
 ./tools/vms/detectar_tecnologias_repositorio.sh <ruta> <tipo> # inspeccionar manifiestos sin ejecutar el proyecto
 ./tools/vms/configurar_perfil_backend_local.sh ...         # crear perfil core/módulo sin preguntas
 ./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza # retirar artefactos administrados de una VM
+./tools/vms/actualizar_memoria_negocio_vm.sh [--anexar] [perfil] [repo] # sobrescribir o anexar memoria de negocio (.md) privada en la VM
 ./tools/vms/configurar_ssh_vm.sh user@ip                  # copiar llave SSH a VM nueva
 ./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo # preparar una VM Pi de extremo a extremo
 ./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar       # auditar una VM Pi sin reinstalar
