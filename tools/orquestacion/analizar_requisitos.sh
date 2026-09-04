@@ -23,30 +23,41 @@ if printf '%s\n' "$prompt_lower" | grep -Eq 'solo lectura|sólo lectura|sin modi
   read_only=true
 fi
 
-# Destinos mencionados explícitamente en cualquier requisito de cada dominio.
-# Sirven para propagar instrucciones compartidas como "comprueba relaciones"
-# sin elegir una VM por la longitud accidental de un alias del prompt completo.
-jq -n --slurpfile base "$tmp/base.json" --slurpfile context "$tmp/context.json" '
-  [$context[0].inventory[] as $candidate
-   | (([ $candidate.aliases[]?, $candidate.repository, $candidate.module ]
-       | map(ascii_downcase) | unique
-       | map(select(. as $signal | ["api","backend","frontend","laravel","php","vue","interfaz","panel","componente","pantalla"] | index($signal) | not)))) as $signals
-   | select([ $base[0].requirements[]
-       | select(.category == $candidate.stack)
-       | (.text | ascii_downcase) as $text
-       | $signals[] as $signal
-       | select(($signal | length) > 0 and ($text | contains($signal)))
-     ] | length > 0)
-   | $candidate]
-' > "$tmp/explicit_targets.json"
-
 : > "$tmp/enriched.ndjson"
-while IFS= read -r requirement; do
-  category="$(jq -r '.category' <<< "$requirement")"
-  if [ "$category" = "general" ]; then
-    jq -c '. + {target_profile:null,repository:null,module:null,repository_kind:null,workspace:null,technology_constraints:null,depends_on:[]}' <<< "$requirement" >> "$tmp/enriched.ndjson"
-    continue
+use_llm=false
+if [ "${PRUEBA_AGENTES_DISABLE_LLM_ANALYSIS:-0}" != "1" ] && [ -x "$ROOT/tools/orquestacion/analizar_con_llm.py" ]; then
+  if "$ROOT/tools/orquestacion/analizar_con_llm.py" "$PROMPT" "$tmp/context.json" > "$tmp/llm_result.json" 2>/dev/null; then
+    if [ -s "$tmp/llm_result.json" ] && jq -e 'type == "array" and length > 0' "$tmp/llm_result.json" >/dev/null 2>&1; then
+      use_llm=true
+      echo "🤖 Análisis inteligente de requisitos con LLM (Hermes 3 / Ollama) aplicado correctamente." >&2
+      jq -c '.[]' "$tmp/llm_result.json" > "$tmp/enriched.ndjson"
+    fi
   fi
+fi
+
+if [ "$use_llm" = "false" ]; then
+  # Destinos mencionados explícitamente en cualquier requisito de cada dominio (Fallback determinista)
+  jq -n --slurpfile base "$tmp/base.json" --slurpfile context "$tmp/context.json" '
+    [$context[0].inventory[] as $candidate
+     | (([ $candidate.aliases[]?, $candidate.repository, $candidate.module ]
+         | map(ascii_downcase) | unique
+         | map(select(. as $signal | ["api","backend","frontend","laravel","php","vue","interfaz","panel","componente","pantalla"] | index($signal) | not)))) as $signals
+     | select([ $base[0].requirements[]
+         | select(.category == $candidate.stack)
+         | (.text | ascii_downcase) as $text
+         | $signals[] as $signal
+         | select(($signal | length) > 0 and ($text | contains($signal)))
+       ] | length > 0)
+     | $candidate]
+  ' > "$tmp/explicit_targets.json"
+
+  while IFS= read -r requirement; do
+    category="$(jq -r '.category' <<< "$requirement")"
+    if [ "$category" = "general" ]; then
+      jq -c '. + {target_profile:null,repository:null,module:null,repository_kind:null,workspace:null,technology_constraints:null,depends_on:[]}' <<< "$requirement" >> "$tmp/enriched.ndjson"
+      continue
+    fi
+
 
   has_candidates="$(jq -r --arg stack "$category" '[.inventory[] | select(.stack == $stack)] | length' "$tmp/context.json")"
   if [ "$has_candidates" -eq 0 ]; then
@@ -110,8 +121,10 @@ while IFS= read -r requirement; do
     ' >> "$tmp/enriched.ndjson"
   done < "$tmp/selected.ndjson"
 done < <(jq -c '.requirements[]' "$tmp/base.json")
+fi
 
 jq -s --arg original "$PROMPT" --argjson read_only "$read_only" --slurpfile context "$tmp/context.json" '
+
   (to_entries | map(.value + {id:("REQ-" + ((.key + 1) | tostring | if length == 1 then "00" + . elif length == 2 then "0" + . else . end))})) as $requirements
   | $requirements
   | {

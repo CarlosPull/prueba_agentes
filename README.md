@@ -1,10 +1,19 @@
 # Orquestador distribuido de agentes con Pi y memoria compartida
 
-Este repositorio contiene un orquestador local escrito en shell script. Recibe un prompt libre, recopila contexto de memoria, lo divide en requisitos atómicos, selecciona la VM y el repositorio correctos y ejecuta cada subtarea mediante **Pi** y `pi-harness` dentro de la VM. La Mac no ejecuta Pi ni modifica directamente los repositorios remotos.
+Este repositorio contiene un orquestador local escrito en shell script y respaldado por un **Analista Inteligente de Requisitos** impulsado por **LLM local (`Hermes 3` en Ollama)**. Recibe un prompt libre, recopila contexto de memoria, desglosa inteligente y semánticamente las subtareas sin duplicaciones redundantes, selecciona la VM y el repositorio correctos, ejecuta cada subtarea mediante **Pi** y `pi-harness` dentro de la VM en una **rama dedicada por tarea** (`feature/tarea-...`) y **publica automáticamente los Pull Requests en GitHub** (`https://github.com/Felix-Pull/.../compare/...`). La Mac no ejecuta Pi ni modifica directamente los repositorios remotos.
 
 > El flujo anterior basado en Python, OpenCode o `agent-runner` fue retirado. El motor de ejecución actual es exclusivamente Pi.
 
+## Novedades del Sistema
+
+* 🤖 **Análisis Inteligente con LLM Local (`Hermes 3`)**: `tools/orquestacion/analizar_con_llm.py` analiza semánticamente el prompt y distingue entre solicitudes de UI frontend (Vue) y endpoints backend (Laravel), evitando despachos redundantes o duplicados.
+* 🌿 **Flujo de Ramas Dedicadas por Tarea**: Cada despacho crea y conmuta automáticamente a una rama única por tarea (`feature/tarea-<id_despacho>-<timestamp>`) en la VM.
+* 🐙 **Publicación y Pull Requests Automáticos en GitHub**: Al finalizar la tarea, la VM realiza `git push -u origin feature/tarea-...` e incluye el enlace directo al **Pull Request** en `REPORTE_PI.md` y `EVIDENCIA_AGENTES.md`.
+* 🔑 **Sincronización de Identidad SSH y Git (`configurar_git_vms.sh`)**: Vinculación automática de remotos SSH (`git@github.com:...`) y claves SSH salientes entre la Mac y las VMs.
+* 🛡️ **Resiliencia no Bloqueante**: Verificación no bloqueante del Memory Gateway con fallback transparente a inventario local si el Gateway estuviera apagado.
+
 ## Flujo completo
+
 
 ```mermaid
 flowchart TD
