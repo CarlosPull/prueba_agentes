@@ -110,8 +110,9 @@ def handler_for(client: GatewayClient, html: bytes):
                 self.send_json(400, {"error": "parámetros numéricos no válidos"})
             except GatewayError as error:
                 self.send_json(error.status, {"error": str(error)})
-            except Exception:
-                self.send_json(500, {"error": "error interno del visualizador"})
+            except Exception as error:
+                sys.stderr.write(f"[visualizador ERROR] {error}\n")
+                self.send_json(500, {"error": f"error interno del visualizador: {error}"})
 
         def log_message(self, pattern: str, *args: object) -> None:
             sys.stderr.write(f"[visualizador] {self.address_string()} {pattern % args}\n")
@@ -119,18 +120,16 @@ def handler_for(client: GatewayClient, html: bytes):
     return ViewerHandler
 
 
-def required_env(name: str) -> str:
-    value = os.environ.get(name, "").strip()
-    if not value:
-        raise ValueError(f"falta la variable {name}")
-    return value
+def get_env_or_default(name: str, default_val: str) -> str:
+    val = os.environ.get(name, "").strip()
+    return val if val else default_val
 
-
-def required_file(name: str) -> str:
-    value = Path(required_env(name)).expanduser()
-    if not value.is_file():
-        raise ValueError(f"{name} apunta a un archivo inexistente: {value}")
-    return str(value)
+def get_file_or_default(name: str, default_path: Path) -> str:
+    val = os.environ.get(name, "").strip()
+    target = Path(val).expanduser() if val else default_path
+    if not target.is_file():
+        raise ValueError(f"{name} apunta a un archivo inexistente: {target}")
+    return str(target)
 
 
 def arguments() -> argparse.Namespace:
@@ -148,16 +147,32 @@ def main() -> int:
         raise ValueError("--port debe estar entre 1 y 65535")
     if args.host not in {"127.0.0.1", "localhost", "::1"} and not args.permitir_red:
         raise ValueError("usa --permitir-red para exponer el visualizador fuera de localhost")
+    
+    root_dir = Path(__file__).resolve().parent.parent.parent
+    pki_dir = root_dir / ".private" / "memory-gateway-pki"
+
+    gateway_url = get_env_or_default("MEMORY_GATEWAY_URL", "https://127.0.0.1:9443")
+    client_cert = get_file_or_default("MEMORY_GATEWAY_CLIENT_CERT", pki_dir / "clients" / "memory-admin.crt")
+    client_key = get_file_or_default("MEMORY_GATEWAY_CLIENT_KEY", pki_dir / "clients" / "memory-admin.key")
+    ca_cert = get_file_or_default("MEMORY_GATEWAY_CA", pki_dir / "ca.crt")
+
+    # Si estamos en macOS con Python del sistema, intentar usar el venv si existe ssl TLS 1.3
+    python_bin = sys.executable
+    venv_python = root_dir / ".private" / "cognee-venv" / "bin" / "python"
+    if not ssl.HAS_TLSv1_3 and venv_python.is_file():
+        os.execv(str(venv_python), [str(venv_python)] + sys.argv)
+
     client = GatewayClient(
-        required_env("MEMORY_GATEWAY_URL"),
-        required_file("MEMORY_GATEWAY_CLIENT_CERT"),
-        required_file("MEMORY_GATEWAY_CLIENT_KEY"),
-        required_file("MEMORY_GATEWAY_CA"),
+        gateway_url,
+        client_cert,
+        client_key,
+        ca_cert,
     )
     html = HTML_PATH.read_bytes()
     server = ThreadingHTTPServer((args.host, args.port), handler_for(client, html))
     url = f"http://{args.host}:{server.server_port}/"
     print(f"Visualizador disponible en {url}")
+    print(f"Conectado a Memory Gateway en {gateway_url}")
     print("Las credenciales mTLS permanecen en este proceso y no se envían al navegador.")
     if args.abrir:
         webbrowser.open(url)
@@ -168,6 +183,7 @@ def main() -> int:
     finally:
         server.server_close()
     return 0
+
 
 
 if __name__ == "__main__":

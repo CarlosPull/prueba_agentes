@@ -36,10 +36,25 @@ export class CogneeClient {
     return headers;
   }
 
-  dataset(entityId) {
-    const readable = String(entityId).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "memoria";
-    const fingerprint = createHash("sha256").update(String(entityId)).digest("hex").slice(0, 12);
-    return `prueba_agentes_${readable}_${fingerprint}`;
+  dataset(entityId, repository = null) {
+    const repo = repository || (typeof entityId === "object" ? entityId?.repository : null);
+    if (repo) {
+      const cleanRepo = String(repo).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      return `prueba_agentes_repo_${cleanRepo}`;
+    }
+    const strId = String(entityId || "");
+    const repoMatch = strId.match(/repository:([a-zA-Z0-9_\-]+)/);
+    if (repoMatch && repoMatch[1]) {
+      const cleanRepo = repoMatch[1].toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      return `prueba_agentes_repo_${cleanRepo}`;
+    }
+    const tenantMatch = strId.match(/business:([a-zA-Z0-9_\-]+)/);
+    if (tenantMatch && tenantMatch[1]) {
+      const cleanTenant = tenantMatch[1].toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      return `prueba_agentes_tenant_${cleanTenant}`;
+    }
+    const readable = strId.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "memoria";
+    return `prueba_agentes_${readable}`;
   }
 
   async datasetByName(name) {
@@ -63,9 +78,9 @@ export class CogneeClient {
     if (!response.ok) throw new Error(errorBody(response, raw));
   }
 
-  async index({ id, entityId, content, metadata, graphModel, customPrompt = "", replaceDataset = false }) {
+  async index({ id, entityId, repository = null, content, metadata, graphModel, customPrompt = "", replaceDataset = false }) {
     if (!this.configured) throw new Error("Cognee no está configurado");
-    const dataset = this.dataset(entityId);
+    const dataset = this.dataset(entityId, repository || metadata?.repository);
     if (replaceDataset) await this.deleteDatasetByName(dataset);
     let sourceContent = content;
     if (graphModel && typeof content === "string") {

@@ -213,6 +213,8 @@ env \
   SYSTEM_ROOT_DIRECTORY="$PROJECT_ROOT/.private/cognee-system" \
   DATA_ROOT_DIRECTORY="$PROJECT_ROOT/.private/cognee-data" \
   COGNEE_LOGS_DIR="$PROJECT_ROOT/.private/cognee-logs" \
+  LBUG_C_API_LIB_PATH="$PROJECT_ROOT/.private/ladybug-v0.19.0/liblbug.dylib" \
+  DYLD_LIBRARY_PATH="$PROJECT_ROOT/.private/ladybug-v0.19.0" \
   REQUIRE_AUTHENTICATION=false \
   ENABLE_BACKEND_ACCESS_CONTROL=false \
   VECTOR_DB_PROVIDER=lancedb \

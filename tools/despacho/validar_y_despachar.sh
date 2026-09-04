@@ -62,7 +62,7 @@ if [ -z "$MODO_FULLSTACK" ] && { [ "$ROLE" = "frontend" ] || [ "$ROLE" = "dev-fr
 fi
 
 if [ -z "$MODO_FULLSTACK" ] && { [ "$ROLE" = "backend" ] || [ "$ROLE" = "dev-back" ]; }; then
-  if echo "$REQUISITOS_ONLY" | grep -qE "vue|\.vue|vite|tailwind|npm run|vitest|components/ui|src/views|src/components"; then
+  if echo "$REQUISITOS_ONLY" | grep -qE "\bvue\b|\.vue|vite|tailwind|npm run|vitest|components/ui|src/views|src/components"; then
     echo "------------------------------------------------------------" >&2
     echo "❌ TAREA RECHAZADA: INCOMPATIBILIDAD DE DOMINIO DETECTADA" >&2
     echo "El agente asignado '$ROLE' es estrictamente de Backend (PHP 8 / Laravel 13)." >&2

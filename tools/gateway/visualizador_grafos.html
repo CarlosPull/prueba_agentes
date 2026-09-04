@@ -5,109 +5,613 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapa de memoria · Cognee</title>
   <style>
-    :root { color-scheme: dark; --bg:#07131c; --panel:#0d1d28; --line:#274352; --text:#edf8f5; --muted:#9db3b7; --mint:#58e6bb; --amber:#ffc66d; --danger:#ff7c85; }
-    * { box-sizing:border-box; }
-    body { margin:0; min-height:100vh; color:var(--text); background:radial-gradient(circle at 10% 0%, #14313b, transparent 34rem), var(--bg); font:15px/1.45 ui-sans-serif,system-ui,-apple-system,sans-serif; }
-    button,input,select { font:inherit; }
-    button,input,select { color:var(--text); background:#102733; border:1px solid var(--line); border-radius:.55rem; padding:.58rem .7rem; }
-    button { cursor:pointer; font-weight:700; }
-    button:hover { border-color:var(--mint); }
-    :focus-visible { outline:3px solid color-mix(in srgb,var(--mint) 60%,transparent); outline-offset:2px; }
-    header { display:flex; align-items:end; justify-content:space-between; gap:1rem; padding:1.3rem 1.5rem .9rem; }
-    h1 { margin:0; font-size:clamp(1.25rem,3vw,2rem); letter-spacing:-.03em; }
-    .eyebrow { margin:0 0 .25rem; color:var(--mint); font-size:.76rem; font-weight:800; letter-spacing:.13em; text-transform:uppercase; }
-    .status { color:var(--muted); text-align:right; }
-    .controls { display:grid; grid-template-columns:minmax(14rem,2fr) minmax(12rem,2fr) 7rem auto auto auto; gap:.65rem; padding:0 1.5rem 1rem; }
-    label { display:grid; gap:.25rem; color:var(--muted); font-size:.78rem; }
-    .check { display:flex; align-items:end; padding-bottom:.55rem; gap:.5rem; white-space:nowrap; }
-    .check input { width:1rem; height:1rem; }
-    main { display:grid; grid-template-columns:minmax(0,1fr) 19rem; min-height:calc(100vh - 10.5rem); border-top:1px solid var(--line); }
-    .canvas { position:relative; min-height:34rem; overflow:hidden; background-image:linear-gradient(#17303b55 1px,transparent 1px),linear-gradient(90deg,#17303b55 1px,transparent 1px); background-size:32px 32px; }
-    svg { width:100%; height:100%; min-height:34rem; display:block; touch-action:none; }
-    .edge { stroke:#78919a; stroke-opacity:.42; }
-    .node { cursor:grab; stroke:#07131c; stroke-width:2; }
-    .node:active { cursor:grabbing; }
-    .node-label { fill:var(--text); font-size:11px; paint-order:stroke; stroke:#07131c; stroke-width:3px; pointer-events:none; }
-    aside { border-left:1px solid var(--line); background:color-mix(in srgb,var(--panel) 92%,transparent); padding:1rem; overflow:auto; }
-    aside h2 { margin:.1rem 0 .6rem; font-size:1rem; }
-    .hint,.empty { color:var(--muted); }
-    .details { white-space:pre-wrap; overflow-wrap:anywhere; color:#c9dcde; font:12px/1.55 ui-monospace,SFMono-Regular,monospace; }
-    .legend { display:flex; flex-wrap:wrap; gap:.45rem .8rem; margin-top:1rem; color:var(--muted); font-size:.75rem; }
-    .dot { display:inline-block; width:.65rem; height:.65rem; border-radius:50%; margin-right:.28rem; }
-    .error { color:var(--danger); }
-    .busy::after { content:""; display:inline-block; width:.7rem; height:.7rem; margin-left:.4rem; border:2px solid var(--line); border-top-color:var(--mint); border-radius:50%; animation:spin .8s linear infinite; }
-    @keyframes spin { to { transform:rotate(360deg); } }
-    @media (max-width:850px) { .controls{grid-template-columns:1fr 1fr}.controls label:nth-child(2){grid-column:1/-1} main{grid-template-columns:1fr} aside{border-left:0;border-top:1px solid var(--line);min-height:12rem} }
-    @media (max-width:520px) { header{align-items:start;flex-direction:column}.status{text-align:left}.controls{grid-template-columns:1fr}.controls label:nth-child(2){grid-column:auto} }
-    @media (prefers-reduced-motion:reduce) { * { animation-duration:.01ms!important; } }
+    :root {
+      color-scheme: dark;
+      --bg: #07131c;
+      --panel: #0d1d28;
+      --panel-hover: #122838;
+      --line: #274352;
+      --text: #edf8f5;
+      --muted: #9db3b7;
+      --mint: #58e6bb;
+      --amber: #ffc66d;
+      --danger: #ff7c85;
+      --blue: #54a5ff;
+      --purple: #b983ff;
+      --glow: rgba(88, 230, 187, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background: radial-gradient(circle at 10% 0%, #14313b, transparent 38rem), var(--bg);
+      font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+    button, input, select { font: inherit; }
+    button, input, select {
+      color: var(--text);
+      background: #102733;
+      border: 1px solid var(--line);
+      border-radius: 0.55rem;
+      padding: 0.58rem 0.75rem;
+      transition: all 0.2s ease;
+    }
+    button { cursor: pointer; font-weight: 700; }
+    button:hover, select:hover, input:hover { border-color: var(--mint); box-shadow: 0 0 10px var(--glow); }
+    :focus-visible { outline: 3px solid color-mix(in srgb, var(--mint) 60%, transparent); outline-offset: 2px; }
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1.3rem 1.5rem 0.9rem;
+    }
+    h1 { margin: 0; font-size: clamp(1.25rem, 3vw, 2rem); letter-spacing: -0.03em; }
+    .eyebrow { margin: 0 0 0.25rem; color: var(--mint); font-size: 0.76rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
+    .status { color: var(--muted); text-align: right; font-size: 0.88rem; }
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(13rem, 2fr) minmax(11rem, 2fr) 6.5rem 7.5rem auto auto auto;
+      gap: 0.65rem;
+      padding: 0 1.5rem 1rem;
+      align-items: flex-end;
+    }
+    label { display: grid; gap: 0.25rem; color: var(--muted); font-size: 0.78rem; font-weight: 600; }
+    .check { display: flex; align-items: center; padding-bottom: 0.55rem; gap: 0.5rem; white-space: nowrap; cursor: pointer; }
+    .check input { width: 1.1rem; height: 1.1rem; cursor: pointer; accent-color: var(--mint); }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 21rem;
+      min-height: calc(100vh - 10.5rem);
+      border-top: 1px solid var(--line);
+    }
+    .canvas {
+      position: relative;
+      min-height: 34rem;
+      overflow: hidden;
+      background-image: radial-gradient(var(--line) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+    svg { width: 100%; height: 100%; min-height: 34rem; display: block; touch-action: none; }
+    
+    /* Dynamic Edge Styles */
+    .edge { stroke: #5c7b88; stroke-opacity: 0.45; stroke-width: 1.8px; transition: stroke 0.2s, stroke-opacity 0.2s, stroke-width 0.2s; }
+    .edge.active { stroke: var(--mint); stroke-opacity: 0.95; stroke-width: 2.8px; filter: drop-shadow(0 0 6px var(--mint)); }
+    .edge.dimmed { stroke-opacity: 0.12; }
+    
+    /* Dynamic Node Styles */
+    .node-group { cursor: grab; transition: opacity 0.2s; }
+    .node-group:active { cursor: grabbing; }
+    .node-group.dimmed { opacity: 0.18; }
+    .node {
+      stroke: #07131c;
+      stroke-width: 2.5px;
+      transition: r 0.2s ease, stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease;
+    }
+    .node-group:hover .node {
+      stroke: #ffffff;
+      stroke-width: 3.5px;
+      filter: drop-shadow(0 0 12px var(--mint));
+    }
+    .node-group.selected .node {
+      stroke: var(--mint);
+      stroke-width: 4px;
+      filter: drop-shadow(0 0 16px var(--mint));
+    }
+    .node-label {
+      fill: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      paint-order: stroke;
+      stroke: #07131c;
+      stroke-width: 3.5px;
+      pointer-events: none;
+      user-select: none;
+    }
+    .node-badge {
+      fill: rgba(7, 19, 28, 0.85);
+      stroke: var(--line);
+      stroke-width: 1px;
+      rx: 4px;
+    }
+
+    aside {
+      border-left: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel) 94%, transparent);
+      padding: 1.1rem;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+    }
+    aside h2 { margin: 0; font-size: 1.1rem; letter-spacing: -0.01em; }
+    .hint, .empty { color: var(--muted); font-size: 0.88rem; margin: 0; }
+    .details {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: #c9dcde;
+      background: #091722;
+      border: 1px solid var(--line);
+      border-radius: 0.6rem;
+      padding: 0.8rem;
+      font: 12px/1.55 ui-monospace, SFMono-Regular, monospace;
+      max-height: 28rem;
+      overflow-y: auto;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: auto; color: var(--muted); font-size: 0.8rem; }
+    .dot { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 50%; margin-right: 0.35rem; vertical-align: middle; }
+    .error { color: var(--danger); font-weight: 700; }
+    .busy::after {
+      content: "";
+      display: inline-block;
+      width: 0.75rem;
+      height: 0.75rem;
+      margin-left: 0.45rem;
+      border: 2px solid var(--line);
+      border-top-color: var(--mint);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 900px) {
+      .controls { grid-template-columns: 1fr 1fr; }
+      .controls label:nth-child(2) { grid-column: 1 / -1; }
+      main { grid-template-columns: 1fr; }
+      aside { border-left: 0; border-top: 1px solid var(--line); min-height: 14rem; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <div><p class="eyebrow">Memory Gateway</p><h1>Mapa vivo de memoria</h1></div>
+    <div>
+      <p class="eyebrow">Memory Gateway</p>
+      <h1>Mapa vivo de memoria</h1>
+    </div>
     <div id="status" class="status" role="status">Conectando…</div>
   </header>
   <section class="controls" aria-label="Controles del grafo">
     <label>Memoria<select id="dataset"><option value="">Cargando…</option></select></label>
     <label>Enfocar por significado<input id="query" type="search" maxlength="1000" placeholder="Ej. autenticación, pagos, usuarios"></label>
     <label>Nodos<select id="maxNodes"><option>100</option><option selected>250</option><option>500</option><option>1000</option></select></label>
+    <label>Tamaño nodos
+      <select id="nodeSize">
+        <option value="1.2">Normal (1.2x)</option>
+        <option value="1.8">Grande (1.8x)</option>
+        <option value="2.4" selected>Gigante (2.4x)</option>
+        <option value="3.2">Extra Grande (3.2x)</option>
+        <option value="4.0">Ultra (4.0x)</option>
+      </select>
+    </label>
     <button id="refresh" type="button">Actualizar</button>
     <label class="check"><input id="domain" type="checkbox" checked> Vista de dominio</label>
     <label class="check"><input id="auto" type="checkbox" checked> Auto · 15 s</label>
   </section>
   <main>
-    <section class="canvas" aria-label="Grafo interactivo"><svg id="graph" role="img" aria-label="Relaciones de la memoria"><g id="viewport"><g id="edges"></g><g id="nodes"></g></g></svg></section>
-    <aside><h2>Detalle</h2><p id="hint" class="hint">Selecciona un nodo. Arrastra para moverlo; usa la rueda para ampliar.</p><pre id="details" class="details"></pre><div id="legend" class="legend"></div></aside>
+    <section class="canvas" aria-label="Grafo interactivo">
+      <svg id="graph" role="img" aria-label="Relaciones de la memoria">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#5c7b88" />
+          </marker>
+          <marker id="arrow-active" viewBox="0 0 10 10" refX="26" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#58e6bb" />
+          </marker>
+        </defs>
+        <g id="viewport">
+          <g id="edges"></g>
+          <g id="nodes"></g>
+        </g>
+      </svg>
+    </section>
+    <aside>
+      <h2>Detalle del Nodo</h2>
+      <p id="hint" class="hint">Haz clic en un nodo para inspeccionar sus datos. Arrastra para reorganizar; usa la rueda del ratón para hacer zoom.</p>
+      <pre id="details" class="details"></pre>
+      <div id="legend" class="legend"></div>
+    </aside>
   </main>
   <script>
-    const $=id=>document.getElementById(id), palette=['#58e6bb','#ffc66d','#70b7ff','#c59aff','#ff8991','#82df70','#f79ee6'];
-    const state={nodes:[],links:[],scale:1,tx:0,ty:0,drag:null,pan:null,raf:0};
-    const status=(text,error=false)=>{ $('status').textContent=text; $('status').className=`status${error?' error':''}`; };
-    const identity=value=>String(value?.id??value?.identifier??value?.name??value??'');
-    function normalize(graph){
-      const technical=new Set(['textdocument','documentchunk','textsummary','entitytype','document','chunk']);
-      const nodeMap=new Map(), idMap=new Map();
-      (graph.nodes||[]).forEach((raw,index)=>{
-        const origId=identity(raw)||`n-${index}`;
-        const type=String(raw.type??raw.node_type??raw.kind??'Entidad');
-        const label=String(raw.label??raw.name??raw.title??origId);
-        if($('domain').checked&&technical.has(type.toLowerCase().replaceAll('_','')))return;
-        const canonicalId=(type.toLowerCase()==='repositorio'&&label)?`repo:${label}`:origId;
-        idMap.set(origId,canonicalId);
-        if(!nodeMap.has(canonicalId)){
-          nodeMap.set(canonicalId,{id:canonicalId,label,type,raw,x:0,y:0,vx:0,vy:0});
+    const $ = id => document.getElementById(id);
+    const palette = ['#58e6bb', '#ffc66d', '#70b7ff', '#c59aff', '#ff8991', '#82df70', '#f79ee6'];
+    const typeColorMap = {
+      'repositorio': '#ffc66d',  // Amber
+      'modulo': '#58e6bb',       // Mint
+      'endpoint': '#70b7ff',     // Blue
+      'tecnologia': '#c59aff',   // Purple
+      'entidad': '#ff8991'       // Red/Pink
+    };
+
+    const state = { nodes: [], links: [], scale: 1, tx: 0, ty: 0, drag: null, pan: null, raf: 0, selectedNode: null, rawData: null };
+    const status = (text, error = false) => { $('status').textContent = text; $('status').className = `status${error ? ' error' : ''}`; };
+    const identity = value => String(value?.id ?? value?.identifier ?? value?.name ?? value ?? '');
+
+    function getBaseRadius(type) {
+      const t = String(type || '').toLowerCase();
+      if (t === 'repositorio') return 28;
+      if (t === 'modulo' || t === 'module') return 22;
+      if (t === 'endpoint') return 16;
+      if (t === 'tecnologia' || t === 'technology') return 18;
+      return 18;
+    }
+
+    function getNodeRadius(node) {
+      const mult = parseFloat($('nodeSize').value) || 1.6;
+      return Math.round(getBaseRadius(node.type) * mult);
+    }
+
+    function color(type) {
+      const key = String(type || '').toLowerCase();
+      if (typeColorMap[key]) return typeColorMap[key];
+      let hash = 0;
+      for (const c of key) hash = (hash * 31 + c.charCodeAt(0)) | 0;
+      return palette[Math.abs(hash) % palette.length];
+    }
+
+    function normalize(graph) {
+      const technical = new Set(['textdocument', 'documentchunk', 'textsummary', 'entitytype', 'document', 'chunk']);
+      const nodeMap = new Map(), idMap = new Map();
+      (graph.nodes || []).forEach((raw, index) => {
+        const origId = identity(raw) || `n-${index}`;
+        const type = String(raw.type ?? raw.node_type ?? raw.kind ?? 'Entidad');
+        const label = String(raw.label ?? raw.name ?? raw.title ?? origId);
+        if ($('domain').checked && technical.has(type.toLowerCase().replaceAll('_', ''))) return;
+        const canonicalId = (type.toLowerCase() === 'repositorio' && label) ? `repo:${label}` : origId;
+        idMap.set(origId, canonicalId);
+        if (!nodeMap.has(canonicalId)) {
+          nodeMap.set(canonicalId, { id: canonicalId, label, type, raw, x: 0, y: 0, vx: 0, vy: 0 });
         }
       });
-      const nodes=Array.from(nodeMap.values());
-      const known=new Set(nodes.map(n=>n.id));
-      const links=(graph.links||graph.edges||[]).map(raw=>{
-        const origSrc=identity(raw.source??raw.source_id??raw.from);
-        const origTgt=identity(raw.target??raw.target_id??raw.to);
-        const source=idMap.get(origSrc)||origSrc;
-        const target=idMap.get(origTgt)||origTgt;
-        const label=String(raw.label??raw.relation??raw.relationship_name??raw.edge_info?.relationship_name??raw.type??'');
-        return {source,target,label,raw};
-      }).filter(link=>known.has(link.source)&&known.has(link.target));
-      const level=new Map(nodes.map(node=>[node.id,0]));for(let pass=0;pass<3;pass+=1)for(const link of links){const relation=link.label.toLowerCase();if(relation.includes('modulo')||relation.includes('module'))level.set(link.target,Math.max(level.get(link.target)||0,1));if(relation.includes('endpoint')||relation.includes('tecnolog')||relation.includes('technology'))level.set(link.target,Math.max(level.get(link.target)||0,2));}
-      const groups=[0,1,2,3].map(value=>nodes.filter(node=>(level.get(node.id)||0)===value));for(const [value,group] of groups.entries())group.forEach((node,index)=>{node.level=value;node.x=(innerWidth*.72)*(index+1)/(group.length+1);node.y=100+value*180;});
-      return {nodes,links};
+      const nodes = Array.from(nodeMap.values());
+      const known = new Set(nodes.map(n => n.id));
+      const links = (graph.links || graph.edges || []).map(raw => {
+        const origSrc = identity(raw.source ?? raw.source_id ?? raw.from);
+        const origTgt = identity(raw.target ?? raw.target_id ?? raw.to);
+        const source = idMap.get(origSrc) || origSrc;
+        const target = idMap.get(origTgt) || origTgt;
+        const label = String(raw.label ?? raw.relation ?? raw.relationship_name ?? raw.edge_info?.relationship_name ?? raw.type ?? '');
+        return { source, target, label, raw };
+      }).filter(link => known.has(link.source) && known.has(link.target));
+
+      const level = new Map(nodes.map(node => [node.id, 0]));
+      for (let pass = 0; pass < 3; pass += 1) {
+        for (const link of links) {
+          const relation = link.label.toLowerCase();
+          if (relation.includes('modulo') || relation.includes('module')) level.set(link.target, Math.max(level.get(link.target) || 0, 1));
+          if (relation.includes('endpoint') || relation.includes('tecnolog') || relation.includes('technology')) level.set(link.target, Math.max(level.get(link.target) || 0, 2));
+        }
+      }
+      const groups = [0, 1, 2, 3].map(value => nodes.filter(node => (level.get(node.id) || 0) === value));
+      const mult = parseFloat($('nodeSize').value) || 1.6;
+      for (const [value, group] of groups.entries()) {
+        group.forEach((node, index) => {
+          node.level = value;
+          node.x = (innerWidth * 0.72) * (index + 1) / (group.length + 1);
+          node.y = 120 + value * (190 * (mult > 2 ? 1.3 : 1.0));
+        });
+      }
+      return { nodes, links };
     }
-    function color(type){let hash=0;for(const c of type)hash=(hash*31+c.charCodeAt(0))|0;return palette[Math.abs(hash)%palette.length];}
-    function render(raw){
-      cancelAnimationFrame(state.raf); Object.assign(state,normalize(raw)); const edges=$('edges'),nodes=$('nodes'); edges.replaceChildren(); nodes.replaceChildren();
-      const nodeMap=new Map(state.nodes.map(node=>[node.id,node]));
-      for(const link of state.links){const line=document.createElementNS('http://www.w3.org/2000/svg','line');line.classList.add('edge');line.setAttribute('stroke-width','1.2');const title=document.createElementNS('http://www.w3.org/2000/svg','title');title.textContent=link.label||`${link.source} → ${link.target}`;line.append(title);edges.append(line);link.el=line;link.a=nodeMap.get(link.source);link.b=nodeMap.get(link.target);}
-      for(const node of state.nodes){const group=document.createElementNS('http://www.w3.org/2000/svg','g');group.setAttribute('tabindex','0');group.setAttribute('role','button');group.setAttribute('aria-label',node.label);const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');circle.classList.add('node');circle.setAttribute('r','8');circle.setAttribute('fill',color(node.type));const label=document.createElementNS('http://www.w3.org/2000/svg','text');label.classList.add('node-label');label.setAttribute('x','11');label.setAttribute('y','4');label.textContent=node.label.length>34?node.label.slice(0,31)+'…':node.label;group.append(circle,label);group.addEventListener('pointerdown',event=>{event.stopPropagation();state.drag=node;group.setPointerCapture(event.pointerId)});group.addEventListener('click',()=>showNode(node));group.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();showNode(node)}});nodes.append(group);node.el=group;}
-      const types=[...new Set(state.nodes.map(n=>n.type))];$('legend').replaceChildren(...types.map(type=>{const span=document.createElement('span'),dot=document.createElement('i');dot.className='dot';dot.style.background=color(type);span.append(dot,document.createTextNode(type));return span;}));
-      let ticks=0; function simulate(){const width=$('graph').clientWidth;for(const node of state.nodes){node.vx+=(width/2-node.x)*.0003;node.vy+=(100+(node.level||0)*180-node.y)*.002;}for(const link of state.links){const a=link.a,b=link.b;if(!a||!b)continue;const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,force=((d-150)/d)*.0018;a.vx+=dx*force;a.vy+=dy*force;b.vx-=dx*force;b.vy-=dy*force;}for(let i=0;i<state.nodes.length;i++){for(let j=i+1;j<Math.min(state.nodes.length,i+50);j++){const a=state.nodes[i],b=state.nodes[j],dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy+1,force=Math.min(.12,180/d2);a.vx-=dx*force;a.vy-=dy*force;b.vx+=dx*force;b.vy+=dy*force;}}for(const n of state.nodes){if(n!==state.drag){n.vx*=.86;n.vy*=.86;n.x+=n.vx;n.y+=n.vy;}n.el.setAttribute('transform',`translate(${n.x},${n.y})`);}for(const l of state.links){const a=l.a,b=l.b;l.el.setAttribute('x1',a.x);l.el.setAttribute('y1',a.y);l.el.setAttribute('x2',b.x);l.el.setAttribute('y2',b.y);}if(ticks++<300)state.raf=requestAnimationFrame(simulate);} simulate();
+
+    function render(raw) {
+      if (raw) state.rawData = raw;
+      cancelAnimationFrame(state.raf);
+      Object.assign(state, normalize(state.rawData || { nodes: [], links: [] }));
+      const edges = $('edges'), nodes = $('nodes');
+      edges.replaceChildren();
+      nodes.replaceChildren();
+
+      const nodeMap = new Map(state.nodes.map(node => [node.id, node]));
+
+      // Render Edges
+      for (const link of state.links) {
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.classList.add('edge');
+        line.setAttribute('marker-end', 'url(#arrow)');
+        const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+        title.textContent = link.label || `${link.source} → ${link.target}`;
+        line.append(title);
+        edges.append(line);
+        link.el = line;
+        link.a = nodeMap.get(link.source);
+        link.b = nodeMap.get(link.target);
+      }
+
+      // Render Nodes
+      for (const node of state.nodes) {
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.classList.add('node-group');
+        group.setAttribute('tabindex', '0');
+        group.setAttribute('role', 'button');
+        group.setAttribute('aria-label', `${node.label} (${node.type})`);
+
+        const radius = getNodeRadius(node);
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.classList.add('node');
+        circle.setAttribute('r', radius);
+        circle.setAttribute('fill', color(node.type));
+
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.classList.add('node-label');
+        label.setAttribute('x', radius + 7);
+        label.setAttribute('y', 5);
+        label.textContent = node.label.length > 38 ? node.label.slice(0, 35) + '…' : node.label;
+
+        group.append(circle, label);
+
+        // Hover & Interaction listeners
+        group.addEventListener('pointerdown', event => {
+          event.stopPropagation();
+          state.drag = node;
+          group.setPointerCapture(event.pointerId);
+        });
+
+        group.addEventListener('pointerenter', () => highlightConnections(node));
+        group.addEventListener('pointerleave', () => clearHighlights());
+
+        group.addEventListener('click', () => showNode(node));
+        group.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            showNode(node);
+          }
+        });
+
+        nodes.append(group);
+        node.el = group;
+        node.circleEl = circle;
+      }
+
+      // Legend
+      const types = [...new Set(state.nodes.map(n => n.type))];
+      $('legend').replaceChildren(...types.map(type => {
+        const span = document.createElement('span'), dot = document.createElement('i');
+        dot.className = 'dot';
+        dot.style.background = color(type);
+        span.append(dot, document.createTextNode(type));
+        return span;
+      }));
+
+      // Force Simulation
+      let ticks = 0;
+      const mult = parseFloat($('nodeSize').value) || 1.6;
+      const targetDist = 160 * mult;
+
+      function simulate() {
+        const width = $('graph').clientWidth;
+        for (const node of state.nodes) {
+          node.vx += (width / 2 - node.x) * 0.0003;
+          node.vy += (120 + (node.level || 0) * (190 * (mult > 2 ? 1.3 : 1.0)) - node.y) * 0.002;
+        }
+        for (const link of state.links) {
+          const a = link.a, b = link.b;
+          if (!a || !b) continue;
+          const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+          const force = ((d - targetDist) / d) * 0.002;
+          a.vx += dx * force;
+          a.vy += dy * force;
+          b.vx -= dx * force;
+          b.vy -= dy * force;
+        }
+        for (let i = 0; i < state.nodes.length; i++) {
+          for (let j = i + 1; j < Math.min(state.nodes.length, i + 50); j++) {
+            const a = state.nodes[i], b = state.nodes[j];
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const d2 = dx * dx + dy * dy + 1;
+            const repForce = Math.min(0.18, (300 * mult) / d2);
+            a.vx -= dx * repForce;
+            a.vy -= dy * repForce;
+            b.vx += dx * repForce;
+            b.vy += dy * repForce;
+          }
+        }
+        for (const n of state.nodes) {
+          if (n !== state.drag) {
+            n.vx *= 0.86;
+            n.vy *= 0.86;
+            n.x += n.vx;
+            n.y += n.vy;
+          }
+          n.el.setAttribute('transform', `translate(${n.x},${n.y})`);
+        }
+        for (const l of state.links) {
+          const a = l.a, b = l.b;
+          l.el.setAttribute('x1', a.x);
+          l.el.setAttribute('y1', a.y);
+          l.el.setAttribute('x2', b.x);
+          l.el.setAttribute('y2', b.y);
+        }
+        if (ticks++ < 300) state.raf = requestAnimationFrame(simulate);
+      }
+      simulate();
     }
-    function showNode(node){$('hint').textContent=`${node.label} · ${node.type}`;$('details').textContent=JSON.stringify(node.raw,null,2);}
-    async function json(url){const response=await fetch(url,{cache:'no-store'}),payload=await response.json().catch(()=>({error:'respuesta inválida'}));if(!response.ok)throw new Error(payload.error||`HTTP ${response.status}`);return payload;}
-    async function loadDatasets(){try{const payload=await json('/api/datasets'),select=$('dataset'),previous=select.value;select.replaceChildren();const allOpt=document.createElement('option');allOpt.value='ALL_DATASETS';allOpt.textContent='🌐 Vista General del Proyecto (Todos los Datasets)';select.append(allOpt);for(const item of payload.datasets||[]){const option=document.createElement('option');option.value=item.id;option.textContent=item.name.replace(/^prueba_agentes_/,'');select.append(option);}if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;if(!select.value){status('No hay grafos indexados todavía');render({nodes:[],links:[]});return;}await loadGraph();}catch(error){status(error.message,true);}}
-    async function loadGraph(){const id=$('dataset').value;if(!id)return;$('refresh').classList.add('busy');try{const params=new URLSearchParams({dataset_id:id,query:$('query').value,max_nodes:$('maxNodes').value,neighborhood_depth:'2'}),payload=await json('/api/graph?'+params),graph=payload.graph||{};render(graph);status(`${state.nodes.length} nodos · ${state.links.length} relaciones · ${new Date().toLocaleTimeString()}`);}catch(error){status(error.message,true);}finally{$('refresh').classList.remove('busy');}}
-    $('refresh').addEventListener('click',loadGraph);$('dataset').addEventListener('change',loadGraph);$('domain').addEventListener('change',loadGraph);$('query').addEventListener('keydown',e=>{if(e.key==='Enter')loadGraph()});
-    const svg=$('graph'),viewport=$('viewport');function transform(){viewport.setAttribute('transform',`translate(${state.tx} ${state.ty}) scale(${state.scale})`)}svg.addEventListener('wheel',e=>{e.preventDefault();state.scale=Math.max(.25,Math.min(4,state.scale*(e.deltaY<0?1.1:.9)));transform()},{passive:false});svg.addEventListener('pointerdown',e=>{if(e.target===svg)state.pan={x:e.clientX-state.tx,y:e.clientY-state.ty}});svg.addEventListener('pointermove',e=>{if(state.drag){const rect=svg.getBoundingClientRect();state.drag.x=(e.clientX-rect.left-state.tx)/state.scale;state.drag.y=(e.clientY-rect.top-state.ty)/state.scale;}else if(state.pan){state.tx=e.clientX-state.pan.x;state.ty=e.clientY-state.pan.y;transform();}});svg.addEventListener('pointerup',()=>{state.drag=null;state.pan=null});svg.addEventListener('pointercancel',()=>{state.drag=null;state.pan=null});
-    let refreshCycle=0;setInterval(()=>{if($('auto').checked&&!document.hidden){refreshCycle+=1;if(refreshCycle%4===0)loadDatasets();else loadGraph();}},15000);loadDatasets();
+
+    function highlightConnections(node) {
+      const connectedNodeIds = new Set([node.id]);
+      for (const link of state.links) {
+        const isConn = (link.source === node.id || link.target === node.id);
+        if (isConn) {
+          connectedNodeIds.add(link.source);
+          connectedNodeIds.add(link.target);
+          link.el.classList.add('active');
+          link.el.classList.remove('dimmed');
+          link.el.setAttribute('marker-end', 'url(#arrow-active)');
+        } else {
+          link.el.classList.add('dimmed');
+          link.el.classList.remove('active');
+          link.el.setAttribute('marker-end', 'url(#arrow)');
+        }
+      }
+      for (const n of state.nodes) {
+        if (connectedNodeIds.has(n.id)) {
+          n.el.classList.remove('dimmed');
+        } else {
+          n.el.classList.add('dimmed');
+        }
+      }
+    }
+
+    function clearHighlights() {
+      for (const link of state.links) {
+        link.el.classList.remove('active', 'dimmed');
+        link.el.setAttribute('marker-end', 'url(#arrow)');
+      }
+      for (const n of state.nodes) {
+        n.el.classList.remove('dimmed');
+      }
+    }
+
+    function showNode(node) {
+      if (state.selectedNode && state.selectedNode.el) {
+        state.selectedNode.el.classList.remove('selected');
+      }
+      state.selectedNode = node;
+      if (node && node.el) {
+        node.el.classList.add('selected');
+      }
+      $('hint').textContent = `${node.label} · ${node.type}`;
+      $('details').textContent = JSON.stringify(node.raw, null, 2);
+    }
+
+    async function json(url) {
+      const response = await fetch(url, { cache: 'no-store' });
+      const payload = await response.json().catch(() => ({ error: 'respuesta inválida' }));
+      if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+      return payload;
+    }
+
+    async function loadDatasets() {
+      try {
+        const payload = await json('/api/datasets');
+        const select = $('dataset'), previous = select.value;
+        select.replaceChildren();
+        const allOpt = document.createElement('option');
+        allOpt.value = 'ALL_DATASETS';
+        allOpt.textContent = '🌐 Vista General del Proyecto (Todos los Datasets)';
+        select.append(allOpt);
+
+        const rawList = payload.datasets || [];
+        const canonicalRepos = new Set();
+        for (const item of rawList) {
+          if (item.name.startsWith('prueba_agentes_repo_')) {
+            const repo = item.repository || item.name.replace('prueba_agentes_repo_', '').replace(/_/g, '-');
+            canonicalRepos.add(repo);
+          }
+        }
+
+        const filteredList = rawList.filter(item => {
+          const isLegacy = item.name.includes('_v2_') || item.name.includes('_contracts_') || item.name.includes('_company_');
+          if (isLegacy && item.repository && canonicalRepos.has(item.repository)) {
+            return false; // prefer unified canonical dataset!
+          }
+          return true;
+        });
+
+        for (const item of filteredList) {
+          const option = document.createElement('option');
+          option.value = item.id;
+          let label = item.repository;
+          if (!label) {
+            if (item.name.startsWith('prueba_agentes_repo_')) {
+              label = item.name.replace('prueba_agentes_repo_', '').replace(/_/g, '-');
+            } else {
+              label = item.name.replace(/^prueba_agentes_/, '');
+            }
+          }
+          option.textContent = `📦 ${label}`;
+          select.append(option);
+        }
+        if (previous && [...select.options].some(o => o.value === previous)) select.value = previous;
+        if (!select.value) {
+          status('No hay grafos indexados todavía');
+          render({ nodes: [], links: [] });
+          return;
+        }
+        await loadGraph();
+      } catch (error) {
+        status(error.message, true);
+      }
+    }
+
+    async function loadGraph() {
+      const id = $('dataset').value;
+      if (!id) return;
+      $('refresh').classList.add('busy');
+      try {
+        const params = new URLSearchParams({
+          dataset_id: id,
+          query: $('query').value,
+          max_nodes: $('maxNodes').value,
+          neighborhood_depth: '2'
+        });
+        const payload = await json('/api/graph?' + params);
+        const graph = payload.graph || {};
+        render(graph);
+        status(`${state.nodes.length} nodos · ${state.links.length} relaciones · ${new Date().toLocaleTimeString()}`);
+      } catch (error) {
+        status(error.message, true);
+      } finally {
+        $('refresh').classList.remove('busy');
+      }
+    }
+
+    // Event Listeners
+    $('refresh').addEventListener('click', loadGraph);
+    $('dataset').addEventListener('change', loadGraph);
+    $('domain').addEventListener('change', loadGraph);
+    $('nodeSize').addEventListener('change', () => { if (state.rawData) render(state.rawData); });
+    $('query').addEventListener('keydown', e => { if (e.key === 'Enter') loadGraph(); });
+
+    // SVG Pan & Zoom
+    const svg = $('graph'), viewport = $('viewport');
+    function transform() { viewport.setAttribute('transform', `translate(${state.tx} ${state.ty}) scale(${state.scale})`); }
+    svg.addEventListener('wheel', e => {
+      e.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const delta = Math.max(-80, Math.min(80, e.deltaY));
+      const zoomFactor = Math.exp(-delta * 0.0015);
+      const newScale = Math.max(0.2, Math.min(5, state.scale * zoomFactor));
+
+      state.tx = mouseX - (mouseX - state.tx) * (newScale / state.scale);
+      state.ty = mouseY - (mouseY - state.ty) * (newScale / state.scale);
+      state.scale = newScale;
+      transform();
+    }, { passive: false });
+
+    svg.addEventListener('pointerdown', e => {
+      if (e.target === svg || e.target === viewport) {
+        state.pan = { x: e.clientX - state.tx, y: e.clientY - state.ty };
+      }
+    });
+
+    svg.addEventListener('pointermove', e => {
+      if (state.drag) {
+        const rect = svg.getBoundingClientRect();
+        state.drag.x = (e.clientX - rect.left - state.tx) / state.scale;
+        state.drag.y = (e.clientY - rect.top - state.ty) / state.scale;
+      } else if (state.pan) {
+        state.tx = e.clientX - state.pan.x;
+        state.ty = e.clientY - state.pan.y;
+        transform();
+      }
+    });
+
+    svg.addEventListener('pointerup', () => { state.drag = null; state.pan = null; });
+    svg.addEventListener('pointercancel', () => { state.drag = null; state.pan = null; });
+
+    let refreshCycle = 0;
+    setInterval(() => {
+      if ($('auto').checked && !document.hidden) {
+        refreshCycle += 1;
+        if (refreshCycle % 4 === 0) loadDatasets();
+        else loadGraph();
+      }
+    }, 15000);
+
+    loadDatasets();
   </script>
 </body>
 </html>

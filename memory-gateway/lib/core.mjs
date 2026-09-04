@@ -215,6 +215,8 @@ export class MemoryGatewayCore {
       });
     }
     return {
+      repositorio: repository,
+      nombre_del_repositorio: repository,
       name: repository,
       contiene_modulos: [...modules.entries()].map(([name, expone_endpoints]) => ({ name, expone_endpoints })),
     };
@@ -445,27 +447,61 @@ export class MemoryGatewayCore {
     return repaired;
   }
 
+  async cleanupLegacyDatasets() {
+    if (!this.cognee.configured) return 0;
+    try {
+      const datasets = await this.cognee.datasets();
+      let deletedCount = 0;
+      for (const ds of datasets) {
+        const name = String(ds.name || ds.dataset_name || "");
+        if (name.startsWith("prueba_agentes_v2_") || (name.startsWith("prueba_agentes_") && !name.startsWith("prueba_agentes_repo_") && !name.startsWith("prueba_agentes_tenant_") && !name.startsWith("prueba_agentes_company_"))) {
+          const dsId = String(ds.id || ds.dataset_id || "");
+          await this.cognee.deleteDataset(dsId);
+          deletedCount += 1;
+        }
+      }
+      return deletedCount;
+    } catch (error) {
+      process.stderr.write(`[MemoryGateway] Error al limpiar datasets antiguos: ${error.message}\n`);
+      return 0;
+    }
+  }
+
   async listGraphs(identity) {
     this.authorize(identity, "graphs:read");
     if (!this.cognee.configured) throw new HttpError(503, "Cognee no está configurado");
-    const datasets = await this.cognee.datasets();
+    let datasets = [];
+    try {
+      datasets = await this.cognee.datasets();
+    } catch (error) {
+      process.stderr.write(`[MemoryGateway] No se pudieron obtener datasets de Cognee: ${error.message}\n`);
+    }
     const known = new Map();
     for (const row of this.db.prepare("SELECT DISTINCT core_id,repository FROM contracts").all()) {
-      known.set(this.cognee.dataset(this.contractEntityId(row.core_id, row.repository)), { layer: "shared_contracts", core_id: row.core_id, repository: row.repository });
+      known.set(this.cognee.dataset(this.contractEntityId(row.core_id, row.repository), row.repository), { layer: "shared_contracts", core_id: row.core_id, repository: row.repository });
     }
     for (const row of this.db.prepare("SELECT DISTINCT repository FROM private_memories WHERE layer='company' AND repository IS NOT NULL").all()) {
-      known.set(this.cognee.dataset(this.companyRepositoryEntityId(row.repository)), { layer: "company", repository: row.repository });
+      known.set(this.cognee.dataset(this.companyRepositoryEntityId(row.repository), row.repository), { layer: "company", repository: row.repository });
     }
     return datasets
       .map((dataset) => {
         const name = String(dataset.name || dataset.dataset_name || "");
+        let repository = known.get(name)?.repository;
+        if (!repository && name.startsWith("prueba_agentes_repo_")) {
+          const rawRepo = name.replace(/^prueba_agentes_repo_/, "");
+          const matched = this.db.prepare("SELECT DISTINCT repository FROM contracts WHERE replace(repository, '-', '_')=?").get(rawRepo)
+            || this.db.prepare("SELECT DISTINCT repository FROM private_memories WHERE replace(repository, '-', '_')=?").get(rawRepo);
+          repository = matched ? matched.repository : rawRepo.replace(/_/g, "-");
+        }
         return ({
-        id: String(dataset.id || dataset.dataset_id || ""),
-        name,
-        created_at: dataset.created_at || dataset.createdAt || null,
-        updated_at: dataset.updated_at || dataset.updatedAt || null,
-        ...(known.get(name) || {}),
-      }); })
+          id: String(dataset.id || dataset.dataset_id || ""),
+          name,
+          created_at: dataset.created_at || dataset.createdAt || null,
+          updated_at: dataset.updated_at || dataset.updatedAt || null,
+          repository,
+          ...(known.get(name) || {}),
+        });
+      })
       .filter((dataset) => DATASET_ID.test(dataset.id) && dataset.name.startsWith("prueba_agentes_"))
       .sort((left, right) => left.name.localeCompare(right.name));
   }
@@ -488,6 +524,7 @@ export class MemoryGatewayCore {
             neighborhoodDepth,
             maxNodes,
           });
+          graph = this.unifyGraphNodes(graph);
           if (dataset.repository) graph = this.scopeRepositoryGraph(graph, dataset, body.full === true);
           for (const node of graph.nodes || []) {
             const id = String(node.id ?? node.identifier ?? node.name ?? "");
@@ -532,6 +569,7 @@ export class MemoryGatewayCore {
           neighborhoodDepth,
           maxNodes,
         });
+        g = this.unifyGraphNodes(g, targetRepo);
         if (item.repository) g = this.scopeRepositoryGraph(g, item, body.full === true);
         for (const node of g.nodes || []) {
           const id = String(node.id ?? node.identifier ?? node.name ?? "");
@@ -547,17 +585,52 @@ export class MemoryGatewayCore {
       } catch {}
     }
 
+    const unifiedFinal = this.unifyGraphNodes(
+      { nodes: Array.from(mergedNodes.values()), links: Array.from(mergedLinks.values()) },
+      targetRepo
+    );
+    const scopedFinal = dataset.repository
+      ? this.scopeRepositoryGraph(unifiedFinal, dataset, body.full === true)
+      : unifiedFinal;
+
     return {
       dataset,
-      graph: this.unifyGraphNodes({ nodes: Array.from(mergedNodes.values()), links: Array.from(mergedLinks.values()) }),
+      graph: scopedFinal,
     };
   }
 
-  unifyGraphNodes(graph) {
+  unifyGraphNodes(graph, targetRepository = null) {
     if (!graph || !Array.isArray(graph.nodes) || !graph.nodes.length) return graph || { nodes: [], links: [] };
     const nodeId = (value) => String(value?.id ?? value?.identifier ?? value ?? "");
     const nodeMapping = new Map();
     const canonicalNodes = new Map();
+    const moduleToRepo = new Map();
+    const repoTechs = new Map();
+
+    try {
+      const query = targetRepository
+        ? this.db.prepare("SELECT DISTINCT module, repository FROM contracts WHERE repository=?").all(targetRepository)
+        : this.db.prepare("SELECT DISTINCT module, repository FROM contracts").all();
+      for (const row of query) {
+        moduleToRepo.set(row.module, row.repository);
+      }
+    } catch {}
+
+    try {
+      const techRows = targetRepository
+        ? this.db.prepare("SELECT repository, content FROM private_memories WHERE layer='company' AND repository=?").all(targetRepository)
+        : this.db.prepare("SELECT repository, content FROM private_memories WHERE layer='company' AND repository IS NOT NULL").all();
+      for (const row of techRows) {
+        if (!row.repository || row.repository === "version" || row.repository === "repositories") continue;
+        try {
+          const doc = JSON.parse(row.content);
+          if (Array.isArray(doc.usa_tecnologias)) {
+            const list = doc.usa_tecnologias.map((t) => String(t.name || t).trim()).filter(Boolean);
+            if (list.length) repoTechs.set(row.repository, list);
+          }
+        } catch {}
+      }
+    } catch {}
 
     for (const node of graph.nodes) {
       const origId = nodeId(node);
@@ -565,13 +638,21 @@ export class MemoryGatewayCore {
       const nodeName = String(node.name || node.nombre || node.label || node.title || origId);
 
       let canonicalId = origId;
-      if (nodeType === "Repositorio" && nodeName) {
-        canonicalId = `repo:${nodeName}`;
+      const typeLower = nodeType.toLowerCase();
+      const cleanName = nodeName.trim();
+      if ((typeLower === "repositorio" || typeLower === "repository") && cleanName) {
+        canonicalId = `repo:${cleanName}`;
+      } else if ((typeLower === "modulo" || typeLower === "module") && cleanName) {
+        canonicalId = `module:${cleanName}`;
+      } else if (typeLower === "endpoint" && cleanName) {
+        canonicalId = `endpoint:${cleanName}`;
+      } else if ((typeLower === "tecnologia" || typeLower === "technology") && cleanName) {
+        canonicalId = `tech:${cleanName}`;
       }
 
       nodeMapping.set(origId, canonicalId);
       if (!canonicalNodes.has(canonicalId)) {
-        canonicalNodes.set(canonicalId, { ...node, id: canonicalId, label: node.label || nodeName, name: nodeName });
+        canonicalNodes.set(canonicalId, { ...node, id: canonicalId, label: node.label || cleanName, name: cleanName });
       }
     }
 
@@ -579,12 +660,98 @@ export class MemoryGatewayCore {
     for (const link of graph.links || graph.edges || []) {
       const origSrc = nodeId(link.source);
       const origTgt = nodeId(link.target);
-      const src = nodeMapping.get(origSrc) || origSrc;
+      let src = nodeMapping.get(origSrc) || origSrc;
       const tgt = nodeMapping.get(origTgt) || origTgt;
       const label = String(link.relation || link.label || link.relationship_name || link.edge_info?.relationship_name || "");
+
+      if (label === "usa_tecnologias" && (src.includes("Repositorio") || src.includes("repositories") || src.includes("version"))) {
+        continue;
+      }
+
+      if (label === "contiene_modulos") {
+        const tgtNode = canonicalNodes.get(tgt) || graph.nodes.find((n) => nodeId(n) === origTgt);
+        const tgtModuleName = String(tgtNode?.name || tgtNode?.nombre || tgtNode?.label || "");
+        if (tgtModuleName && moduleToRepo.has(tgtModuleName)) {
+          const expectedRepo = moduleToRepo.get(tgtModuleName);
+          const repoId = `repo:${expectedRepo}`;
+          if (!canonicalNodes.has(repoId)) {
+            canonicalNodes.set(repoId, { id: repoId, name: expectedRepo, label: expectedRepo, type: "Repositorio" });
+          }
+          src = repoId;
+        }
+      }
+
       const key = `${src}->${label}->${tgt}`;
       if (src && tgt && !canonicalLinks.has(key)) {
         canonicalLinks.set(key, { ...link, source: src, target: tgt, label });
+      }
+    }
+
+    for (const [repoName, techs] of repoTechs.entries()) {
+      const repoId = `repo:${repoName}`;
+      if (canonicalNodes.has(repoId)) {
+        for (const techName of techs) {
+          const techId = `tech:${techName}`;
+          if (!canonicalNodes.has(techId)) {
+            canonicalNodes.set(techId, { id: techId, name: techName, label: techName, type: "Tecnologia" });
+          }
+          const linkKey = `${repoId}->usa_tecnologias->${techId}`;
+          if (!canonicalLinks.has(linkKey)) {
+            canonicalLinks.set(linkKey, { source: repoId, target: techId, relation: "usa_tecnologias", label: "usa_tecnologias" });
+          }
+        }
+      }
+    }
+
+    try {
+      const contractRows = targetRepository
+        ? this.db.prepare("SELECT repository, module, method, path, document FROM contracts WHERE repository=?").all(targetRepository)
+        : this.db.prepare("SELECT repository, module, method, path, document FROM contracts").all();
+      for (const row of contractRows) {
+        const repoId = `repo:${row.repository}`;
+        const moduleId = `module:${row.module}`;
+        const endpointName = `${row.method} ${row.path}`;
+        const endpointId = `endpoint:${endpointName}`;
+
+        if (!canonicalNodes.has(repoId)) {
+          canonicalNodes.set(repoId, { id: repoId, name: row.repository, label: row.repository, type: "Repositorio" });
+        }
+        if (!canonicalNodes.has(moduleId)) {
+          canonicalNodes.set(moduleId, { id: moduleId, name: row.module, label: row.module, type: "Modulo" });
+        }
+        if (!canonicalNodes.has(endpointId)) {
+          let docObj = {};
+          try { docObj = JSON.parse(row.document); } catch {}
+          canonicalNodes.set(endpointId, {
+            id: endpointId,
+            name: endpointName,
+            label: endpointName,
+            type: "Endpoint",
+            metodo: row.method,
+            ruta: row.path,
+            resumen: docObj.summary || "",
+            autenticacion: docObj.authentication || "",
+            version_api: docObj.api_version || "1.0.0",
+            raw: docObj,
+          });
+        }
+
+        const repoLinkKey = `${repoId}->contiene_modulos->${moduleId}`;
+        if (!canonicalLinks.has(repoLinkKey)) {
+          canonicalLinks.set(repoLinkKey, { source: repoId, target: moduleId, relation: "contiene_modulos", label: "contiene_modulos" });
+        }
+
+        const modLinkKey = `${moduleId}->expone_endpoints->${endpointId}`;
+        if (!canonicalLinks.has(modLinkKey)) {
+          canonicalLinks.set(modLinkKey, { source: moduleId, target: endpointId, relation: "expone_endpoints", label: "expone_endpoints" });
+        }
+      }
+    } catch {}
+
+    for (const id of ["repo:repositories", "repo:Repositorio 1", "repo:version", "repo:Repositorio"]) {
+      if (canonicalNodes.has(id)) {
+        const hasRelevantLinks = Array.from(canonicalLinks.values()).some((l) => l.source === id || l.target === id);
+        if (!hasRelevantLinks) canonicalNodes.delete(id);
       }
     }
 
