@@ -107,13 +107,12 @@ for profile in "${perfiles[@]}"; do
     printf '%s\n' '$pub_key' >> ~/.ssh/authorized_keys
     chmod 600 ~/.ssh/authorized_keys
 
-    # Llaves SSH salientes hacia GitHub/remoto
-    if [ ! -f ~/.ssh/id_ed25519 ]; then
-      printf '%s\n' '$priv_key' > ~/.ssh/id_ed25519
-      printf '%s\n' '$pub_key' > ~/.ssh/id_ed25519.pub
-      chmod 600 ~/.ssh/id_ed25519
-      chmod 644 ~/.ssh/id_ed25519.pub
-    fi
+    # Llaves SSH salientes hacia GitHub/remoto (asegurar coincidencia con la Mac)
+    printf '%s\n' '$priv_key' > ~/.ssh/id_ed25519
+    printf '%s\n' '$pub_key' > ~/.ssh/id_ed25519.pub
+    chmod 600 ~/.ssh/id_ed25519
+    chmod 644 ~/.ssh/id_ed25519.pub
+
 
     # Configuración de usuario global en Git
     git config --global user.name '$GIT_NAME'
