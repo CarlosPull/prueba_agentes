@@ -26,11 +26,19 @@ fi
 : > "$tmp/enriched.ndjson"
 use_llm=false
 if [ "${PRUEBA_AGENTES_DISABLE_LLM_ANALYSIS:-0}" != "1" ] && [ -x "$ROOT/tools/orquestacion/analizar_con_llm.py" ]; then
-  if "$ROOT/tools/orquestacion/analizar_con_llm.py" "$PROMPT" "$tmp/context.json" > "$tmp/llm_result.json" 2>/dev/null; then
+  if "$ROOT/tools/orquestacion/analizar_con_llm.py" "$PROMPT" "$tmp/context.json" > "$tmp/llm_result.json" 2>"$tmp/llm_error.log"; then
     if [ -s "$tmp/llm_result.json" ] && jq -e 'type == "array" and length > 0' "$tmp/llm_result.json" >/dev/null 2>&1; then
       use_llm=true
       echo "🤖 Análisis inteligente de requisitos con LLM (Hermes 3 / Ollama) aplicado correctamente." >&2
       jq -c '.[]' "$tmp/llm_result.json" > "$tmp/enriched.ndjson"
+      # Las restricciones generales originales no dependen de la reformulación del LLM.
+      jq -c '.requirements[] | select(.category == "general") | . + {target_profile:null,repository:null,module:null,depends_on:[]}' "$tmp/base.json" >> "$tmp/enriched.ndjson"
+    fi
+  else
+    llm_status=$?
+    if [ "$llm_status" -eq 3 ]; then
+      cat "$tmp/llm_error.log" >&2
+      exit 3
     fi
   fi
 fi

@@ -1,0 +1,17 @@
+# Base de laboratorio para agentes frontend. Backend requiere una imagen con PHP/Composer acordes al módulo.
+FROM docker.io/library/node:24-bookworm-slim
+ARG PI_VERSION=0.85.1
+ARG AGENT_PATH=skills/dev-front
+RUN apt-get update && apt-get install -y --no-install-recommends bash git jq bubblewrap util-linux ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"
+COPY pi-harness /opt/pi-harness
+COPY ${AGENT_PATH} /opt/agente/actual
+COPY plataforma/remoto/ejecutar_tarea.sh /opt/orquestador/ejecutar_tarea.sh
+RUN chmod -R a+rX /opt/pi-harness /opt/agente /opt/orquestador \
+    && chmod +x /opt/pi-harness/bin/* /opt/orquestador/ejecutar_tarea.sh \
+    && sha256sum /opt/agente/actual/SKILL.md | cut -d ' ' -f 1 > /opt/agente/actual/.agent-version
+ENV PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp/pi-home
+USER 1000:1000
+WORKDIR /workspace
+CMD ["sleep", "infinity"]

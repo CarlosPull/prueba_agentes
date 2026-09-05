@@ -1,0 +1,11 @@
+.git
+.private
+**/node_modules
+plataforma/dist
+logs
+proyectos
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+!**/.env.example

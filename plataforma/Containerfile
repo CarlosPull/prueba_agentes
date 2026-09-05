@@ -1,0 +1,26 @@
+FROM docker.io/library/node:24-bookworm-slim AS build
+WORKDIR /srv/orquestador/plataforma
+COPY plataforma/package.json plataforma/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY plataforma/tsconfig.json ./
+COPY plataforma/src ./src
+COPY plataforma/web ./web
+COPY plataforma/vite.config.ts ./
+RUN npm run build && npm prune --omit=dev --ignore-scripts
+
+FROM docker.io/library/node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends bash jq git openssh-client ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /srv/orquestador/plataforma
+COPY --from=build /srv/orquestador/plataforma/node_modules ./node_modules
+COPY --from=build /srv/orquestador/plataforma/dist ./dist
+COPY --from=build /srv/orquestador/plataforma/public ./public
+COPY plataforma/package.json ./
+COPY plataforma/migrations ./migrations
+COPY plataforma/bin ./bin
+COPY tools /srv/orquestador/tools
+RUN chmod +x bin/*.sh /srv/orquestador/tools/*/*.sh
+USER 1000:1000
+ENV HOST=0.0.0.0 PORT=3100
+EXPOSE 3100
+CMD ["node", "dist/server.js"]

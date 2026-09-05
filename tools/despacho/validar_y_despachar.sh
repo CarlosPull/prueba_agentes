@@ -75,7 +75,9 @@ fi
 
 # 2. BLOQUEO FÍSICO DE RE-DESPACHO (Candado de Ejecución Única)
 LOCK_FILE="$PROJECT_DIR/.ejecucion_lock.$DISPATCH_ID"
-if [ -f "$LOCK_FILE" ]; then
+# mkdir es atómico, incluso si llegan dos procesos al mismo tiempo.
+# Se conserva la detección de candados de archivo creados por versiones anteriores.
+if ! mkdir "$LOCK_FILE" 2>/dev/null; then
   echo "------------------------------------------------------------" >&2
   echo "⛔ BLOQUEO DE SEGURIDAD ABSOLUTO:" >&2
   echo "Ya existe una ejecución registrada para el rol '$ROLE' en este proyecto." >&2
@@ -84,8 +86,6 @@ if [ -f "$LOCK_FILE" ]; then
   echo "------------------------------------------------------------" >&2
   exit 1
 fi
-
-touch "$LOCK_FILE"
 
 # 3. Invocación limpia SSH
 dispatch_args=()

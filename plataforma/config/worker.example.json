@@ -1,0 +1,13 @@
+{
+  "00000000-0000-4000-8000-000000000001": {
+    "host": "vm.example.invalid",
+    "user": "orquestador",
+    "port": 22,
+    "identityFile": "/run/secrets/orquestador_ssh",
+    "knownHostsFile": "/etc/prueba-agentes/known_hosts",
+    "container": "modulo-comments",
+    "repository": "comments",
+    "stack": "backend",
+    "isolationVerified": false
+  }
+}

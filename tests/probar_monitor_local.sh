@@ -2,6 +2,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ "$(uname -s)" != Darwin ]; then
+  if "$ROOT/tools/sincronizacion/instalar_monitor_local.sh" >/dev/null 2>&1; then
+    echo 'FALLO: se intentó instalar launchd fuera de macOS.' >&2
+    exit 1
+  fi
+  echo '✓ En este sistema se rechaza la instalación exclusiva de macOS; LaunchAgent se verifica en macOS.'
+  exit 0
+fi
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 

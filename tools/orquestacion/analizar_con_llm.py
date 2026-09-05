@@ -1,6 +1,42 @@
 #!/usr/bin/env python3
 import sys, json, urllib.request
 
+
+class DestinoInvalido(ValueError):
+    """Una respuesta del modelo no puede ampliar el inventario autorizado."""
+
+
+def enriquecer_requisitos(reqs, inventory):
+    if not isinstance(reqs, list) or not reqs or len(reqs) > 100:
+        raise DestinoInvalido("Lista de requisitos inválida")
+    inv_map = {}
+    for item in inventory:
+        key = (item["profile"], item["repository"])
+        if key in inv_map:
+            raise DestinoInvalido("Destino duplicado en el inventario")
+        inv_map[key] = item
+    enriched = []
+    for i, r in enumerate(reqs, start=1):
+        if not isinstance(r, dict):
+            raise DestinoInvalido("Requisito inválido")
+        if not all(isinstance(r.get(field), str) for field in ["target_profile", "repository", "module", "category"]):
+            raise DestinoInvalido("Identificadores del destino inválidos")
+        inv_item = inv_map.get((r.get("target_profile"), r.get("repository")))
+        if inv_item is None:
+            raise DestinoInvalido("Perfil/repositorio ajeno al inventario")
+        if r.get("category") != inv_item["stack"] or r.get("module") != inv_item["module"]:
+            raise DestinoInvalido("Categoría o módulo no coincide con el destino")
+        if not isinstance(r.get("text"), str) or not r["text"].strip() or len(r["text"]) > 20000:
+            raise DestinoInvalido("Texto del requisito inválido")
+        enriched.append({
+            "id": f"REQ-{i:03d}", "category": inv_item["stack"], "text": r["text"],
+            "target_profile": inv_item["profile"], "repository": inv_item["repository"],
+            "module": inv_item["module"], "repository_kind": inv_item.get("kind"),
+            "workspace": inv_item["workspace"],
+            "technology_constraints": inv_item.get("technology"), "depends_on": []
+        })
+    return enriched
+
 def main():
     if len(sys.argv) < 3:
         sys.exit(1)
@@ -72,47 +108,14 @@ REGLAS DE ORO:
             res_raw = response.read().decode("utf-8")
             res_json = json.loads(res_raw)
             model_out = json.loads(res_json.get("response", "{}"))
-            reqs = model_out.get("requirements", [])
-            if not reqs:
-                sys.exit(1)
-            
-            # Enrich requirements with workspace and technology constraints from inventory
-            inv_map = {item["profile"]: item for item in inventory}
-            enriched = []
-            for i, r in enumerate(reqs, start=1):
-                p_id = r.get("target_profile")
-                inv_item = inv_map.get(p_id)
-                if not inv_item:
-                    # Fallback match by stack or module
-                    cat = r.get("category", "backend")
-                    matching = [item for item in inventory if item.get("stack") == cat or item.get("module") == cat]
-                    if matching:
-                        inv_item = matching[0]
-                        p_id = inv_item["profile"]
-
-                if not inv_item:
-                    continue
-
-                req_id = f"REQ-{i:03d}"
-                enriched.append({
-                    "id": req_id,
-                    "category": inv_item.get("stack", "backend"),
-                    "text": r.get("text", prompt_user),
-                    "target_profile": inv_item.get("profile"),
-                    "repository": inv_item.get("repository"),
-                    "module": inv_item.get("module"),
-                    "repository_kind": inv_item.get("kind"),
-                    "workspace": inv_item.get("workspace"),
-                    "technology_constraints": inv_item.get("technology"),
-                    "depends_on": []
-                })
-
-            if not enriched:
-                sys.exit(1)
+            enriched = enriquecer_requisitos(model_out.get("requirements"), inventory)
 
             print(json.dumps(enriched, ensure_ascii=False, indent=2))
             sys.exit(0)
 
+    except DestinoInvalido as error:
+        print(f"ROUTING_LLM_RECHAZADO: {error}", file=sys.stderr)
+        sys.exit(3)
     except Exception:
         sys.exit(1)
 

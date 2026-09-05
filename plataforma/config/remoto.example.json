@@ -1,0 +1,9 @@
+{
+  "00000000-0000-4000-8000-000000000001": {
+    "container": "modulo-comments",
+    "repository": "comments",
+    "role": "backend",
+    "workspace_volume": "modulo-comments-codigo",
+    "enabled": false
+  }
+}

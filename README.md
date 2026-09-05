@@ -1,5 +1,7 @@
 # Orquestador distribuido de agentes con Pi y memoria compartida
 
+> **Implementación multiusuario en curso (5 de septiembre de 2026):** el estado real, las pruebas realizadas y los pendientes para retomar están en [plataforma/README.md](plataforma/README.md). La nueva arquitectura usa exclusivamente Podman. API, PostgreSQL e interfaz web ya funcionan localmente; la ejecución completa de Pi dentro de Podman sigue pendiente por una restricción de Bubblewrap detectada en el piloto. El [plan completo](PLAN_PLATAFORMA_MULTIUSUARIO.md) describe el alcance propuesto, no funcionalidades ya terminadas.
+
 Este repositorio contiene un orquestador local escrito en shell script y respaldado por un **Analista Inteligente de Requisitos** impulsado por **LLM local (`Hermes 3` en Ollama)**. Recibe un prompt libre, recopila contexto de memoria, desglosa inteligente y semánticamente las subtareas sin duplicaciones redundantes, selecciona la VM y el repositorio correctos, ejecuta cada subtarea mediante **Pi** y `pi-harness` dentro de la VM en una **rama dedicada por tarea** (`feature/tarea-...`) y **publica automáticamente los Pull Requests en GitHub** (`https://github.com/Felix-Pull/.../compare/...`). La Mac no ejecuta Pi ni modifica directamente los repositorios remotos.
 
 > El flujo anterior basado en Python, OpenCode o `agent-runner` fue retirado. El motor de ejecución actual es exclusivamente Pi.

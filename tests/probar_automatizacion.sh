@@ -3,10 +3,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-find "$ROOT/tools" "$ROOT/pi-harness/bin" -type f -name '*.sh' -exec bash -n {} +
+while IFS= read -r script; do bash -n "$script"; done < <(find "$ROOT/tools" "$ROOT/pi-harness/bin" -type f -name '*.sh')
+bash -n "$ROOT/pi-harness/bin/pi-harness"
 jq empty "$ROOT/config/vms.json"
+# La suite determinista no debe depender de un servicio Ollama local activo.
+export PRUEBA_AGENTES_DISABLE_LLM_ANALYSIS=1
+python3 "$ROOT/tests/probar_analista_llm.py"
 
 for prueba in \
+  probar_candado_despacho.sh \
   probar_clasificacion.sh \
   probar_enrutamiento_modular.sh \
   probar_despacho_paralelo.sh \

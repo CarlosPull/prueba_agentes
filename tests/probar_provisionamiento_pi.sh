@@ -56,6 +56,7 @@ branch_actual="$(git -C "$ROOT" branch --show-current)"
 respuestas=(
   "192.168.50.231" "carlos2"
   "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" ""
+  "n" # Memory Gateway desactivado para la prueba sin servicios externos.
 )
 salida_configuracion="$(printf '%s\n' "${respuestas[@]}" \
   | PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json" \
@@ -93,6 +94,7 @@ jq -e '.repositories."laravel-dev"
 respuestas_frontend=(
   "192.168.50.232" "carlos3"
   "" "2" "" "" "" "" "" "" "" "" "" "" "" ""
+  "n" # Respuesta al nuevo diálogo de memoria.
 )
 printf '%s\n' "${respuestas_frontend[@]}" \
   | PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json" \

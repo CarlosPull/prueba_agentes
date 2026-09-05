@@ -6,4 +6,9 @@ logs/*
 !logs/.gitkeep
 proyectos/
 *.srl
-
+node_modules/
+plataforma/dist/
+plataforma/public/
+plataforma/.env
+plataforma/.env.*
+!plataforma/.env.example

@@ -3,7 +3,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DB_PATH="$ROOT/.private/memory-gateway-data/gateway.sqlite"
+DB_PATH="${MEMORY_GATEWAY_DB:-$ROOT/.private/memory-gateway-data/gateway.sqlite}"
+# El explorador nunca abre SQLite con permisos de escritura.
+sqlite3() { command sqlite3 -readonly "$@"; }
+SQL_LITERAL() { printf '%s' "$1" | sed "s/'/''/g"; }
 
 USO() {
   echo "🤖 CLI de Consulta de Memoria - Memory Gateway"
@@ -69,6 +72,7 @@ case "$OPCION" in
   --buscar)
     QUERY="${2:-}"
     [ -n "$QUERY" ] || { echo "Error: especifica un término de búsqueda. Ej: --buscar stats" >&2; exit 1; }
+    QUERY="$(SQL_LITERAL "$QUERY")"
     echo "🔍 Resultados de búsqueda para: '$QUERY'"
     echo "---------------------------------------------------------------------------------------------------"
     echo "📄 Contratos coincidentes:"
@@ -86,6 +90,8 @@ case "$OPCION" in
     METODO="${2:-}"
     RUTA="${3:-}"
     [ -n "$METODO" ] && [ -n "$RUTA" ] || { echo "Error: uso: --ver <METODO> <RUTA>. Ej: --ver GET /api/posts/{id}/stats" >&2; exit 1; }
+    METODO="$(SQL_LITERAL "$METODO")"
+    RUTA="$(SQL_LITERAL "$RUTA")"
     echo "📄 Esquema del Contrato para: $METODO $RUTA"
     echo "---------------------------------------------------------------------------------------------------"
     doc="$(sqlite3 "$DB_PATH" "SELECT document FROM contracts WHERE upper(method)=upper('$METODO') AND path='$RUTA';")"
