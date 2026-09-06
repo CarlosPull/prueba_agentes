@@ -1,20 +1,198 @@
-# Orquestador distribuido de agentes con Pi y memoria compartida
+# Plataforma multiusuario de orquestación con Pi y Podman
 
-> **Implementación multiusuario en curso (5 de septiembre de 2026):** el estado real, las pruebas realizadas y los pendientes para retomar están en [plataforma/README.md](plataforma/README.md). La nueva arquitectura usa exclusivamente Podman. API, PostgreSQL e interfaz web ya funcionan localmente; la ejecución completa de Pi dentro de Podman sigue pendiente por una restricción de Bubblewrap detectada en el piloto. El [plan completo](PLAN_PLATAFORMA_MULTIUSUARIO.md) describe el alcance propuesto, no funcionalidades ya terminadas.
+La nueva arquitectura permite administrar usuarios y asignarles módulos alojados en máquinas virtuales. Cada módulo corresponde a un repositorio Git dentro de un contenedor administrado por **Podman**. El usuario inicia sesión en la plataforma, ve únicamente sus destinos asignados y elige dónde enviar su prompt. El servidor valida sus permisos antes de aceptar y despachar la tarea.
 
-Este repositorio contiene un orquestador local escrito en shell script y respaldado por un **Analista Inteligente de Requisitos** impulsado por **LLM local (`Hermes 3` en Ollama)**. Recibe un prompt libre, recopila contexto de memoria, desglosa inteligente y semánticamente las subtareas sin duplicaciones redundantes, selecciona la VM y el repositorio correctos, ejecuta cada subtarea mediante **Pi** y `pi-harness` dentro de la VM en una **rama dedicada por tarea** (`feature/tarea-...`) y **publica automáticamente los Pull Requests en GitHub** (`https://github.com/Felix-Pull/.../compare/...`). La Mac no ejecuta Pi ni modifica directamente los repositorios remotos.
+Una VM puede alojar varios módulos y atender a varios usuarios; no es obligatorio tener una VM exclusiva por persona. Tener permiso sobre un módulo no concede acceso a todos los contenedores de esa VM. Podman es el motor de contenedores: el repositorio vive en un volumen del contenedor, no dentro de un «archivo Podman».
 
-> El flujo anterior basado en Python, OpenCode o `agent-runner` fue retirado. El motor de ejecución actual es exclusivamente Pi.
+> **Estado documentado al 5 de septiembre de 2026:** API, base de datos e interfaz web implementadas y probadas localmente. El trabajador y los ejecutores remotos están escritos, pero **el flujo completo usuario → VM → Podman → Pi todavía no está validado ni habilitado**. El piloto local encontró un fallo de Bubblewrap; la VM nueva `192.168.1.119` sigue pendiente de acceso SSH por llave. No interpretar esta guía como una confirmación de producción.
+
+> **Pausa actual:** la preparación automática desde el panel quedó a medio implementar. El árbol actual falla al compilar (`TS1294` en `plataforma/src/provisioner.ts:94`). Los scripts de arranque también cambiaron y aún no se probaron. **No ejecutar el nuevo despliegue como si estuviera terminado.** Las pruebas exitosas citadas más abajo corresponden a la versión anterior a estos cambios.
+
+## Guías para empezar
+
+- [Pendientes para completar el flujo](#pendientes-para-obtener-la-arquitectura-totalmente-funcional).
+- [Configurar una VM y ejecutar el piloto de pruebas](plataforma/GUIA_PRUEBAS_VM.md).
+- [Detalle de implementación, evidencia y pendientes](plataforma/README.md).
+- [Plan de implementación completo](PLAN_PLATAFORMA_MULTIUSUARIO.md).
+
+## Arquitectura nueva
+
+```mermaid
+flowchart TD
+    U["Usuario: inicia sesión y envía prompt"] --> WEB["Plataforma web Vue"]
+    subgraph CENTRAL["Servidor central · servicios con Podman"]
+        WEB --> API["API: identidad y permisos por destino"]
+        API <--> DB[("PostgreSQL: usuarios, sesiones, permisos, trabajos y auditoría")]
+        DB --> W["Trabajador: reserva y revalida permisos"]
+        W --> O["Orquestador shell: orquestar.sh"]
+    end
+    O -. "SSH con llave y comando forzado · pendiente de piloto" .-> EXEC
+    subgraph VM["VM asignada · usuario de servicio sin privilegios"]
+        EXEC["Ejecutor remoto: valida destino y aislamiento"]
+        EXEC --> A
+        EXEC --> B
+        subgraph A["Contenedor Podman del módulo A"]
+            PA["Pi + pi-harness + agente"] --> RA["Volumen A: repositorio Git y copia por tarea"]
+        end
+        subgraph B["Contenedor Podman del módulo B"]
+            PB["Pi + pi-harness + agente"] --> RB["Volumen B: repositorio Git y copia por tarea"]
+        end
+    end
+    EXEC -. "Resultado y evidencia" .-> W
+    W --> DB
+    DB --> API
+    API --> WEB
+```
+
+Las flechas a ambos módulos representan destinos posibles: cada trabajo apunta a **un único destino autorizado**. El usuario web no recibe SSH, credenciales de la VM ni el socket de Podman. La terminal web restringida aún no existe.
+
+## Cómo funciona el flujo
+
+1. El administrador registra una VM y sus destinos. Cada destino identifica VM, repositorio, contenedor y stack (`backend` o `frontend`). Este registro en la web **no crea** la VM ni el contenedor.
+2. Asigna usuarios a módulos con permisos de lectura o escritura. Un administrador delegado administra únicamente sus VMs; ser administrador no concede permiso implícito para ejecutar prompts.
+3. El usuario inicia sesión. La API consulta sus permisos vigentes y la interfaz muestra sus módulos asignados.
+4. Selecciona uno y envía el prompt. La API verifica sesión, asignación, política de lectura y preparación del destino antes de crear un trabajo en PostgreSQL.
+5. El trabajador reserva el trabajo, vuelve a comprobar los permisos y genera un inventario limitado a ese destino. Invoca la entrada normal `tools/orquestacion/orquestar.sh` con el adaptador Podman.
+6. El adaptador conecta por SSH con una identidad del servidor. Un comando forzado valida el registro remoto y el contenedor antes de ejecutar Pi.
+7. Dentro del contenedor, el ejecutor crea una copia Git independiente en `/workspace/ejecuciones/<job>/repo`, a partir de `/workspace/repositorio`, y aplica la política correspondiente mediante pi-harness.
+8. El trabajador registra el resultado para consultarlo desde la plataforma. Si pierde confirmación remota, el trabajo queda en `reconciliation_required` y no se reintenta automáticamente.
+
+Los pasos remotos describen el código implementado **pendiente de prueba real**. Cortar SSH o solicitar cancelación no demuestra que el proceso remoto haya terminado. El nuevo ejecutor no hace `git push` ni crea PR: conserva los cambios en la copia de la tarea.
+
+## Qué implementamos y qué falta
+
+| Componente | Estado |
+|---|---|
+| Inicio/cierre de sesión y cambio de contraseña | Implementado; contraseñas con scrypt y sesiones almacenadas como hash |
+| Usuarios, VMs, módulos y permisos | Implementado en API y web, con administración delegada y revocación |
+| Prompts, historial, resultados y solicitud de cancelación | Interfaz/API implementadas; resultados Pi reales pendientes |
+| PostgreSQL y servidor web con Podman | Arranque local verificado; roles separados de migración y aplicación |
+| Cola, idempotencia y revalidación de permisos | Implementadas; pruebas con PostgreSQL real |
+| Aislamiento del orquestador por destino | Inventario limitado; memoria global y LLM desactivados en el trabajador |
+| SSH restringido y ejecución dentro de Podman | Scripts escritos; falta instalación y validación en VM |
+| Imagen de módulo | Base frontend anterior construida; nuevas etapas frontend/backend escritas, sin construir ni validar |
+| Bubblewrap dentro de Podman | Prueba local fallida; requiere diagnóstico en la VM de laboratorio |
+| Preparación desde el panel y habilitación | API, migración, panel y servicios escritos parcialmente; falta corregir compilación, revisar y probar |
+| Terminal web, publicación Git/PR y memoria por usuario | Pendientes |
+
+También corregimos la resolución de varios repositorios dentro de un perfil, el rechazo de destinos inválidos del analista, el candado atómico de despacho y pruebas que dependían de datos locales privados.
+
+Antes de iniciar la preparación automática se verificaron **19 pruebas de plataforma con PostgreSQL en Podman**, cinco pruebas del analista y el candado con 12 invocaciones concurrentes. API y frontend compilaron; se comprobó por HTTP el inicio, recursos, sesión y logout. La suite antigua todavía falla en la visualización de grafos del Memory Gateway. El detalle está en [el registro de continuidad](plataforma/README.md#3-qué-se-verificó-realmente).
+
+## Arrancar la plataforma local
+
+El comando de arranque es el siguiente, pero **debe usarse después de corregir y verificar los cambios pendientes**. La versión actual intenta iniciar también los dos trabajadores. Desde la raíz del repositorio, con Podman, OpenSSL y herramientas SSH instalados:
+
+```bash
+bash plataforma/bin/iniciar_podman.sh
+```
+
+Abrir **http://127.0.0.1:3100**. El comando construye la imagen, aplica migraciones y arranca API/web y PostgreSQL. Conserva la base en el volumen `orquestador-postgres`. La versión nueva invoca `servicios_trabajadores.sh` para preparación y ejecución, pero esa integración aún no se probó. La versión anterior sí tuvo API/web y PostgreSQL funcionando; no confundir esa imagen con el código actual.
+
+La cuenta inicial de este laboratorio es `carlos@pull.srl`. Sus datos de acceso se guardaron en `.private/plataforma/acceso-inicial.txt`; no versionar ese archivo. Cambiar la contraseña al ingresar. En una instalación nueva sin administrador:
+
+```bash
+bash plataforma/bin/crear_admin.sh
+```
+
+Todos los contenedores se construyen y ejecutan con **Podman**, sin Docker Engine ni Docker Compose. Las referencias `docker.io/library/...` son ubicaciones de imágenes, no un cambio de motor.
+
+## Pendientes para obtener la arquitectura totalmente funcional
+
+El objetivo de entrega es que un administrador registre una **VM existente**, prepare sus contenedores desde la web y asigne usuarios a módulos. Cada usuario inicia sesión y envía prompts únicamente a los destinos autorizados; el resultado vuelve a su historial. Crear la VM en el hipervisor sigue siendo un paso externo.
+
+**Orden recomendado: A → B → C → D → E → F → G.** Mantener los destinos deshabilitados hasta que sus verificaciones reales pasen. El código existente se conserva para continuar; no empezar de cero ni asumir que todo archivo escrito está terminado.
+
+### A. Recuperar una base compilable y comprobada
+
+- [ ] Corregir `TS1294` en el constructor de `SSHPreparer`, en `plataforma/src/provisioner.ts:94`: sus propiedades declaradas en parámetros no son compatibles con `erasableSyntaxOnly`. Declarar campos y asignarlos explícitamente, conservando la configuración TypeScript.
+- [ ] Volver a compilar API y Vue y añadir verificación de tipos de componentes/plantillas Vue.
+- [ ] Revisar sintaxis y comportamiento de todos los scripts nuevos; no se ejecutaron en una VM.
+- [ ] Probar la migración `003_provisionamiento.sql` tanto sobre una instalación nueva como sobre datos de la versión anterior. Verificar permisos PostgreSQL para las nuevas tablas.
+- [ ] Ampliar pruebas de API/cola con conexiones, fuentes Git, preparación, perfiles permitidos, estados y revocaciones. Las 19 pruebas anteriores **no validan** estos cambios.
+- [ ] Resolver el fallo antiguo de grafos en `tests/probar_memory_gateway.mjs:137` y ejecutar la suite del visualizador y la suite general completa.
+
+### B. Terminar el alta y preparación de VMs desde la web
+
+- [ ] Validar el formulario de IP/nombre, puerto y huella SSH; probar guardar, consultar, errores y permisos administrativos. Solo el administrador general configura la conexión privilegiada de preparación.
+- [ ] Generar y mostrar correctamente la llave pública dedicada de preparación. Completar instrucciones de instalación desde la consola de la VM y alternativas cuando root por SSH esté restringido. No guardar contraseñas de root en la web.
+- [ ] Probar verificación de huella antes de autenticar, llave incorrecta, host inaccesible, timeout y cambio de identidad SSH. Revisar normalización de hosts y registros duplicados de una misma VM.
+- [ ] Resolver el acceso inicial a `192.168.1.119`: responde por SSH pero rechaza la llave local. El usuario confirmó que aún no conecta; no se configuró remotamente esa VM.
+- [ ] Revisar y probar `remoto/preparar.sh` en una VM desechable: paquetes Debian/Ubuntu, cuenta de servicio, UID/GID subordinados, Podman rootless y sesión de usuario. El soporte para otras distribuciones no está implementado.
+- [ ] Validar la configuración SSH efectiva del usuario de servicio, propietario de las llaves, comando forzado, ausencia de terminal/reenvíos y acceso administrativo separado.
+- [ ] Asegurar que repetir la preparación no sobrescriba instalaciones ajenas ni interrumpa módulos existentes. Revisar bloqueo remoto y transferencia del paquete del instalador antes de modificar archivos compartidos.
+
+### C. Terminar la preparación de cada módulo
+
+- [ ] Probar el formulario de repositorio HTTPS, rama, stack y perfil de credenciales; la selección del agente debe corresponder al stack aprobado. No permitir comandos/rutas arbitrarios desde el formulario.
+- [ ] Construir y probar **ambas** etapas de `Containerfile.modulo`: frontend Node/Vue y backend PHP/Composer, incluyendo rutas de Pi, extensiones PHP y requisitos reales del proyecto.
+- [ ] Instalar y verificar dependencias del módulo dentro de su entorno aislado. Tener Node/PHP en la imagen no significa que las dependencias del repositorio ya estén instaladas.
+- [ ] Probar clonación pública y privada, referencia base, repositorio vacío, rama inexistente y fallo a mitad de clonado. Verificar reintentos sin borrar cambios y coherencia de URL/rama/volumen.
+- [ ] Verificar contenedor/volumen exclusivo por destino y manejo de nombres ocupados; no reutilizar recursos de otro módulo.
+- [ ] Probar `configurar_credenciales.sh` y los perfiles con `allowedVmIds`. Decidir si se necesita autorización más fina por módulo/administrador antes de compartir un perfil entre módulos de una VM.
+- [ ] Comprobar que tokens Git no queden en Git/config/logs y que los secretos Pi no aparezcan en respuestas ni evidencia visible. Completar rotación/revocación; los secretos ya creados no se actualizan automáticamente.
+- [ ] Verificar red hacia el proveedor y autenticación real de Pi, más una tarea mínima; el diagnóstico de binarios no prueba esa conexión.
+- [ ] Resolver y volver a probar Bubblewrap dentro de Podman. El ensayo local falló al montar `/proc`; no usar modo privilegiado ni retirar el aislamiento como atajo.
+- [ ] Probar `verificar_contenedor.sh` con la versión real de Podman: capacidades efectivas, montajes, usuario, namespaces, sockets y políticas. Verificar aislamiento cruzado con dos módulos.
+
+### D. Cerrar habilitación, permisos y recuperación
+
+- [ ] Validar el recorrido `pending → queued → preparing → ready`, errores y estado `review`, con mensajes útiles y evidencia administrativa sin secretos.
+- [ ] Asegurar que `execution_ready` solo se active después de verificar remoto, registro del trabajador y autorización vigente; probar fallos entre esas operaciones.
+- [ ] Revalidar asignaciones administrativas antes del despacho y al finalizar. Probar carreras de revocación/desactivación y el orden de locks de VM, destino, usuario y trabajo.
+- [ ] Probar exclusión de preparación/ejecución simultáneas, reservas entre varios trabajadores, reinicios y pérdida de latidos.
+- [ ] Implementar consulta de estado remoto y cancelación confirmada de tareas. Cortar SSH no acredita que Pi terminó.
+- [ ] Implementar conciliación administrativa auditada tanto para preparaciones en `review` como para tareas en `reconciliation_required`. No existe aún una operación para resolver esos estados; no reencolar a ciegas.
+- [ ] Manejar recursos que quedaron creados antes de fallar y definir reintentos/retirada controlada sin pérdida de repositorios.
+
+### E. Desplegar el servidor central con Podman
+
+- [ ] Construir la imagen nueva con el paquete de provisionamiento y comprobar sus rutas/permisos internos.
+- [ ] Probar `servicios_trabajadores.sh`: llaves separadas de preparación/ejecución, volúmenes de secretos, registro compartido y evidencia persistente. La API solo debe recibir la llave pública necesaria.
+- [ ] Verificar los tres servicios: API/web, trabajador de preparación y trabajador de ejecución, además de PostgreSQL. Probar sus latidos, fallos y apagado.
+- [ ] Revisar actualización coordinada de migraciones/API/trabajadores y recuperación ante fallo de salud. Evitar reemplazar trabajadores durante operaciones activas sin un procedimiento seguro.
+- [ ] Probar que reinicios conservan usuarios, permisos, registros y resultados, sin duplicar ejecuciones.
+- [ ] Si las pruebas se harán desde otros equipos, configurar HTTPS, origen de la API y acceso de red. La instalación anterior solo publicó `127.0.0.1:3100`.
+- [ ] Para servicio permanente, completar systemd/Quadlet o equivalente Podman, respaldo/restauración, retención y limpieza. Revisar cuotas concurrentes y separación de privilegios de base de datos.
+
+### F. Completar una prueba reproducible de extremo a extremo
+
+- [ ] Preparar dos usuarios operadores, un administrador delegado y dos módulos desechables; añadir otra VM para comprobar límites entre VMs.
+- [ ] Desde la web: registrar VM → preparar VM → registrar/preparar módulo → asignar usuario → iniciar sesión del usuario → enviar prompt → consultar resultado.
+- [ ] Verificar tanto lectura como escritura permitida. La escritura debe quedar en la copia Git de esa tarea y conservar el repositorio base.
+- [ ] Manipular el UUID de destino desde un cliente de prueba: el servidor debe rechazar el acceso a módulos/VMs ajenos, aunque se salte la interfaz.
+- [ ] Comprobar ausencia de filtraciones por resultados, historial, errores, logs, memoria o herramientas del agente.
+- [ ] Probar doble envío, concurrencia por módulo, revocación antes/durante ejecución, desconexión, cancelación y recuperación.
+- [ ] Guardar resultados esperados/observados, UUID de trabajo/destino y evidencia; actualizar la guía con comandos realmente comprobados para que otra persona repita el ensayo.
+
+### G. Alcance adicional para recuperar todas las capacidades del orquestador
+
+Estos puntos amplían el piloto básico; no presentarlos como funcionalidades existentes:
+
+- [ ] Reactivar tecnologías, analista LLM y Memory Gateway **solo después de filtrar contexto por permisos de módulo**. El trabajador actual los mantiene desactivados.
+- [ ] Soportar un prompt dirigido a varios módulos autorizados, manteniendo trabajos, permisos y resultados separados.
+- [ ] Si se requiere publicación: permiso independiente, push y creación real de PR, con revalidación y distinción entre PR y enlace de comparación. El ejecutor nuevo no publica cambios.
+- [ ] Si se requiere acceso interactivo: implementar terminal web limitada al contenedor autorizado; no dar una consola general de la VM.
+- [ ] Completar recuperación de cuentas y evaluar OIDC/MFA según el uso previsto.
+- [ ] Actualizar instrucciones antiguas de `AGENTS.md`/CLI que contradicen el flujo nuevo; QA/security siguen sin despacho automatizado en este piloto.
+
+**Criterio para declarar el flujo listo para pruebas de otra persona:** compilación y pruebas nuevas aprobadas, servicios desplegados, una VM preparada por el procedimiento documentado, Pi ejecutando realmente en dos módulos aislados, permisos positivos/negativos verificados y recuperación de errores comprobada. Hoy no se ha alcanzado ese criterio.
+
+El inventario exacto de archivos a retomar está en [plataforma/README.md](plataforma/README.md). La [guía de VMs](plataforma/GUIA_PRUEBAS_VM.md) conserva los pasos de diagnóstico, pero todavía no es una receta validada de instalación completa.
+
+## Referencia del orquestador CLI anterior
+
+Los apartados siguientes documentan las herramientas shell, memoria y provisionamiento **del flujo SSH anterior**. Se conservan para mantenimiento y diagnóstico; su provisionador no configura automáticamente la nueva plataforma ni sus contenedores. El trabajador nuevo conserva la entrada shell, pero usa su propio inventario limitado y adaptador Podman. La publicación Git y memoria global descritas aquí no están habilitadas en el flujo multiusuario.
 
 ## Novedades del Sistema
 
 * 🤖 **Análisis Inteligente con LLM Local (`Hermes 3`)**: `tools/orquestacion/analizar_con_llm.py` analiza semánticamente el prompt y distingue entre solicitudes de UI frontend (Vue) y endpoints backend (Laravel), evitando despachos redundantes o duplicados.
 * 🌿 **Flujo de Ramas Dedicadas por Tarea**: Cada despacho crea y conmuta automáticamente a una rama única por tarea (`feature/tarea-<id_despacho>-<timestamp>`) en la VM.
-* 🐙 **Publicación y Pull Requests Automáticos en GitHub**: Al finalizar la tarea, la VM realiza `git push -u origin feature/tarea-...` e incluye el enlace directo al **Pull Request** en `REPORTE_PI.md` y `EVIDENCIA_AGENTES.md`.
+* 🐙 **Publicación Git del flujo CLI anterior**: Al finalizar la tarea, la VM realiza `git push -u origin feature/tarea-...` e incluye un enlace de comparación para proponer un PR; ese enlace no confirma que exista un PR en `REPORTE_PI.md` y `EVIDENCIA_AGENTES.md`.
 * 🔑 **Sincronización de Identidad SSH y Git (`configurar_git_vms.sh`)**: Vinculación automática de remotos SSH (`git@github.com:...`) y claves SSH salientes entre la Mac y las VMs.
 * 🛡️ **Resiliencia no Bloqueante**: Verificación no bloqueante del Memory Gateway con fallback transparente a inventario local si el Gateway estuviera apagado.
 
-## Flujo completo
+## Flujo del orquestador CLI anterior
 
 
 ```mermaid

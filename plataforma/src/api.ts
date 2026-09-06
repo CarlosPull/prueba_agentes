@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { digest, token, hashPassword, verifyPassword, dummyHash } from './auth.ts';
 import type { User } from './auth.ts';
 import { transaction } from './db.ts';
+import { provisionRoutes } from './provision-api.ts';
 
 declare module 'fastify' { interface FastifyRequest { actor: User | null } }
 type DB = Pool | PoolClient;
@@ -243,6 +244,11 @@ export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
     const b = request.body;
     if (!b.prompt.trim()) throw new HttpError(400, 'Escribe una solicitud.');
     const result = await transaction(pool, async db => {
+      const vm = (await db.query('SELECT vm_id FROM targets WHERE id=$1', [b.targetId])).rows[0];
+      if (vm) {
+        await db.query('SELECT id FROM vms WHERE id=$1 FOR SHARE', [vm.vm_id]);
+        if ((await db.query("SELECT 1 FROM preparations WHERE vm_id=$1 AND state IN ('queued','running','review')", [vm.vm_id])).rowCount) throw new HttpError(409, 'La VM está en preparación o revisión.');
+      }
       const allowed = await db.query(`SELECT t.id FROM targets t JOIN vms v ON v.id=t.vm_id
         JOIN grants g ON g.target_id=t.id JOIN users u ON u.id=g.user_id
         WHERE t.id=$1 AND u.id=$2 AND u.active AND t.active AND v.active AND g.can_read
@@ -275,5 +281,6 @@ export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
     await audit(pool, request.actor!.id, 'cancelacion_solicitada', request.params.id);
     return result.rows[0];
   });
+  await provisionRoutes(app, pool);
   return app;
 }

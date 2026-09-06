@@ -49,10 +49,13 @@ GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO orquestador_app;
 REVOKE ALL ON schema_migrations FROM orquestador_app;
 SQL
 unset password app_password
+# Crear llaves/volúmenes e iniciar trabajadores después de aplicar migraciones.
+bash "$ROOT/plataforma/bin/servicios_trabajadores.sh"
 previous=''
 if podman container exists orquestador-api; then previous="$(podman inspect --format '{{.Image}}' orquestador-api)"; fi
 start_api() {
   podman run --replace -d --name orquestador-api --pod orquestador-plataforma --env-file "$private/api.env" \
+    --volume orquestador-public:/etc/orquestador:ro \
     --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=64m \
     "$1" >/dev/null
 }

@@ -21,6 +21,8 @@ git -C "$run/repo" checkout --quiet -b "codex/tarea-$job" "$commit"
 export PI_HARNESS_RUNS_DIR="$run/evidencia"
 args=(start --role "$role" --workspace "$run/repo" --agent-dir /opt/agente/actual --backend auto --task -)
 [ "$read_only" = false ] || args+=(--read-only)
+[ -z "${PI_PROVIDER:-}" ] || args+=(--provider "$PI_PROVIDER")
+[ -z "${PI_MODEL:-}" ] || args+=(--model "$PI_MODEL")
 printf '%s\n' "$task" | /opt/pi-harness/bin/pi-harness "${args[@]}"
 # La publicación Git requiere un permiso y una fase independiente; este MVP no hace push.
 printf '\nEjecución completada. Los cambios permanecen en la copia de trabajo de esta tarea.\n'

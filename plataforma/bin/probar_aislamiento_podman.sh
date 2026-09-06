@@ -7,7 +7,7 @@ name="orquestador-aislamiento-$$"
 volume="$name-codigo"
 cleanup() { podman rm -f "$name" >/dev/null 2>&1 || true; podman volume rm "$volume" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
-podman build -t "$image" -f "$ROOT/plataforma/Containerfile.modulo" "$ROOT"
+podman build --target frontend -t "$image" -f "$ROOT/plataforma/Containerfile.modulo" "$ROOT"
 podman volume create "$volume" >/dev/null
 podman run --rm --volume "$volume:/workspace" --user 0:0 "$image" sh -c 'mkdir -p /workspace/repositorio/src; chown -R 1000:1000 /workspace' 
 podman run -d --name "$name" --read-only --user 1000:1000 --cap-drop=ALL \

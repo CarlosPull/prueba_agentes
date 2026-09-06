@@ -4,7 +4,9 @@
 **Rama al pausar: `implementacion_usuarios`.**
 **Estado: API, PostgreSQL e interfaz web disponibles localmente; ejecución remota pendiente de validar aislamiento. No lista para producción.**
 
-Se retomó la implementación tras la pausa solicitada por el usuario. Los cambios permanecen en el árbol de trabajo, sin commit ni push. No sobrescribirlos ni empezar de cero.
+Este documento conserva la evidencia de la implementación y los pendientes. Consultar `git status` para conocer el estado actual del árbol de trabajo; no asumir que sigue sin commits desde la sesión inicial.
+
+La explicación general y el diagrama están en el [README principal](../README.md). La preparación de cada VM y la matriz de aceptación están en la [guía del piloto](GUIA_PRUEBAS_VM.md).
 
 ## 1. Decisiones acordadas
 
@@ -125,7 +127,7 @@ La suite general requiere permitir servidores de prueba locales: dentro del aisl
 - Cuenta administradora inicial: **carlos@pull.srl**. Contraseña generada guardada localmente en `.private/plataforma/acceso-inicial.txt` con modo 600. No copiarla a documentación, chat o Git. Cambiarla desde la plataforma después del primer ingreso; retirar el archivo cuando ya no se necesite.
 - `.private/plataforma/` contiene credenciales privadas del servidor; no eliminarlas para reiniciar. La base persiste en el volumen `orquestador-postgres`.
 - El trabajador no está iniciado. Los registros de ejemplo siguen deshabilitados. No se modificó `config/vms.json` ni las VMs existentes.
-- No hay despliegue público, commit ni push.
+- No se realizó despliegue público durante la implementación descrita. Consultar Git para el estado actual de commits.
 - Node del sistema es 18; se usó Node 24 del runtime de Codex. jq se extrajo temporalmente; instalarlo de forma estable para uso desde el host.
 
 Rutas de esta sesión (no portables):
@@ -136,6 +138,10 @@ export LD_LIBRARY_PATH="/tmp/prueba-agentes-deps/root/usr/lib/x86_64-linux-gnu${
 ```
 
 Requisitos del host: Node 24+, jq, Git, OpenSSH, OpenSSL y Podman. No depender de `/tmp` permanentemente.
+
+### VM nueva pendiente de acceso
+
+El usuario creó la VM `192.168.1.119` con acceso inicial `root`. Se comprobó que SSH responde y que el cliente ofrece la llave creada, pero la VM la rechaza. Cambiar la contraseña no resolvió el acceso. Está pendiente revisar desde la consola remota los permisos y contenido de `authorized_keys`, la configuración efectiva y los registros de SSH. No se ha instalado Podman ni ejecutado el piloto en esa VM desde esta sesión.
 
 ## 5. Pendientes para continuar, en orden
 

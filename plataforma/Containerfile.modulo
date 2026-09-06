@@ -1,16 +1,35 @@
-# Base de laboratorio para agentes frontend. Backend requiere una imagen con PHP/Composer acordes al módulo.
-FROM docker.io/library/node:24-bookworm-slim
+# Imágenes de stack reproducibles, construidas únicamente con Podman.
+FROM docker.io/library/node:24-bookworm-slim AS frontend
 ARG PI_VERSION=0.85.1
-ARG AGENT_PATH=skills/dev-front
 RUN apt-get update && apt-get install -y --no-install-recommends bash git jq bubblewrap util-linux ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && npm install --global --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"
 COPY pi-harness /opt/pi-harness
-COPY ${AGENT_PATH} /opt/agente/actual
-COPY plataforma/remoto/ejecutar_tarea.sh /opt/orquestador/ejecutar_tarea.sh
+COPY skills/dev-front /opt/agente/actual
+COPY plataforma/remoto/ejecutar_tarea.sh plataforma/remoto/clonar.sh /opt/orquestador/
 RUN chmod -R a+rX /opt/pi-harness /opt/agente /opt/orquestador \
-    && chmod +x /opt/pi-harness/bin/* /opt/orquestador/ejecutar_tarea.sh \
+    && chmod +x /opt/pi-harness/bin/* /opt/orquestador/*.sh \
     && sha256sum /opt/agente/actual/SKILL.md | cut -d ' ' -f 1 > /opt/agente/actual/.agent-version
+ENV PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp/pi-home
+USER 1000:1000
+WORKDIR /workspace
+CMD ["sleep", "infinity"]
+
+FROM docker.io/library/composer:2 AS composer
+FROM docker.io/library/php:8.4-cli-bookworm AS backend
+RUN apt-get update && apt-get install -y --no-install-recommends bash git jq bubblewrap util-linux ca-certificates unzip libicu-dev libzip-dev libonig-dev libsqlite3-dev \
+    && docker-php-ext-install intl zip mbstring pdo_mysql pdo_sqlite bcmath \
+    && rm -rf /var/lib/apt/lists/*
+# docker-php-ext-install es el auxiliar de la imagen oficial PHP, no el motor Docker.
+COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
+COPY --from=frontend /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js /usr/local/bin/pi
+COPY --from=composer /usr/bin/composer /usr/local/bin/composer
+COPY --from=frontend /opt/pi-harness /opt/pi-harness
+COPY --from=frontend /opt/orquestador /opt/orquestador
+COPY skills/dev-back /opt/agente/actual
+RUN chmod -R a+rX /opt/agente && sha256sum /opt/agente/actual/SKILL.md | cut -d ' ' -f 1 > /opt/agente/actual/.agent-version
 ENV PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp/pi-home
 USER 1000:1000
 WORKDIR /workspace

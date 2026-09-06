@@ -27,21 +27,7 @@ role="$(jq -r .role <<< "$entry")"
 volume="$(jq -r .workspace_volume <<< "$entry")"
 [[ "$container" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]] && [[ "$volume" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]] || exit 1
 [[ "$role" = backend || "$role" = frontend ]] || exit 1
-# Mínimo obligatorio; la verificación completa del aislamiento sigue siendo un paso del piloto.
-podman inspect "$container" | jq -e --arg volume "$volume" '
-  .[0] | .State.Running==true and .HostConfig.Privileged==false and .HostConfig.ReadonlyRootfs==true
-  and (.Config.User=="1000:1000" or .Config.User=="1000")
-  and (.HostConfig.NetworkMode!="host") and (.HostConfig.PidMode!="host")
-  and ((.HostConfig.CapDrop // [] | map(ascii_upcase) | index("ALL"))!=null)
-  and ([.Mounts[]? | select(.Destination=="/workspace" and .Name==$volume)]|length)==1
-  and ([.Mounts[]? | select(.Destination!="/workspace")]|length)==0
-' >/dev/null || { echo 'Error: el contenedor no cumple el aislamiento mínimo.' >&2; exit 1; }
-# La presencia del binario no demuestra que el host permita sus namespaces.
-# Comprobarlo antes de registrar o ejecutar cualquier tarea.
-podman exec --user 1000:1000 "$container" bwrap --unshare-all --die-with-parent \
-  --ro-bind / / --proc /proc --dev /dev /bin/true >/dev/null 2>&1 || {
-  echo 'Error: Bubblewrap no puede aplicar el aislamiento dentro de Podman.' >&2; exit 1;
-}
+"$(dirname "${BASH_SOURCE[0]}")/verificar_contenedor.sh" "$container" "$volume"
 mkdir -p "$state/jobs" "$state/locks"
 chmod 700 "$state" "$state/jobs" "$state/locks"
 exec 9>"$state/locks/$target"

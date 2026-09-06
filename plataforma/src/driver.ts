@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Driver, Job } from './queue.ts';
 
@@ -20,8 +20,9 @@ export class OrchestratorDriver implements Driver {
   root: string; registryPath: string; runs: string;
   constructor(root: string, registryPath: string, runs: string) { this.root = resolve(root); this.registryPath = registryPath; this.runs = resolve(runs); }
   async run(job: Job, signal: AbortSignal) {
-    const registry = JSON.parse(await readFile(this.registryPath, 'utf8'));
-    const connection = registry[job.target_id] as Connection;
+    const isDirectory = (await stat(this.registryPath)).isDirectory();
+    const registry = JSON.parse(await readFile(isDirectory ? join(this.registryPath, `${job.target_id}.json`) : this.registryPath, 'utf8'));
+    const connection = (isDirectory ? registry : registry[job.target_id]) as Connection;
     try { validateConnection(connection); } catch {
       return { state: 'failed' as const, result: 'Destino pendiente de provisionar y verificar en el registro del trabajador.' };
     }

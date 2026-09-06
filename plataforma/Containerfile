@@ -19,6 +19,11 @@ COPY plataforma/package.json ./
 COPY plataforma/migrations ./migrations
 COPY plataforma/bin ./bin
 COPY tools /srv/orquestador/tools
+COPY pi-harness /srv/orquestador/pi-harness
+COPY skills /srv/orquestador/skills
+COPY plataforma/remoto ./remoto
+COPY plataforma/Containerfile.modulo ./Containerfile.modulo
+RUN tar -cf provision-bundle.tar -C /srv/orquestador pi-harness skills plataforma/remoto plataforma/Containerfile.modulo
 RUN chmod +x bin/*.sh /srv/orquestador/tools/*/*.sh
 USER 1000:1000
 ENV HOST=0.0.0.0 PORT=3100
