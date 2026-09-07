@@ -29,11 +29,13 @@ podman run --rm --user 0:0 --network none --volume orquestador-registry:/registr
 podman run --replace -d --name orquestador-preparacion --pod orquestador-plataforma --env-file "$private/api.env" \
   --env PROVISION_PRIVATE=/run/orquestador/secrets --env WORKER_REGISTRY=/var/lib/orquestador/registry \
   --volume orquestador-provision-secrets:/run/orquestador/secrets:ro --volume orquestador-registry:/var/lib/orquestador/registry \
+  --volume "$ROOT/config:/srv/orquestador/config:rw" \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /tmp:rw,nosuid,size=128m \
   "$image" node dist/provision-main.js >/dev/null
 podman run --replace -d --name orquestador-trabajador --pod orquestador-plataforma --env-file "$private/api.env" \
   --env WORKER_REGISTRY=/var/lib/orquestador/registry --env WORKER_RUNS=/var/lib/orquestador/runs \
   --volume orquestador-execution-secrets:/run/orquestador/secrets:ro --volume orquestador-registry:/var/lib/orquestador/registry:ro --volume orquestador-runs:/var/lib/orquestador/runs \
+  --volume "$ROOT/config:/srv/orquestador/config:rw" \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /tmp:rw,nosuid,size=128m \
   "$image" node dist/worker-main.js >/dev/null
 echo 'Servicios de preparación y ejecución iniciados. La web muestra sus latidos.'

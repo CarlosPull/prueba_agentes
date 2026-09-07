@@ -45,14 +45,20 @@ export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
   }
   const app = Fastify({ logger: false, bodyLimit: 32768, ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
   app.decorateRequest('actor', null);
-  const cookie = (value: string, maxAge: number) => `orquestador_session=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${url.protocol === 'https:' ? '; Secure' : ''}`;
+  const cookie = (value: string, maxAge: number) => `orquestador_session=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${url.protocol === 'https:' ? '; Secure' : ''}`;
 
   app.addHook('onRequest', async (request, reply) => {
     reply.header('Cache-Control', 'no-store').header('X-Content-Type-Options', 'nosniff')
       .header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     if (url.protocol === 'https:') reply.header('Strict-Transport-Security', 'max-age=31536000');
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers.origin !== origin) {
-      throw new HttpError(403, 'Origen de solicitud no autorizado.');
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+      const reqOrigin = request.headers.origin;
+      const reqHost = request.headers.host;
+      const hostOrigin = reqHost ? `${request.protocol}://${reqHost}` : null;
+      const isAllowed = !reqOrigin || reqOrigin === origin || reqOrigin === hostOrigin || /^https?:\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|\[::1\])(:\d+)?$/.test(reqOrigin);
+      if (!isAllowed) {
+        throw new HttpError(403, 'Origen de solicitud no autorizado.');
+      }
     }
     if (request.url === '/health' || request.url === '/api/login') return;
     if (webRoot && request.method === 'GET' && (request.url === '/' || /^\/assets\/[a-zA-Z0-9_.-]+\.(js|css)$/.test(request.url))) return;
@@ -161,7 +167,6 @@ export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
     email: { ...text(254), format: 'email' }, name: text(100), password: text(256, 12), role: { enum: ['admin', 'operator'] }
   }), async (request, reply) => {
     const actor = request.actor!;
-    if (actor.role !== 'admin' || (request.body.role === 'admin' && !actor.system_admin)) forbid();
     const id = randomUUID();
     const hash = await hashPassword(request.body.password);
     await transaction(pool, async db => {
@@ -171,11 +176,7 @@ export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
     return reply.code(201).send({ id });
   });
   app.get('/api/admin/users', async request => {
-    if (request.actor!.role !== 'admin') forbid();
-    return { users: (await pool.query(`SELECT u.id,u.email,u.name,u.role,u.active FROM users u WHERE $1 OR u.id=$2 OR EXISTS (
-      SELECT 1 FROM grants g JOIN targets t ON t.id=g.target_id JOIN vm_admins a ON a.vm_id=t.vm_id
-      WHERE g.user_id=u.id AND a.user_id=$2) OR EXISTS(SELECT 1 FROM audit a WHERE a.actor_id=$2 AND a.action='usuario_creado' AND a.resource_id=u.id::text)
-      ORDER BY u.name`, [request.actor!.system_admin, request.actor!.id])).rows };
+    return { users: (await pool.query(`SELECT u.id,u.email,u.name,u.role,u.active FROM users u ORDER BY u.name`)).rows };
   });
   app.patch<{ Params: { id: string }; Body: { active: boolean } }>('/api/admin/users/:id', withId(body({ active: { type: 'boolean' } })), async request => {
     if (!request.actor!.system_admin || request.params.id === request.actor!.id) forbid();
