@@ -183,7 +183,10 @@ MAIN() {
   local total_copiadas=0
   local total_omitidas=0
 
-  while IFS=$'\t' read -r perfil ip usuario version_node version_pi; do
+  # Lee de fd 3, no de stdin: los "ssh"/"scp" de más abajo no redirigen su
+  # propio stdin, y si el bucle leyera de fd 0 se comerían las filas
+  # restantes de $filas, cortando el bucle tras la primera VM.
+  while IFS=$'\t' read -r -u 3 perfil ip usuario version_node version_pi; do
     [ -n "$perfil" ] || continue
     echo ""
     echo "🌐 Perfil '$perfil' ($usuario@$ip)"
@@ -210,7 +213,7 @@ MAIN() {
     else
       total_omitidas=$((total_omitidas + 1))
     fi
-  done <<< "$filas"
+  done 3<<< "$filas"
 
   echo ""
   echo "------------------------------------------------------------"
