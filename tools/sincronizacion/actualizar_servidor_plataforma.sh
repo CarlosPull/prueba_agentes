@@ -15,8 +15,18 @@ exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
   exit 0
 fi
+trap 'flock -u 9' EXIT
 
-git fetch origin "$BRANCH" >/dev/null 2>&1 || exit 0
+# Podman crea procesos persistentes (conmon). No deben heredar el candado
+# del actualizador, que pertenece únicamente a esta ejecución de Bash.
+podman() {
+  command podman "$@" 9>&-
+}
+
+if ! git fetch origin "$BRANCH" >> "$LOG_FILE" 2>&1; then
+  echo "[$(date -Iseconds)] Error: no se pudo consultar origin/$BRANCH." >> "$LOG_FILE"
+  exit 1
+fi
 LOCAL_HASH="$(git rev-parse HEAD 2>/dev/null || echo 'NONE')"
 REMOTE_HASH="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo 'NONE')"
 
