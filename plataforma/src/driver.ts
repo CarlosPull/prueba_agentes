@@ -43,7 +43,7 @@ export class OrchestratorDriver implements Driver {
       PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'C.UTF-8',
       PRUEBA_AGENTES_VMS_CONF: join(directory, 'vms.json'),
       PRUEBA_AGENTES_PRIVATE_TECH_MEMORY: join(directory, 'tecnologias.json'),
-      PRUEBA_AGENTES_PRIVATE_MEMORY_REQUIRED: '1', PRUEBA_AGENTES_DISABLE_LLM_ANALYSIS: '1',
+      PRUEBA_AGENTES_PRIVATE_MEMORY_REQUIRED: '1', PRUEBA_AGENTES_DISABLE_LLM_ANALYSIS: process.env.PRUEBA_AGENTES_DISABLE_LLM_ANALYSIS ?? '0',
       PRUEBA_AGENTES_PROJECTS_DIR: join(directory, 'proyectos'),
       PRUEBA_AGENTES_DIAGNOSTICO_VMS: 'true',
       PRUEBA_AGENTES_DESPACHADOR: join(this.root, 'plataforma/bin/despachar_podman.sh'),

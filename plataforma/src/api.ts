@@ -38,8 +38,9 @@ async function manages(db: DB, actor: User, vmId: string) {
 
 export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
   const url = new URL(origin);
-  if (origin !== url.origin || (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) {
-    throw new Error('APP_ORIGIN debe ser un origen HTTPS; HTTP solo está permitido en localhost.');
+  const isLocalNetwork = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|\[::1\])/.test(url.hostname);
+  if (origin !== url.origin || (url.protocol !== 'https:' && !isLocalNetwork)) {
+    throw new Error('APP_ORIGIN debe ser un origen HTTPS o una IP de red local.');
   }
   const app = Fastify({ logger: false, bodyLimit: 32768, ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
   app.decorateRequest('actor', null);

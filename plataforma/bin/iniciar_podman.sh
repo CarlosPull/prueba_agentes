@@ -10,14 +10,15 @@ chmod 700 "$private"
 if [ ! -e "$private/postgres.env" ] && [ ! -e "$private/api.env" ]; then
   password="$(openssl rand -hex 32)"
   app_password="$(openssl rand -hex 32)"
+  app_origin="${APP_ORIGIN:-http://127.0.0.1:3100}"
   printf 'POSTGRES_DB=orquestador\nPOSTGRES_USER=orquestador\nPOSTGRES_PASSWORD=%s\n' "$password" > "$private/postgres.env"
   printf 'DATABASE_URL=postgresql://orquestador:%s@127.0.0.1:5432/orquestador\n' "$password" > "$private/migration.env"
-  printf 'DATABASE_URL=postgresql://orquestador_app:%s@127.0.0.1:5432/orquestador\nAPP_ORIGIN=http://127.0.0.1:3100\n' "$app_password" > "$private/api.env"
+  printf 'DATABASE_URL=postgresql://orquestador_app:%s@127.0.0.1:5432/orquestador\nAPP_ORIGIN=%s\n' "$app_password" "$app_origin" > "$private/api.env"
 fi
 [ -s "$private/postgres.env" ] && [ -s "$private/api.env" ] && [ -s "$private/migration.env" ] || { echo 'Configuración privada incompleta; revisa los archivos de base, migraciones y API.' >&2; exit 1; }
 chmod 600 "$private"/*.env
 podman build -t localhost/orquestador-plataforma:0.1 -f "$ROOT/plataforma/Containerfile" "$ROOT"
-podman pod exists orquestador-plataforma || podman pod create --name orquestador-plataforma --publish 127.0.0.1:3100:3100 >/dev/null
+podman pod exists orquestador-plataforma || podman pod create --name orquestador-plataforma --publish 3100:3100 >/dev/null
 podman volume exists orquestador-postgres || podman volume create orquestador-postgres >/dev/null
 if ! podman container exists orquestador-db; then
   podman run -d --name orquestador-db --pod orquestador-plataforma --env-file "$private/postgres.env" \

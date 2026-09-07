@@ -91,7 +91,17 @@ export function command(program: string, args: string[], input: string | Buffer,
   });
 }
 export class SSHPreparer implements Preparer {
-  constructor(private pool: Pool, private root: string, private privateDir: string, private registry: string) {}
+  private pool: Pool;
+  private root: string;
+  private privateDir: string;
+  private registry: string;
+
+  constructor(pool: Pool, root: string, privateDir: string, registry: string) {
+    this.pool = pool;
+    this.root = root;
+    this.privateDir = privateDir;
+    this.registry = registry;
+  }
   async run(p: Preparation, stage: (s: string) => Promise<void>, signal: AbortSignal) {
     const c = (await this.pool.query('SELECT * FROM vm_connections WHERE vm_id=$1',[p.vm_id])).rows[0];
     if (!c || !/^[a-zA-Z0-9][a-zA-Z0-9.:-]*$/.test(c.host) || !Number.isInteger(c.port)) throw new PreparationError('Conexión no válida.');
