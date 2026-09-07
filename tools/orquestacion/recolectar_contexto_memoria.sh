@@ -26,23 +26,54 @@ fi
 
 inventory="$(jq -c --argjson private "$private_json" '
   [to_entries[] as $vm
-   | select($vm.value.engine == "pi" and $vm.value.dispatch_enabled == true)
-   | ($vm.value.repositories // [{id:$vm.key,module:$vm.value.stack,kind:$vm.value.stack,path:$vm.value.workspace,business_memory:"",aliases:[$vm.key,$vm.value.stack]}])[]
-   | {
-       profile:$vm.key, stack:$vm.value.stack, ip:$vm.value.ip, user:$vm.value.user,
-       repository:.id, module:.module, kind:.kind, workspace:.path,
-       business_memory:(.business_memory // ""), aliases:(.aliases // []),
-       technology:($private.repositories[.id] // null)
-     }]
+   | $vm.value as $v
+   | (
+       if ($v.users | type) == "array" then
+         $v.users[] as $u
+         | $u.repositories[] as $r
+         | select(($r.engine == "pi" or $v.engine == "pi") and ($r.dispatch_enabled == true or $v.dispatch_enabled == true))
+         | {
+             profile:$vm.key, stack:($r.stack // $v.stack), ip:$v.ip, user:$u.name,
+             repository:$r.id, module:$r.module, kind:$r.kind, workspace:$r.path,
+             business_memory:($r.business_memory // ""), aliases:($r.aliases // []),
+             technology:($private.repositories[$r.id] // null)
+           }
+       else
+         ($v.repositories // [{id:$vm.key,module:$v.stack,kind:$v.stack,path:$v.workspace,business_memory:"",aliases:[$vm.key,$v.stack]}])[] as $r
+         | select(($r.engine == "pi" or $v.engine == "pi") and ($r.dispatch_enabled == true or $v.dispatch_enabled == true))
+         | {
+             profile:$vm.key, stack:($r.stack // $v.stack), ip:$v.ip, user:($v.user // "serveradmin"),
+             repository:$r.id, module:$r.module, kind:$r.kind, workspace:($r.path // $v.workspace),
+             business_memory:($r.business_memory // ""), aliases:($r.aliases // []),
+             technology:($private.repositories[$r.id] // null)
+           }
+       end
+     )]
 ' "$VMS_CONF")"
 
 gateway_status="disabled"
 contracts='[]'
 technology_semantic='[]'
-enabled_memory_count="$(jq '[to_entries[] | select(.value.engine == "pi" and .value.dispatch_enabled == true and (.value.memory.enabled // false))] | length' "$VMS_CONF")"
+enabled_memory_count="$(jq '
+  [to_entries[] as $vm
+   | select(
+       if ($vm.value.users | type) == "array" then
+         $vm.value.users[].repositories[] | select((.memory.enabled // false) and (.dispatch_enabled // true))
+       else
+         ($vm.value.memory.enabled // false) and ($vm.value.dispatch_enabled // true)
+       end
+     )] | length
+' "$VMS_CONF")"
 if [ "$enabled_memory_count" -gt 0 ]; then
   gateway_status="unavailable"
-  gateway_url="${MEMORY_GATEWAY_URL:-$(jq -r '[to_entries[] | select(.value.engine == "pi" and .value.dispatch_enabled == true and (.value.memory.enabled // false)) | .value.memory.gateway_url] | unique | if length == 1 then .[0] else "" end' "$VMS_CONF")}"
+  gateway_url="${MEMORY_GATEWAY_URL:-$(jq -r '
+    [to_entries[] as $vm
+     | if ($vm.value.users | type) == "array" then
+         $vm.value.users[].repositories[] | select(.memory.enabled // false) | .memory.gateway_url
+       else
+         select($vm.value.memory.enabled // false) | .value.memory.gateway_url
+       end] | unique | if length == 1 then .[0] else "" end
+  ' "$VMS_CONF")}"
   collector_cert="${MEMORY_GATEWAY_COLLECTOR_CERT:-$ROOT/.private/memory-gateway-pki/clients/orchestrator-analyst.crt}"
   collector_key="${MEMORY_GATEWAY_COLLECTOR_KEY:-$ROOT/.private/memory-gateway-pki/clients/orchestrator-analyst.key}"
   collector_ca="${MEMORY_GATEWAY_CA:-$ROOT/.private/memory-gateway-pki/ca.crt}"

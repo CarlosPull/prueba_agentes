@@ -29,7 +29,13 @@ else
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     profiles+=("$line")
-  done < <(jq -r 'to_entries[] | select(.value.engine == "pi" and (.value.dispatch_enabled // true)) | .key' "$VMS_CONF")
+  done < <(jq -r 'to_entries[] | select(
+    if (.value.users | type) == "array" then
+      .value.users[].repositories[] | select(.engine == "pi" and (.dispatch_enabled // true))
+    else
+      .value.engine == "pi" and (.value.dispatch_enabled // true)
+    end
+  ) | .key' "$VMS_CONF" | sort -u)
 fi
 
 [ "${#profiles[@]}" -gt 0 ] || { echo "No hay perfiles de VM para sincronizar." >&2; exit 0; }
@@ -41,8 +47,8 @@ for profile in "${profiles[@]}"; do
   [ -n "$exists" ] || { echo "Error: el perfil '$profile' no existe en vms.json." >&2; exit 1; }
 
   ip="$(jq -r --arg p "$profile" '.[$p].ip' "$VMS_CONF")"
-  user="$(jq -r --arg p "$profile" '.[$p].user' "$VMS_CONF")"
-  stack="$(jq -r --arg p "$profile" '.[$p].stack // "backend"' "$VMS_CONF")"
+  user="$(jq -r --arg p "$profile" '.[$p].users[0].name // .[$p].user' "$VMS_CONF")"
+  stack="$(jq -r --arg p "$profile" '.[$p].users[0].repositories[0].stack // .[$p].stack // "backend"' "$VMS_CONF")"
 
   [ -n "$ip" ] && [ "$ip" != "null" ] && [ -n "$user" ] && [ "$user" != "null" ] || {
     echo "⚠️ Omitiendo perfil '$profile': falta IP o usuario en vms.json." >&2

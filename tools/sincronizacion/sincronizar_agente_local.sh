@@ -11,7 +11,7 @@ if [ -z "$VM_PROFILE" ]; then
   echo "Uso: ./tools/sincronizacion/sincronizar_agente_local.sh <perfil-vm> [--silencioso]" >&2
   exit 1
 fi
-if [[ ! "$VM_PROFILE" =~ ^[a-z0-9-]+$ ]]; then
+if [[ ! "$VM_PROFILE" =~ ^[A-Za-z0-9-]+$ ]]; then
   echo "Error: perfil de VM no válido." >&2
   exit 1
 fi

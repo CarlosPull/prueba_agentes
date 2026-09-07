@@ -13,7 +13,7 @@ if [ -z "$VM_PROFILE" ]; then
   exit 1
 fi
 
-if [[ ! "$VM_PROFILE" =~ ^[a-z0-9-]+$ ]]; then
+if [[ ! "$VM_PROFILE" =~ ^[A-Za-z0-9-]+$ ]]; then
   echo "Error: el perfil de VM solo puede contener letras minúsculas, números y guiones." >&2
   exit 1
 fi

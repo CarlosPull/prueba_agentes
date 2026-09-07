@@ -8,11 +8,11 @@ PROFILE="${1:-}"
 CONFIRMATION="${2:-}"
 [ -n "$PROFILE" ] || { echo "Uso: ./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza" >&2; exit 1; }
 [ "$CONFIRMATION" = "--confirmar-limpieza" ] || { echo "Error: falta --confirmar-limpieza." >&2; exit 1; }
-[[ "$PROFILE" =~ ^[a-z0-9-]+$ ]] || { echo "Error: perfil inválido." >&2; exit 1; }
+[[ "$PROFILE" =~ ^[A-Za-z0-9-]+$ ]] || { echo "Error: perfil inválido." >&2; exit 1; }
 
 ip="$(jq -er --arg profile "$PROFILE" '.[$profile].ip' "$VMS_CONF")" || { echo "Error: perfil inexistente." >&2; exit 1; }
-user="$(jq -er --arg profile "$PROFILE" '.[$profile].user' "$VMS_CONF")"
-remote_agent="$(jq -er --arg profile "$PROFILE" '.[$profile].remote_agent' "$VMS_CONF")"
+user="$(jq -er --arg profile "$PROFILE" '.[$profile].users[0].name // .[$profile].user' "$VMS_CONF")"
+remote_agent="$(jq -er --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].remote_agent // .[$profile].remote_agent' "$VMS_CONF")"
 [[ "$user" =~ ^[A-Za-z0-9._-]+$ ]] && [[ "$ip" =~ ^[A-Za-z0-9.:-]+$ ]] || { echo "Error: destino SSH inseguro." >&2; exit 1; }
 [[ "$remote_agent" =~ ^/home/$user/agentes/[A-Za-z0-9._/-]+$ ]] || { echo "Error: ruta de agente insegura." >&2; exit 1; }
 
@@ -21,7 +21,7 @@ while IFS= read -r path; do
   [ -n "$path" ] || continue
   [[ "$path" =~ ^/home/$user/[A-Za-z0-9._/-]+$ ]] || { echo "Error: ruta administrada insegura: $path" >&2; exit 1; }
   paths+=("$path")
-done < <(jq -r --arg profile "$PROFILE" '([.[$profile].workspace] + [(.[$profile].repositories // [])[].path]) | unique[]' "$VMS_CONF")
+done < <(jq -r --arg profile "$PROFILE" '([.[$profile].workspace] + [(.[$profile].users[].repositories[]?.path // .[$profile].repositories[]?.path)]) | select(. != null) | unique[]' "$VMS_CONF")
 [ "${#paths[@]}" -gt 0 ] || { echo "Error: el perfil no declara workspaces." >&2; exit 1; }
 
 SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes)
@@ -48,7 +48,13 @@ echo "  Se conservaron Ubuntu, PHP, Node, Pi y la autenticación de Pi."
 
 config_tmp="$(mktemp "$VMS_CONF.limpieza.XXXXXX")"
 trap 'rm -f "$config_tmp"' EXIT INT TERM
-jq --arg profile "$PROFILE" '.[$profile].dispatch_enabled = false' "$VMS_CONF" > "$config_tmp"
+jq --arg profile "$PROFILE" '
+  if (.[$profile].users | type) == "array" then
+    .[$profile].users |= map(.repositories |= map(.dispatch_enabled = false))
+  else
+    .[$profile].dispatch_enabled = false
+  end
+' "$VMS_CONF" > "$config_tmp"
 chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"
 mv "$config_tmp" "$VMS_CONF"
 trap - EXIT INT TERM

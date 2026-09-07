@@ -36,16 +36,16 @@ done
 
 command -v jq >/dev/null 2>&1 || { echo "Error: jq es obligatorio." >&2; exit 1; }
 
-user="$(jq -er --arg profile "$PROFILE" '.[$profile].user' "$VMS_CONF")" || { echo "Error: perfil '$PROFILE' inexistente." >&2; exit 1; }
+user="$(jq -er --arg profile "$PROFILE" '.[$profile].users[0].name // .[$profile].user // empty' "$VMS_CONF")" || { echo "Error: perfil '$PROFILE' inexistente." >&2; exit 1; }
 ip="$(jq -er --arg profile "$PROFILE" '.[$profile].ip' "$VMS_CONF")"
-stack="$(jq -er --arg profile "$PROFILE" '.[$profile].stack' "$VMS_CONF")"
+stack="$(jq -er --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].stack // .[$profile].stack // empty' "$VMS_CONF")"
 [[ "$user" =~ ^[A-Za-z0-9._-]+$ ]] && [[ "$ip" =~ ^[A-Za-z0-9.:-]+$ ]] || { echo "Error: usuario o IP inseguros en '$PROFILE'." >&2; exit 1; }
 [[ "$REMOTE_PATH" =~ ^/home/$user/[A-Za-z0-9._/-]+$ ]] || { echo "Error: la ruta remota debe permanecer dentro de /home/$user/." >&2; exit 1; }
 if [ "$stack" = "frontend" ] && [ "$KIND" != "frontend" ]; then
   echo "Error: una VM frontend sólo admite repositorios de tipo frontend." >&2; exit 1
 fi
 jq -e --arg profile "$PROFILE" --arg repository "$REPOSITORY" \
-  'all((.[$profile].repositories // [])[]; .id != $repository)' "$VMS_CONF" >/dev/null || {
+  'all(((.[$profile].users[].repositories // .[$profile].repositories) // [])[]; .id != $repository)' "$VMS_CONF" >/dev/null || {
     if [ "$REFRESCAR_TECH" -eq 0 ]; then
       echo "Error: '$REPOSITORY' ya está registrado en '$PROFILE'. Usa --refrescar-tecnologias para actualizar manifiestos." >&2; exit 1;
     fi
@@ -97,9 +97,18 @@ aliases_json="$(printf '%s' "$ALIASES_CSV" | jq -R 'split(",") | map(gsub("^[[:s
 config_tmp="$(mktemp "$VMS_CONF.repositorio.XXXXXX")"
 jq --arg profile "$PROFILE" --arg id "$REPOSITORY" --arg module "$MODULE" --arg kind "$KIND" \
   --arg path "$REMOTE_PATH" --arg business_memory "$memory_path" --argjson aliases "$aliases_json" '
-  .[$profile].repositories = ((.[$profile].repositories // []) + [{
-    id:$id,module:$module,kind:$kind,path:$path,business_memory:$business_memory,aliases:$aliases
-  }])
+  if (.[$profile].users | type) == "array" and (.[$profile].users | length) > 0 then
+    .[$profile].users[0].repositories = ((.[$profile].users[0].repositories // []) + [{
+      id:$id,module:$module,kind:$kind,path:$path,business_memory:$business_memory,aliases:$aliases,
+      stack: (.[$profile].users[0].repositories[0].stack // "backend"),
+      engine: (.[$profile].users[0].repositories[0].engine // "pi"),
+      dispatch_enabled: (.[$profile].users[0].repositories[0].dispatch_enabled // true)
+    }])
+  else
+    .[$profile].repositories = ((.[$profile].repositories // []) + [{
+      id:$id,module:$module,kind:$kind,path:$path,business_memory:$business_memory,aliases:$aliases
+    }])
+  end
 ' "$VMS_CONF" > "$config_tmp"
 [ -z "$technology_tmp" ] || mv "$technology_tmp" "$PRIVATE_TECH_MEMORY"
 mv "$config_tmp" "$VMS_CONF"

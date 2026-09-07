@@ -45,7 +45,7 @@ VALIDAR_URL_GIT() {
   }
 }
 
-[[ "$VM_PROFILE" =~ ^[a-z0-9-]+$ ]] || { echo "Error: perfil no válido." >&2; exit 1; }
+[[ "$VM_PROFILE" =~ ^[A-Za-z0-9-]+$ ]] || { echo "Error: perfil no válido." >&2; exit 1; }
 [ "$STACK" = "backend" ] || [ "$STACK" = "frontend" ] || { echo "Error: stack no soportado." >&2; exit 1; }
 [ "$PROJECT_KIND" = "core" ] || [ "$PROJECT_KIND" = "module" ] || [ "$PROJECT_KIND" = "frontend" ] || { echo "Error: tipo de repositorio no soportado." >&2; exit 1; }
 [ "$STACK" != "frontend" ] || [ "$PROJECT_KIND" = "frontend" ] || { echo "Error: una VM frontend requiere kind=frontend." >&2; exit 1; }

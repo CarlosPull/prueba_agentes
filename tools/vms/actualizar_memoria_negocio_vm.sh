@@ -37,7 +37,7 @@ if [ -z "$PROFILE" ]; then
   profiles=()
   while IFS= read -r p; do
     [ -n "$p" ] && profiles+=("$p")
-  done < <(jq -r 'to_entries | map(select(.value.repositories and (.value.repositories | length) > 0 and (.value.dispatch_enabled != false))) | .[].key' "$VMS_CONF")
+  done < <(jq -r 'to_entries | map(select((.value.users and (.value.users | length) > 0) or (.value.repositories and (.value.repositories | length) > 0))) | .[].key' "$VMS_CONF")
 
   if [ "${#profiles[@]}" -eq 0 ]; then
     echo "Error: No se encontraron perfiles con repositorios configurados en vms.json." >&2
@@ -48,7 +48,7 @@ if [ -z "$PROFILE" ]; then
   for i in "${!profiles[@]}"; do
     p="${profiles[$i]}"
     ip="$(jq -r --arg p "$p" '.[$p].ip // "sin IP"' "$VMS_CONF")"
-    repos_str="$(jq -r --arg p "$p" '.[$p].repositories | map(.id) | join(", ")' "$VMS_CONF")"
+    repos_str="$(jq -r --arg p "$p" '([.[$p].users[].repositories[].id] // (.[$p].repositories | map(.id))) | join(", ")' "$VMS_CONF")"
     printf "%2d) %-22s (IP: %s) -> Repos: [%s]\n" "$((i+1))" "$p" "$ip" "$repos_str"
   done
 
@@ -70,7 +70,7 @@ if ! jq -e --arg p "$PROFILE" '.[$p]' "$VMS_CONF" >/dev/null 2>&1; then
 fi
 
 # 2. Selección de Repositorio dentro del Perfil
-repos_json="$(jq -r --arg p "$PROFILE" '.[$p].repositories // []' "$VMS_CONF")"
+repos_json="$(jq -c --arg p "$PROFILE" '[.[$p].users[].repositories[]] // .[$p].repositories // []' "$VMS_CONF")"
 repo_count="$(jq -r 'length' <<< "$repos_json")"
 
 if [ "$repo_count" -eq 0 ]; then
@@ -131,7 +131,7 @@ if [[ ! "$business_memory" =~ ^/home/[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+\.md$ ]]; t
 fi
 
 ip="$(jq -r --arg p "$PROFILE" '.[$p].ip // ""' "$VMS_CONF")"
-user="$(jq -r --arg p "$PROFILE" '.[$p].user // ""' "$VMS_CONF")"
+user="$(jq -r --arg p "$PROFILE" '.[$p].users[0].name // .[$p].user // ""' "$VMS_CONF")"
 
 if [ -z "$ip" ] || [ -z "$user" ]; then
   echo "Error: El perfil '$PROFILE' no especifica usuario o IP en vms.json." >&2

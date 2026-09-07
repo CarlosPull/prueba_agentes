@@ -17,8 +17,8 @@ USO() {
 }
 
 [ -n "$VM_PROFILE" ] || { USO; exit 1; }
-[[ "$VM_PROFILE" =~ ^[a-z0-9-]+$ ]] || {
-  echo "Error: el perfil de VM solo puede contener letras minúsculas, números y guiones." >&2
+[[ "$VM_PROFILE" =~ ^[A-Za-z0-9-]+$ ]] || {
+  echo "Error: el perfil de VM solo puede contener letras, números y guiones." >&2
   exit 1
 }
 if [ -n "$OPCION" ] && [ "$OPCION" != "--con-sudo-interactivo" ] && [ "$OPCION" != "--solo-verificar" ] && [ "$OPCION" != "--solo-configurar" ]; then
@@ -321,14 +321,11 @@ CONFIGURAR_PERFIL_NUEVO() {
     --arg module "$module_nuevo" --arg repository_kind "$repository_kind_nuevo" --argjson aliases "$aliases_json" \
     --arg memory_enabled "$memory_enabled_nuevo" --arg memory_gateway_url "$memory_gateway_url_nuevo" \
     --arg memory_core_id "$memory_core_id_nuevo" --arg memory_tenant_id "$memory_tenant_id_nuevo" '
-      .[$profile] = {
-        ip:$ip, user:$user, workspace:$workspace, stack:$stack,
-        repositories:[{
-          id:$repository_id, module:$module, kind:$repository_kind, path:$workspace,
-          business_memory:("/home/" + $user + "/.local/share/prueba-agentes/business/" + $repository_id + ".md"),
-          aliases:$aliases
-        }],
-        engine:"pi", dispatch_enabled:false,
+      {
+        id:$repository_id, module:$module, kind:$repository_kind, path:$workspace,
+        business_memory:("/home/" + $user + "/.local/share/prueba-agentes/business/" + $repository_id + ".md"),
+        aliases:$aliases, stack:$stack, engine:"pi", dispatch_enabled:false,
+        can_read:true, can_write:true,
         pi_harness:("/home/" + $user + "/.local/bin/pi-harness"),
         pi_provider:"openai-codex", pi_model:"gpt-5.4-mini",
         memory:{
@@ -346,16 +343,27 @@ CONFIGURAR_PERFIL_NUEVO() {
         node_version:$node_version, pi_version:$pi_version,
         install_dependencies:($repository_kind != "module"), local_agent:$local_agent,
         remote_agent:$remote_agent
-      }
-      | if $source_mode == "local" then .[$profile].project_local_path = $project_local_path
-        else .[$profile].project_git_url = $project_git_url | .[$profile].project_git_branch = $project_git_branch end
-      | if $stack == "backend" then .[$profile].php_version = $php_version | .[$profile].php_min_version = $php_min_version else . end
-      | if $agent_update_mode == "git" then
-          .[$profile].git_url = $git_url |
-          .[$profile].git_branch = $git_branch |
-          .[$profile].git_agent_path = $git_agent_path |
-          .[$profile].agent_poll_seconds = ($agent_poll_seconds | tonumber)
-        else . end
+      } as $repo_obj
+      | (if $source_mode == "local" then $repo_obj + {project_local_path:$project_local_path}
+         else $repo_obj + {project_git_url:$project_git_url, project_git_branch:$project_git_branch} end) as $repo_obj
+      | (if $stack == "backend" then $repo_obj + {php_version:$php_version, php_min_version:$php_min_version} else $repo_obj end) as $repo_obj
+      | (if $agent_update_mode == "git" then
+           $repo_obj + {
+             git_url:$git_url,
+             git_branch:$git_branch,
+             git_agent_path:$git_agent_path,
+             agent_poll_seconds:($agent_poll_seconds | tonumber)
+           }
+         else $repo_obj end) as $repo_obj
+      | .[$profile] = {
+          ip: $ip,
+          users: [
+            {
+              name: $user,
+              repositories: [$repo_obj]
+            }
+          ]
+        }
     ' "$VMS_CONF" > "$config_tmp"
 
   chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"
@@ -387,9 +395,21 @@ done
 
 GET_VM_FIELD() {
   local field="$1"
-  jq -r --arg profile "$VM_PROFILE" --arg field "$field" \
-    'if (.[$profile] | type) == "object" and (.[$profile] | has($field)) then .[$profile][$field] else empty end' \
-    "$VMS_CONF" 2>/dev/null || true
+  jq -r --arg profile "$VM_PROFILE" --arg field "$field" '
+    if (.[$profile] | type) == "object" then
+      if $field == "ip" then
+        .[$profile].ip // empty
+      elif $field == "user" then
+        .[$profile].users[0].name // .[$profile].user // empty
+      elif $field == "workspace" then
+        .[$profile].users[0].repositories[0].path // .[$profile].users[0].repositories[0].workspace // .[$profile].workspace // empty
+      else
+        .[$profile].users[0].repositories[0][$field] // .[$profile][$field] // empty
+      end
+    else
+      empty
+    end
+  ' "$VMS_CONF" 2>/dev/null || true
 }
 
 ip="$(GET_VM_FIELD ip)"
@@ -409,7 +429,7 @@ pi_version="$(GET_VM_FIELD pi_version)"
 php_version="$(GET_VM_FIELD php_version)"
 php_min_version="$(GET_VM_FIELD php_min_version)"
 install_dependencies="$(GET_VM_FIELD install_dependencies)"
-project_kind="$(jq -r --arg profile "$VM_PROFILE" '.[$profile].repositories[0].kind // empty' "$VMS_CONF")"
+project_kind="$(jq -r --arg profile "$VM_PROFILE" '.[$profile].users[0].repositories[0].kind // .[$profile].repositories[0].kind // empty' "$VMS_CONF")"
 local_agent="$(GET_VM_FIELD local_agent)"
 remote_agent="$(GET_VM_FIELD remote_agent)"
 agent_git_url="$(GET_VM_FIELD git_url)"
@@ -595,7 +615,7 @@ ENVIAR_CONFIG | ssh "${SSH_OPTS[@]}" "$target" "'$remote_bootstrap' verificar"
 "$ROOT/tools/vms/inicializar_memorias_negocio_vm.sh" "$VM_PROFILE"
 [ "$agent_update_mode" != "local" ] || "$ROOT/tools/sincronizacion/instalar_monitor_local.sh"
 
-if [ "$(jq -r --arg p "$VM_PROFILE" '.[$p].memory.enabled // false' "$VMS_CONF")" = "true" ]; then
+if [ "$(jq -r --arg p "$VM_PROFILE" '.[$p].users[0].repositories[0].memory.enabled // .[$p].memory.enabled // false' "$VMS_CONF")" = "true" ]; then
   "$ROOT/tools/vms/sincronizar_mtls_vm.sh" "$VM_PROFILE" || true
 fi
 "$ROOT/tools/vms/configurar_git_vms.sh" "$VM_PROFILE" || true
@@ -605,11 +625,23 @@ fi
 # coexistir varias VMs backend; el analista elige perfil y repositorio.
 config_tmp="$(mktemp "$VMS_CONF.activar.XXXXXX")"
 jq --arg profile "$VM_PROFILE" '
-  .[$profile].engine = "pi"
-  | .[$profile].dispatch_enabled = true
-  | .[$profile].pi_harness = ("/home/" + .[$profile].user + "/.local/bin/pi-harness")
-  | .[$profile].pi_provider = (.[$profile].pi_provider // "openai-codex")
-  | .[$profile].pi_model = (.[$profile].pi_model // "gpt-5.4-mini")
+  if (.[$profile].users | type) == "array" and (.[$profile].users | length) > 0 then
+    .[$profile].users |= map(
+      .repositories |= map(
+        .engine = "pi"
+        | .dispatch_enabled = true
+        | .pi_harness = (.pi_harness // ("/home/" + (..name? // "serveradmin") + "/.local/bin/pi-harness"))
+        | .pi_provider = (.pi_provider // "openai-codex")
+        | .pi_model = (.pi_model // "gpt-5.4-mini")
+      )
+    )
+  else
+    .[$profile].engine = "pi"
+    | .[$profile].dispatch_enabled = true
+    | .[$profile].pi_harness = ("/home/" + (.[$profile].user // "serveradmin") + "/.local/bin/pi-harness")
+    | .[$profile].pi_provider = (.[$profile].pi_provider // "openai-codex")
+    | .[$profile].pi_model = (.[$profile].pi_model // "gpt-5.4-mini")
+  end
 ' "$VMS_CONF" > "$config_tmp"
 chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"
 mv "$config_tmp" "$VMS_CONF"

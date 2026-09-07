@@ -49,7 +49,13 @@ if [ -n "$TARGET_PROFILE" ]; then
 else
   while IFS= read -r profile; do
     [ -n "$profile" ] && perfiles+=("$profile")
-  done < <(jq -r 'to_entries[] | select(.value.dispatch_enabled == true or .value.engine == "pi") | .key' "$VMS_CONF")
+  done < <(jq -r 'to_entries[] | select(
+    if (.value.users | type) == "array" then
+      .value.users[].repositories[] | select(.dispatch_enabled == true or .engine == "pi")
+    else
+      .value.dispatch_enabled == true or .value.engine == "pi"
+    end
+  ) | .key' "$VMS_CONF" | sort -u)
 fi
 
 echo "🚀 Configurando repositorio Git e identidad en ${#perfiles[@]} VM(s)..."
@@ -63,9 +69,9 @@ priv_key="$(cat "$KEY_FILE")"
 
 for profile in "${perfiles[@]}"; do
   ip="$(jq -r --arg p "$profile" '.[$p].ip // ""' "$VMS_CONF")"
-  user="$(jq -r --arg p "$profile" '.[$p].user // ""' "$VMS_CONF")"
-  workspace="$(jq -r --arg p "$profile" '.[$p].workspace // ""' "$VMS_CONF")"
-  local_path="$(jq -r --arg p "$profile" '.[$p].project_local_path // ""' "$VMS_CONF")"
+  user="$(jq -r --arg p "$profile" '.[$p].users[0].name // .[$p].user // ""' "$VMS_CONF")"
+  workspace="$(jq -r --arg p "$profile" '.[$p].users[0].repositories[0].path // .[$p].workspace // ""' "$VMS_CONF")"
+  local_path="$(jq -r --arg p "$profile" '.[$p].users[0].repositories[0].project_local_path // .[$p].project_local_path // ""' "$VMS_CONF")"
 
   if [ -z "$ip" ] || [ -z "$user" ]; then
     echo "⚠️ Omitiendo '$profile': IP o usuario no definidos."
@@ -82,7 +88,7 @@ for profile in "${perfiles[@]}"; do
   fi
 
   if [ -z "$real_git_url" ]; then
-    real_git_url="$(jq -r --arg p "$profile" '.[$p].project_git_url // .[$p].repositories[0].git_url // ""' "$VMS_CONF")"
+    real_git_url="$(jq -r --arg p "$profile" '.[$p].users[0].repositories[0].project_git_url // .[$p].project_git_url // .[$p].users[0].repositories[0].git_url // .[$p].repositories[0].git_url // ""' "$VMS_CONF")"
   fi
 
   if [ -z "$real_git_url" ]; then
