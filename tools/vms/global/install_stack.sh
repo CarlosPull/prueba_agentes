@@ -7,7 +7,7 @@
 # la guarda).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 PAQUETES_BACKEND_LOCAL="$ROOT/tools/remotos/instalar_paquetes_backend.sh"
 INSTALL_STACK_LOCAL="$ROOT/tools/remotos/install_stack.sh"
@@ -21,7 +21,7 @@ SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=no)
 [ ! -f "$HOME/.ssh/id_ed25519" ] || SSH_OPTS+=(-i "$HOME/.ssh/id_ed25519")
 
 USO() {
-  echo "Uso: ./tools/vms/install_stack.sh" >&2
+  echo "Uso: ./tools/vms/global/install_stack.sh" >&2
   echo "Instala PHP+Composer, Node+npm, pi y Podman de forma global en cada" >&2
   echo "VM de $VMS_CONF. Por cada VM pide el usuario con sudo; la contraseña" >&2
   echo "la piden SSH/sudo directamente en la terminal (nunca se guarda aquí)." >&2
