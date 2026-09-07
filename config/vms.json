@@ -18,14 +18,16 @@
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "sincronizacion_agentes_git",
     "git_agent_path": "skills/dev-back",
-    "agent_poll_seconds": 30
+    "agent_poll_seconds": 30,
+    "permissions": []
   },
   "qa": {
     "ip": "192.168.50.63",
     "user": "serveradmin",
     "workspace": "/home/serveradmin/qa-dev",
     "engine": "legacy-disabled",
-    "dispatch_enabled": false
+    "dispatch_enabled": false,
+    "permissions": []
   },
   "backend-pi-prueba": {
     "ip": "192.168.50.231",
@@ -41,7 +43,8 @@
         "aliases": [
           "backend prueba",
           "laravel prueba"
-        ]
+        ],
+        "permissions": []
       }
     ],
     "stack": "backend",
@@ -74,7 +77,8 @@
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "implementacion_pi",
     "git_agent_path": "skills/dev-back",
-    "agent_poll_seconds": 30
+    "agent_poll_seconds": 30,
+    "permissions": []
   },
   "frontend": {
     "ip": "192.168.50.30",
@@ -94,12 +98,13 @@
           "panel",
           "componente",
           "pantalla"
-        ]
+        ],
+        "permissions": []
       }
     ],
     "stack": "frontend",
     "engine": "pi",
-    "dispatch_enabled": true,
+    "dispatch_enabled": false,
     "pi_harness": "/home/carlos/.local/bin/pi-harness",
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
@@ -125,7 +130,8 @@
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "implementacion_pi",
     "git_agent_path": "skills/dev-front",
-    "agent_poll_seconds": 30
+    "agent_poll_seconds": 30,
+    "permissions": []
   },
   "backend": {
     "ip": "192.168.50.193",
@@ -145,7 +151,8 @@
           "usuarios",
           "pagos",
           "ordenes"
-        ]
+        ],
+        "permissions": []
       }
     ],
     "stack": "backend",
@@ -178,7 +185,8 @@
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "implementacion_pi",
     "git_agent_path": "skills/dev-back",
-    "agent_poll_seconds": 30
+    "agent_poll_seconds": 30,
+    "permissions": []
   },
   "backend-core": {
     "ip": "192.168.50.193",
@@ -198,6 +206,14 @@
           "core",
           "monolito",
           "usuarios"
+        ],
+        "permissions": [
+          {
+            "user_email": "felix@pull.srl",
+            "user_name": "Felix",
+            "can_read": true,
+            "can_write": true
+          }
         ]
       }
     ],
@@ -230,7 +246,15 @@
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "implementacion_pi",
     "git_agent_path": "skills/dev-back",
-    "agent_poll_seconds": 30
+    "agent_poll_seconds": 30,
+    "permissions": [
+      {
+        "user_email": "felix@pull.srl",
+        "user_name": "Felix",
+        "can_read": true,
+        "can_write": true
+      }
+    ]
   },
   "backend-comments": {
     "ip": "192.168.50.40",
@@ -248,6 +272,14 @@
           "comentario",
           "comentarios",
           "comments"
+        ],
+        "permissions": [
+          {
+            "user_email": "felix@pull.srl",
+            "user_name": "Felix",
+            "can_read": true,
+            "can_write": true
+          }
         ]
       }
     ],
@@ -280,7 +312,15 @@
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "implementacion_pi",
     "git_agent_path": "skills/dev-back",
-    "agent_poll_seconds": 30
+    "agent_poll_seconds": 30,
+    "permissions": [
+      {
+        "user_email": "felix@pull.srl",
+        "user_name": "Felix",
+        "can_read": true,
+        "can_write": true
+      }
+    ]
   },
   "backend-posts": {
     "ip": "192.168.50.231",
@@ -298,6 +338,14 @@
           "posts",
           "publicacion",
           "publicaciones"
+        ],
+        "permissions": [
+          {
+            "user_email": "felix@pull.srl",
+            "user_name": "Felix",
+            "can_read": true,
+            "can_write": true
+          }
         ]
       }
     ],
@@ -330,7 +378,15 @@
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "implementacion_pi",
     "git_agent_path": "skills/dev-back",
-    "agent_poll_seconds": 30
+    "agent_poll_seconds": 30,
+    "permissions": [
+      {
+        "user_email": "felix@pull.srl",
+        "user_name": "Felix",
+        "can_read": true,
+        "can_write": true
+      }
+    ]
   },
   "backend-prueba-config": {
     "ip": "192.168.50.64",
@@ -346,11 +402,12 @@
         "business_memory": "/home/pruebaconfig/.local/share/prueba-agentes/business/laravel-dev.md",
         "aliases": [
           "laravel-dev"
-        ]
+        ],
+        "permissions": []
       }
     ],
     "engine": "pi",
-    "dispatch_enabled": true,
+    "dispatch_enabled": false,
     "pi_harness": "/home/pruebaconfig/.local/bin/pi-harness",
     "pi_provider": "openai-codex",
     "pi_model": "gpt-5.4-mini",
@@ -379,6 +436,7 @@
     "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
     "git_branch": "mejoras_flujo",
     "git_agent_path": "skills/dev-back",
-    "agent_poll_seconds": 30
+    "agent_poll_seconds": 30,
+    "permissions": []
   }
 }
