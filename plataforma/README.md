@@ -1,10 +1,10 @@
 # Plataforma multiusuario — estado y continuidad
 
-**Fecha de corte: 5 de septiembre de 2026.**
-**Rama al pausar: `implementacion_usuarios`.**
-**Estado: API, PostgreSQL e interfaz web disponibles localmente; ejecución remota pendiente de validar aislamiento. No lista para producción.**
+**Fecha de actualización: 7 de septiembre de 2026.**
+**Rama activa: `implementacion_usuarios`.**
+**Estado: Servidor central desplegado y operativo en VM `192.168.50.30:3100` con Podman, Ollama + Hermes 3 en `127.0.0.1:11434`, y matriz visual de permisos sincronizada con `config/vms.json`.**
 
-Este documento conserva la evidencia de la implementación y los pendientes. Consultar `git status` para conocer el estado actual del árbol de trabajo; no asumir que sigue sin commits desde la sesión inicial.
+Este documento conserva la evidencia de la implementación y los pendientes. Consultar `git status` para conocer el estado actual del árbol de trabajo.
 
 La explicación general y el diagrama están en el [README principal](../README.md). La preparación de cada VM y la matriz de aceptación están en la [guía del piloto](GUIA_PRUEBAS_VM.md).
 

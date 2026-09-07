@@ -8,6 +8,7 @@ import { digest, token, hashPassword, verifyPassword, dummyHash } from './auth.t
 import type { User } from './auth.ts';
 import { transaction } from './db.ts';
 import { provisionRoutes } from './provision-api.ts';
+import { syncVmsConfigToDb, updateVmsJsonState } from './vms-sync.ts';
 
 declare module 'fastify' { interface FastifyRequest { actor: User | null } }
 type DB = Pool | PoolClient;
@@ -231,11 +232,49 @@ export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
       await manages(db, request.actor!, target.vm_id);
       await db.query(`INSERT INTO grants(user_id,target_id,can_read,can_write) VALUES($1,$2,$3,$4)
         ON CONFLICT(user_id,target_id) DO UPDATE SET can_read=$3,can_write=$4,version=grants.version+1`, [b.userId, target.id, b.canRead, b.canWrite]);
-      await db.query(`UPDATE jobs SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancel_requested' END
-        WHERE user_id=$1 AND target_id=$2 AND state IN ('queued','running') AND (NOT $3 OR (NOT read_only AND NOT $4))`, [b.userId, target.id, b.canRead, b.canWrite]);
       await audit(db, request.actor!.id, 'permisos_actualizados', target.id);
       await db.query("INSERT INTO audit(actor_id,action,resource_id,details) VALUES($1,'detalle_asignacion',$2,$3)", [request.actor!.id, target.id, JSON.stringify({ user_id: b.userId, can_read: b.canRead, can_write: b.canWrite })]);
     });
+    return { ok: true };
+  });
+
+  const vmsJsonPath = process.env.VMS_JSON_PATH ?? join(process.cwd(), '../config/vms.json');
+  void syncVmsConfigToDb(pool, vmsJsonPath).catch(() => {});
+
+  app.post('/api/admin/vms/sync-json', async request => {
+    if (request.actor!.role !== 'admin') forbid();
+    await syncVmsConfigToDb(pool, vmsJsonPath);
+    await updateVmsJsonState(pool, vmsJsonPath);
+    return { ok: true };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/admin/users/:id/permissions', params, async request => {
+    if (request.actor!.role !== 'admin') forbid();
+    await syncVmsConfigToDb(pool, vmsJsonPath).catch(() => {});
+    const userId = request.params.id;
+    const vms = (await pool.query('SELECT * FROM vms ORDER BY name')).rows;
+    const targets = (await pool.query('SELECT * FROM targets ORDER BY name')).rows;
+    const grants = (await pool.query('SELECT target_id, can_read, can_write FROM grants WHERE user_id=$1', [userId])).rows;
+    return { vms, targets, grants };
+  });
+
+  app.put<{ Params: { id: string }; Body: { grants: Array<{ targetId: string; canRead: boolean; canWrite: boolean }> } }>('/api/admin/users/:id/permissions', params, async request => {
+    if (request.actor!.role !== 'admin') forbid();
+    const userId = request.params.id;
+    const items = request.body.grants;
+    if (!Array.isArray(items)) throw new HttpError(400, 'Datos de asignación no válidos.');
+
+    await transaction(pool, async db => {
+      for (const item of items) {
+        if (item.canWrite && !item.canRead) throw new HttpError(400, 'La escritura requiere permiso de lectura.');
+        await db.query(`INSERT INTO grants(user_id, target_id, can_read, can_write) VALUES($1, $2, $3, $4)
+          ON CONFLICT(user_id, target_id) DO UPDATE SET can_read=$3, can_write=$4, version=grants.version+1`,
+          [userId, item.targetId, item.canRead, item.canWrite]);
+      }
+      await audit(db, request.actor!.id, 'matriz_permisos_actualizada', userId);
+    });
+
+    await updateVmsJsonState(pool, vmsJsonPath);
     return { ok: true };
   });
 

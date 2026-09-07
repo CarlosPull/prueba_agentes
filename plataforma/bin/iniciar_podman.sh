@@ -57,6 +57,7 @@ if podman container exists orquestador-api; then previous="$(podman inspect --fo
 start_api() {
   podman run --replace -d --name orquestador-api --pod orquestador-plataforma --env-file "$private/api.env" \
     --volume orquestador-public:/etc/orquestador:ro \
+    --volume "$ROOT/config:/srv/orquestador/config:rw" \
     --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=64m \
     "$1" >/dev/null
 }

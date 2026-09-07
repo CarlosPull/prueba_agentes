@@ -18,6 +18,7 @@ COPY --from=build /srv/orquestador/plataforma/public ./public
 COPY plataforma/package.json ./
 COPY plataforma/migrations ./migrations
 COPY plataforma/bin ./bin
+COPY config /srv/orquestador/config
 COPY tools /srv/orquestador/tools
 COPY pi-harness /srv/orquestador/pi-harness
 COPY skills /srv/orquestador/skills

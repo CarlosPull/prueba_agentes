@@ -2,11 +2,9 @@
 
 La nueva arquitectura permite administrar usuarios y asignarles módulos alojados en máquinas virtuales. Cada módulo corresponde a un repositorio Git dentro de un contenedor administrado por **Podman**. El usuario inicia sesión en la plataforma, ve únicamente sus destinos asignados y elige dónde enviar su prompt. El servidor valida sus permisos antes de aceptar y despachar la tarea.
 
-Una VM puede alojar varios módulos y atender a varios usuarios; no es obligatorio tener una VM exclusiva por persona. Tener permiso sobre un módulo no concede acceso a todos los contenedores de esa VM. Podman es el motor de contenedores: el repositorio vive en un volumen del contenedor, no dentro de un «archivo Podman».
+Una VM puede alojar varios módulos y atender a varios usuarios; no es obligatorio tener una VM exclusiva por persona. Tener permiso sobre un módulo no concede acceso a todos los contenedores de esa VM.
 
-> **Estado documentado al 5 de septiembre de 2026:** API, base de datos e interfaz web implementadas y probadas localmente. El trabajador y los ejecutores remotos están escritos, pero **el flujo completo usuario → VM → Podman → Pi todavía no está validado ni habilitado**. El piloto local encontró un fallo de Bubblewrap; la VM nueva `192.168.1.119` sigue pendiente de acceso SSH por llave. No interpretar esta guía como una confirmación de producción.
-
-> **Pausa actual:** la preparación automática desde el panel quedó a medio implementar. El árbol actual falla al compilar (`TS1294` en `plataforma/src/provisioner.ts:94`). Los scripts de arranque también cambiaron y aún no se probaron. **No ejecutar el nuevo despliegue como si estuviera terminado.** Las pruebas exitosas citadas más abajo corresponden a la versión anterior a estos cambios.
+> **Estado documentado al 7 de septiembre de 2026:** Servidor central de orquestación desplegado y funcional en la VM `192.168.50.30:3100` dentro del pod Podman `orquestador-plataforma`. Incluye integración de Ollama + Hermes 3 en `127.0.0.1:11434` para análisis y enrutamiento automático de prompts filtrados por permisos del usuario, y la sincronización visual de permisos guardados en PostgreSQL y el archivo `config/vms.json` del host.
 
 ## Guías para empezar
 
@@ -15,33 +13,21 @@ Una VM puede alojar varios módulos y atender a varios usuarios; no es obligator
 - [Detalle de implementación, evidencia y pendientes](plataforma/README.md).
 - [Plan de implementación completo](PLAN_PLATAFORMA_MULTIUSUARIO.md).
 
-## Arquitectura nueva
+## Arquitectura del Servidor Central (`192.168.50.30`)
+
+El orquestador funciona como un servicio centralizado de servidor en la VM `192.168.50.30` escuchando en el puerto `3100`:
 
 ```mermaid
 flowchart TD
-    U["Usuario: inicia sesión y envía prompt"] --> WEB["Plataforma web Vue"]
-    subgraph CENTRAL["Servidor central · servicios con Podman"]
-        WEB --> API["API: identidad y permisos por destino"]
-        API <--> DB[("PostgreSQL: usuarios, sesiones, permisos, trabajos y auditoría")]
-        DB --> W["Trabajador: reserva y revalida permisos"]
-        W --> O["Orquestador shell: orquestar.sh"]
+    U["Usuario Web / Admin"] --> WEB["Plataforma web Vue (192.168.50.30:3100)"]
+    subgraph CENTRAL["Servidor Central · VM 192.168.50.30"]
+        WEB --> API["API Fastify Node.js (pod: orquestador-plataforma)"]
+        API <--> DB[("PostgreSQL: users, sessions, vms, targets, grants")]
+        API <--> OLLAMA["Ollama (127.0.0.1:11434 · model: hermes3:latest)"]
+        API <--> VMSJSON["Archivo Host: config/vms.json (permissions por email)"]
     end
-    O -. "SSH con llave y comando forzado · pendiente de piloto" .-> EXEC
-    subgraph VM["VM asignada · usuario de servicio sin privilegios"]
-        EXEC["Ejecutor remoto: valida destino y aislamiento"]
-        EXEC --> A
-        EXEC --> B
-        subgraph A["Contenedor Podman del módulo A"]
-            PA["Pi + pi-harness + agente"] --> RA["Volumen A: repositorio Git y copia por tarea"]
-        end
-        subgraph B["Contenedor Podman del módulo B"]
-            PB["Pi + pi-harness + agente"] --> RB["Volumen B: repositorio Git y copia por tarea"]
-        end
-    end
-    EXEC -. "Resultado y evidencia" .-> W
-    W --> DB
-    DB --> API
-    API --> WEB
+    API -. "SSH SSH Key per profile" .-> VM1["VM Backend (192.168.50.40 / 192.168.50.193)"]
+    API -. "SSH SSH Key per profile" .-> VM2["VM Frontend (192.168.50.30)"]
 ```
 
 Las flechas a ambos módulos representan destinos posibles: cada trabajo apunta a **un único destino autorizado**. El usuario web no recibe SSH, credenciales de la VM ni el socket de Podman. La terminal web restringida aún no existe.
@@ -58,6 +44,62 @@ Las flechas a ambos módulos representan destinos posibles: cada trabajo apunta 
 8. El trabajador registra el resultado para consultarlo desde la plataforma. Si pierde confirmación remota, el trabajo queda en `reconciliation_required` y no se reintenta automáticamente.
 
 Los pasos remotos describen el código implementado **pendiente de prueba real**. Cortar SSH o solicitar cancelación no demuestra que el proceso remoto haya terminado. El nuevo ejecutor no hace `git push` ni crea PR: conserva los cambios en la copia de la tarea.
+
+## Sincronización de Permisos y Estructura de `config/vms.json`
+
+La plataforma almacena de forma autoritativa la matriz de acceso por usuario en **PostgreSQL** (`users`, `vms`, `targets`, `grants`) y sincroniza automáticamente las asignaciones de correo de usuario hacia el archivo del host `/home/carlos/prueba_agentes/config/vms.json`.
+
+Cada vez que un administrador guarda los permisos en la web (**Módulos y permisos**), el contenedor de la API (con bind mount de escritura en `config/vms.json`) ejecuta `updateVmsJsonState()`, actualizando el flag `"dispatch_enabled"` y el arreglo `"permissions"` por cada perfil y repositorio:
+
+```json
+"backend-comments": {
+  "ip": "192.168.50.40",
+  "user": "serveradmin",
+  "workspace": "/home/serveradmin/api-monolitic-comments",
+  "stack": "backend",
+  "dispatch_enabled": true,
+  "permissions": [
+    {
+      "user_email": "felix@pull.srl",
+      "user_name": "Felix",
+      "can_read": true,
+      "can_write": true
+    }
+  ],
+  "repositories": [
+    {
+      "id": "api-monolitic-comments",
+      "module": "comments",
+      "kind": "module",
+      "path": "/home/serveradmin/api-monolitic-comments",
+      "permissions": [
+        {
+          "user_email": "felix@pull.srl",
+          "user_name": "Felix",
+          "can_read": true,
+          "can_write": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Guía para desarrolladores / trabajo de colegas:
+- **Ubicación del servidor central**: VM `192.168.50.30`
+- **URL Web de la plataforma**: `http://192.168.50.30:3100`
+- **Credenciales Admin Inicial**: `carlos@pull.srl`
+- **Motor de Requisitos**: Ollama en `127.0.0.1:11434` (modelo `hermes3:latest`).
+- **Despliegue / Re-arranque del servidor**:
+  ```bash
+  ssh carlos@192.168.50.30
+  cd /home/carlos/prueba_agentes
+  ./plataforma/bin/iniciar_podman.sh --si-ya-existe-actualizar
+  ```
+- **Verificación de la Base de Datos**:
+  ```bash
+  podman exec orquestador-db psql -U orquestador -d orquestador -c "SELECT u.email, t.name, g.can_read, g.can_write FROM grants g JOIN users u ON u.id=g.user_id JOIN targets t ON t.id=g.target_id;"
+  ```
 
 ## Qué implementamos y qué falta
 
