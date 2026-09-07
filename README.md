@@ -49,35 +49,36 @@ Los pasos remotos describen el código implementado **pendiente de prueba real**
 
 La plataforma almacena de forma autoritativa la matriz de acceso por usuario en **PostgreSQL** (`users`, `vms`, `targets`, `grants`) y sincroniza automáticamente las asignaciones de correo de usuario hacia el archivo del host `/home/carlos/prueba_agentes/config/vms.json`.
 
-Cada vez que un administrador guarda los permisos en la web (**Módulos y permisos**), el contenedor de la API (con bind mount de escritura en `config/vms.json`) ejecuta `updateVmsJsonState()`, actualizando el flag `"dispatch_enabled"` y el arreglo `"permissions"` por cada perfil y repositorio:
+Cada vez que un administrador guarda los permisos en la web (**Módulos y permisos**), el contenedor de la API (con bind mount de escritura en `config/vms.json`) ejecuta `updateVmsJsonState()`, estructurando las asignaciones dentro del arreglo `"users"` y asignando a cada usuario su lista de repositorios y módulos autorizados con sus banderas de lectura y escritura:
 
 ```json
-"backend-comments": {
-  "ip": "192.168.50.40",
-  "user": "serveradmin",
-  "workspace": "/home/serveradmin/api-monolitic-comments",
-  "stack": "backend",
-  "dispatch_enabled": true,
-  "permissions": [
+"backend-core": {
+  "ip": "192.168.50.193",
+  "users": [
     {
-      "user_email": "felix@pull.srl",
-      "user_name": "Felix",
-      "can_read": true,
-      "can_write": true
-    }
-  ],
-  "repositories": [
-    {
-      "id": "api-monolitic-comments",
-      "module": "comments",
-      "kind": "module",
-      "path": "/home/serveradmin/api-monolitic-comments",
-      "permissions": [
+      "name": "Felix",
+      "repositories": [
         {
-          "user_email": "felix@pull.srl",
-          "user_name": "Felix",
+          "id": "api-monolitic",
+          "module": "core",
+          "kind": "core",
+          "path": "/home/felix/api-monolitic",
+          "business_memory": "/home/felix/.local/share/prueba-agentes/business/api-monolitic.md",
+          "aliases": [
+            "api",
+            "autenticacion",
+            "core",
+            "monolito",
+            "usuarios"
+          ],
+          "stack": "backend",
+          "engine": "pi",
+          "dispatch_enabled": true,
           "can_read": true,
-          "can_write": true
+          "can_write": true,
+          "pi_harness": "/home/serveradmin/.local/bin/pi-harness",
+          "pi_provider": "openai-codex",
+          "pi_model": "gpt-5.4-mini"
         }
       ]
     }
