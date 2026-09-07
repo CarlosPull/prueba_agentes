@@ -3,14 +3,14 @@
     "ip": "192.168.50.40",
     "users": [
       {
-        "name": "serveradmin",
+        "name": "carlos",
         "repositories": [
           {
             "id": "api-monolitic-comments",
             "module": "api-monolitic-comments",
             "kind": "module",
-            "path": "/home/serveradmin/api-monolitic-comments",
-            "business_memory": "/home/serveradmin/.local/share/prueba-agentes/business/api-monolitic-comments.md",
+            "path": "/home/carlos/api-monolitic-comments",
+            "business_memory": "/home/carlos/.local/share/prueba-agentes/business/api-monolitic-comments.md",
             "aliases": [
               "comments"
             ],
@@ -19,7 +19,7 @@
             "dispatch_enabled": false,
             "can_read": true,
             "can_write": true,
-            "pi_harness": "/home/serveradmin/.local/bin/pi-harness",
+            "pi_harness": "/home/carlos/.local/bin/pi-harness",
             "pi_provider": "openai-codex",
             "pi_model": "gpt-5.4-mini",
             "memory": {
@@ -29,9 +29,9 @@
               "tenant_id": "empresa-prueba",
               "read_business": true,
               "read_company": false,
-              "tls_key": "/home/serveradmin/.config/prueba-agentes/memory-gateway/client.key",
-              "tls_cert": "/home/serveradmin/.config/prueba-agentes/memory-gateway/client.crt",
-              "tls_ca": "/home/serveradmin/.config/prueba-agentes/memory-gateway/ca.crt"
+              "tls_key": "/home/carlos/.config/prueba-agentes/memory-gateway/client.key",
+              "tls_cert": "/home/carlos/.config/prueba-agentes/memory-gateway/client.crt",
+              "tls_ca": "/home/carlos/.config/prueba-agentes/memory-gateway/ca.crt"
             },
             "source_mode": "git",
             "agent_update_mode": "git",
@@ -39,7 +39,7 @@
             "pi_version": "latest",
             "install_dependencies": false,
             "local_agent": "skills/dev-back",
-            "remote_agent": "/home/serveradmin/agentes/dev-back",
+            "remote_agent": "/home/carlos/agentes/dev-back",
             "project_git_url": "https://github.com/Felix-Pull/api-monolitic-comments.git",
             "project_git_branch": "main",
             "php_version": "8.4",
@@ -55,11 +55,111 @@
   },
   "VM2": {
     "ip": "192.168.50.193",
-    "users": []
+    "users": [
+      {
+        "name": "carlos",
+        "repositories": [
+          {
+            "id": "api-monolitic-posts",
+            "module": "api-monolitic-posts",
+            "kind": "module",
+            "path": "/home/carlos/api-monolitic-posts",
+            "business_memory": "/home/carlos/.local/share/prueba-agentes/business/api-monolitic-posts.md",
+            "aliases": [
+              "posts"
+            ],
+            "stack": "backend",
+            "engine": "pi",
+            "dispatch_enabled": false,
+            "can_read": true,
+            "can_write": true,
+            "pi_harness": "/home/carlos/.local/bin/pi-harness",
+            "pi_provider": "openai-codex",
+            "pi_model": "gpt-5.4-mini",
+            "memory": {
+              "enabled": true,
+              "gateway_url": "https://192.168.50.61:9443",
+              "core_id": "api-monolitic-posts",
+              "tenant_id": "empresa-prueba",
+              "read_business": true,
+              "read_company": false,
+              "tls_key": "/home/carlos/.config/prueba-agentes/memory-gateway/client.key",
+              "tls_cert": "/home/carlos/.config/prueba-agentes/memory-gateway/client.crt",
+              "tls_ca": "/home/carlos/.config/prueba-agentes/memory-gateway/ca.crt"
+            },
+            "source_mode": "git",
+            "agent_update_mode": "git",
+            "node_version": "24.19.0",
+            "pi_version": "latest",
+            "install_dependencies": false,
+            "local_agent": "skills/dev-back",
+            "remote_agent": "/home/carlos/agentes/dev-back",
+            "project_git_url": "https://github.com/Felix-Pull/api-monolitic-posts.git",
+            "project_git_branch": "main",
+            "php_version": "8.4",
+            "php_min_version": "8.4.1",
+            "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
+            "git_branch": "implementacion_usuarios",
+            "git_agent_path": "skills/dev-back",
+            "agent_poll_seconds": 30
+          }
+        ]
+      }
+    ]
   },
   "VM3": {
     "ip": "192.168.50.6",
-    "users": []
+    "users": [
+      {
+        "name": "carlos",
+        "repositories": [
+          {
+            "id": "frontend",
+            "module": "frontend",
+            "kind": "module",
+            "path": "/home/carlos/api-monolitic-comments",
+            "business_memory": "/home/carlos/.local/share/prueba-agentes/business/frontend.md",
+            "aliases": [
+              "frontend"
+            ],
+            "stack": "frontend",
+            "engine": "pi",
+            "dispatch_enabled": false,
+            "can_read": true,
+            "can_write": true,
+            "pi_harness": "/home/carlos/.local/bin/pi-harness",
+            "pi_provider": "openai-codex",
+            "pi_model": "gpt-5.4-mini",
+            "memory": {
+              "enabled": true,
+              "gateway_url": "https://192.168.50.61:9443",
+              "core_id": "frontend",
+              "tenant_id": "empresa-prueba",
+              "read_business": true,
+              "read_company": false,
+              "tls_key": "/home/carlos/.config/prueba-agentes/memory-gateway/client.key",
+              "tls_cert": "/home/carlos/.config/prueba-agentes/memory-gateway/client.crt",
+              "tls_ca": "/home/carlos/.config/prueba-agentes/memory-gateway/ca.crt"
+            },
+            "source_mode": "git",
+            "agent_update_mode": "git",
+            "node_version": "24.19.0",
+            "pi_version": "latest",
+            "install_dependencies": false,
+            "local_agent": "skills/dev-back",
+            "remote_agent": "/home/carlos/agentes/dev-back",
+            "project_git_url": "https://github.com/Felix-Pull/vue-dev.git",
+            "project_git_branch": "main",
+            "php_version": "8.4",
+            "php_min_version": "8.4.1",
+            "git_url": "https://github.com/CarlosPull/prueba_agentes.git",
+            "git_branch": "implementacion_usuarios",
+            "git_agent_path": "skills/dev-back",
+            "agent_poll_seconds": 30
+          }
+        ]
+      }
+    ]
   },
   "VM4": {
     "ip": "192.168.50.234",
