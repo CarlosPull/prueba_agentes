@@ -6,18 +6,27 @@ import { hashPassword } from '../src/auth.ts';
 import { buildApi } from '../src/api.ts';
 import { claim, heartbeat, finish, quarantineStale, workOnce } from '../src/queue.ts';
 import { validateConnection } from '../src/driver.ts';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { syncVmsConfigToDb } from '../src/vms-sync.ts';
 
 const url = process.env.DATABASE_TEST_URL;
 if (!url || !new URL(url).pathname.endsWith('_pruebas')) throw new Error('DATABASE_TEST_URL debe apuntar a una base exclusiva terminada en _pruebas. Usa bin/probar_podman.sh.');
 const pool = database(url);
 const origin = 'http://127.0.0.1:3100';
+const configDirectory = await mkdtemp(join(tmpdir(), 'plataforma-vms-pruebas-'));
+const configPath = join(configDirectory, 'vms.json');
+process.env.VMS_JSON_PATH = configPath;
+await writeFile(configPath, '{}');
 const app = await buildApi(pool, origin);
 const password = 'Contraseña de prueba exclusiva 2026';
 const ids = { root: randomUUID(), admin: randomUUID(), alice: randomUUID(), bob: randomUUID(), vm: randomUUID(), otherVm: randomUUID(), a: randomUUID(), b: randomUUID() };
 let hash: string;
 before(async () => { await migrate(pool); await migrate(pool); hash = await hashPassword(password); await app.ready(); });
-after(async () => { await app.close(); await pool.end(); });
+after(async () => { await app.close(); await pool.end(); await rm(configDirectory, { recursive: true, force: true }); });
 beforeEach(async () => {
+  await writeFile(configPath, '{}');
   await pool.query('TRUNCATE audit,jobs,grants,targets,vm_admins,vms,sessions,login_attempts,users CASCADE');
   for (const name of ['root', 'admin', 'alice', 'bob'] as const) await pool.query('INSERT INTO users(id,email,name,password_hash,role,system_admin) VALUES($1,$2,$3,$4,$5,$6)',
     [ids[name], `${name}@example.test`, name, hash, ['root', 'admin'].includes(name) ? 'admin' : 'operator', name === 'root']);
@@ -25,6 +34,57 @@ beforeEach(async () => {
   await pool.query('INSERT INTO vm_admins VALUES($1,$2)', [ids.vm, ids.admin]);
   await pool.query("INSERT INTO targets(id,vm_id,name,repository,container,stack,execution_ready) VALUES($1,$3,'Comentarios','comments','comments','backend',true),($2,$3,'Pagos','pagos','pagos','backend',true)", [ids.a, ids.b, ids.vm]);
   await pool.query('INSERT INTO grants(user_id,target_id,can_read,can_write) VALUES($1,$2,true,true),($3,$4,true,false)', [ids.alice, ids.a, ids.bob, ids.b]);
+});
+
+test('inventario vacío desactiva destinos antiguos y devuelve una matriz vacía', async () => {
+  const cookie = await login('root');
+  const response = await app.inject({ url: `/api/admin/users/${ids.alice}/permissions`, headers: { cookie } });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json().vms, []);
+  assert.deepEqual(response.json().targets, []);
+  assert.equal((await pool.query('SELECT 1 FROM vms WHERE active')).rowCount, 0);
+  assert.equal((await pool.query('SELECT 1 FROM targets WHERE active')).rowCount, 0);
+});
+
+test('listas explícitas vacías no inventan módulos y conservan las VMs declaradas', async () => {
+  await writeFile(configPath, JSON.stringify({ 'VM asignada': { ip: '192.0.2.1', users: [], workspace: '/proyecto' }, VM2: { ip: '192.0.2.2', repositories: [] } }));
+  const cookie = await login('root');
+  const response = await app.inject({ url: `/api/admin/users/${ids.alice}/permissions`, headers: { cookie } });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().vms.length, 2);
+  assert.deepEqual(response.json().targets, []);
+});
+
+test('elimina módulos retirados y conserva solo repositorios explícitos vigentes', async () => {
+  await writeFile(configPath, JSON.stringify({ 'VM asignada': { ip: '192.0.2.1', users: [{ name: 'alice', repositories: [{ id: 'comments' }] }] } }));
+  const cookie = await login('root');
+  const response = await app.inject({ url: `/api/admin/users/${ids.alice}/permissions`, headers: { cookie } });
+  assert.deepEqual(response.json().targets.map((t: any) => t.id), [ids.a]);
+  assert.deepEqual(response.json().vms.map((v: any) => v.id), [ids.vm]);
+});
+
+test('un perfil antiguo con workspace conserva su módulo implícito', async () => {
+  await writeFile(configPath, JSON.stringify({ antiguo: { ip: '192.0.2.1', workspace: '/proyecto' } }));
+  await syncVmsConfigToDb(pool, configPath);
+  assert.deepEqual((await pool.query('SELECT repository FROM targets WHERE active')).rows, [{ repository: 'antiguo' }]);
+});
+
+test('archivo en blanco o inválido informa error sin mostrar una matriz obsoleta', async () => {
+  const cookie = await login('root');
+  for (const content of ['', '{', 'null', '[]']) {
+    await writeFile(configPath, content);
+    const response = await app.inject({ url: `/api/admin/users/${ids.alice}/permissions`, headers: { cookie } });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json().targets, undefined);
+    assert.equal((await pool.query('SELECT 1 FROM targets WHERE active')).rowCount, 2);
+  }
+});
+
+test('guardar una matriz antigua no concede permisos sobre módulos retirados', async () => {
+  const cookie = await login('root');
+  const response = await app.inject({ method: 'PUT', url: `/api/admin/users/${ids.bob}/permissions`, headers: { cookie, origin }, payload: { grants: [{ targetId: ids.a, canRead: true, canWrite: true }] } });
+  assert.equal(response.statusCode, 409);
+  assert.equal((await pool.query('SELECT 1 FROM grants WHERE user_id=$1 AND target_id=$2', [ids.bob, ids.a])).rowCount, 0);
 });
 
 async function login(name: string) {

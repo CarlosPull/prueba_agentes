@@ -240,7 +240,7 @@ export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
   });
 
   const vmsJsonPath = process.env.VMS_JSON_PATH ?? join(process.cwd(), '../config/vms.json');
-  void syncVmsConfigToDb(pool, vmsJsonPath).catch(() => {});
+  void syncVmsConfigToDb(pool, vmsJsonPath).catch(error => app.log.error(error, 'No se pudo sincronizar vms.json.'));
 
   app.post('/api/admin/vms/sync-json', async request => {
     if (request.actor!.role !== 'admin') forbid();
@@ -251,10 +251,15 @@ export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
 
   app.get<{ Params: { id: string } }>('/api/admin/users/:id/permissions', params, async request => {
     if (request.actor!.role !== 'admin') forbid();
-    await syncVmsConfigToDb(pool, vmsJsonPath).catch(() => {});
+    try {
+      await syncVmsConfigToDb(pool, vmsJsonPath);
+    } catch (error) {
+      request.log.error(error, 'No se pudo sincronizar vms.json.');
+      throw new HttpError(503, 'No se pudo leer vms.json. Revisa que exista y contenga JSON válido; usa {} para un inventario vacío.');
+    }
     const userId = request.params.id;
-    const vms = (await pool.query('SELECT * FROM vms ORDER BY name')).rows;
-    const targets = (await pool.query('SELECT * FROM targets ORDER BY name')).rows;
+    const vms = (await pool.query('SELECT * FROM vms WHERE active ORDER BY name')).rows;
+    const targets = (await pool.query('SELECT t.* FROM targets t JOIN vms v ON v.id=t.vm_id WHERE t.active AND v.active ORDER BY t.name')).rows;
     const grants = (await pool.query('SELECT target_id, can_read, can_write FROM grants WHERE user_id=$1', [userId])).rows;
     return { vms, targets, grants };
   });
@@ -264,9 +269,13 @@ export async function buildApi(pool: Pool, origin: string, webRoot?: string) {
     const userId = request.params.id;
     const items = request.body.grants;
     if (!Array.isArray(items)) throw new HttpError(400, 'Datos de asignación no válidos.');
+    await syncVmsConfigToDb(pool, vmsJsonPath);
 
     await transaction(pool, async db => {
       for (const item of items) {
+        const target = (await db.query('SELECT t.vm_id FROM targets t JOIN vms v ON v.id=t.vm_id WHERE t.id=$1 AND t.active AND v.active FOR SHARE OF t,v', [item.targetId])).rows[0];
+        if (!target) throw new HttpError(409, 'El módulo ya no está disponible. Vuelve a cargar los permisos.');
+        await manages(db, request.actor!, target.vm_id);
         if (item.canWrite && !item.canRead) throw new HttpError(400, 'La escritura requiere permiso de lectura.');
         await db.query(`INSERT INTO grants(user_id, target_id, can_read, can_write) VALUES($1, $2, $3, $4)
           ON CONFLICT(user_id, target_id) DO UPDATE SET can_read=$3, can_write=$4, version=grants.version+1`,

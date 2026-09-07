@@ -54,20 +54,25 @@ export type VmConfigEntry = {
 export type VmsConfigFile = Record<string, VmConfigEntry>;
 
 export async function syncVmsConfigToDb(pool: Pool, vmsJsonPath: string) {
-  let content = '';
-  try {
-    content = await readFile(vmsJsonPath, 'utf8');
-  } catch {
-    return;
-  }
+  const content = await readFile(vmsJsonPath, 'utf8');
+  if (!content.trim()) throw new Error('vms.json está en blanco. Usa {} para declarar un inventario vacío.');
   const config = JSON.parse(content) as VmsConfigFile;
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw new Error('vms.json debe contener un objeto de perfiles.');
+  }
+  for (const entry of Object.values(config)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error('Cada perfil de vms.json debe ser un objeto.');
+    }
+  }
 
   await transaction(pool, async (db) => {
-    const validVmNames = Object.keys(config);
+    const validVmNames: string[] = [];
     const validTargetKeys: Array<{ vmName: string; repoName: string }> = [];
 
     for (const [profileName, entry] of Object.entries(config)) {
       if (!entry.ip) continue;
+      validVmNames.push(profileName);
 
       // 1. Sincronizar VM
       let vmId = '';
@@ -99,7 +104,9 @@ export async function syncVmsConfigToDb(pool: Pool, vmsJsonPath: string) {
       if (repos.length === 0 && Array.isArray(entry.repositories)) {
         repos.push(...entry.repositories);
       }
-      if (repos.length === 0) {
+      // Compatibilidad con perfiles antiguos que declaran un workspace único.
+      // Las listas explícitas vacías nunca representan un módulo implícito.
+      if (repos.length === 0 && entry.users === undefined && entry.repositories === undefined && entry.workspace) {
         repos.push({
           id: profileName,
           module: profileName,
@@ -134,9 +141,7 @@ export async function syncVmsConfigToDb(pool: Pool, vmsJsonPath: string) {
     }
 
     // Desactivar VMs eliminadas de vms.json
-    if (validVmNames.length > 0) {
-      await db.query('UPDATE vms SET active = false WHERE name NOT IN (SELECT unnest($1::text[]))', [validVmNames]);
-    }
+    await db.query('UPDATE vms SET active = false WHERE name NOT IN (SELECT unnest($1::text[]))', [validVmNames]);
 
     // Desactivar Targets/Módulos eliminados de vms.json
     const allDbTargets = (await db.query('SELECT t.id, v.name AS vm_name, t.repository FROM targets t JOIN vms v ON v.id = t.vm_id')).rows;
