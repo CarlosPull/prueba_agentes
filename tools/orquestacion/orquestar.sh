@@ -7,17 +7,27 @@ TOOLS_DIR="$ROOT/tools"
 DIAGNOSTICO_VMS="${PRUEBA_AGENTES_DIAGNOSTICO_VMS:-$ROOT/tools/vms/probar_vms.sh}"
 DESPACHADOR="${PRUEBA_AGENTES_DESPACHADOR:-$ROOT/tools/despacho/validar_y_despachar.sh}"
 MODO="ejecutar"
-case "${1:-}" in
-  --clasificar) MODO="clasificar"; shift ;;
-  --descomponer) MODO="descomponer"; shift ;;
-esac
+USUARIO=""
+ARGS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --clasificar) MODO="clasificar"; shift ;;
+    --descomponer) MODO="descomponer"; shift ;;
+    --usuario) [ "$#" -ge 2 ] || { echo "Error: falta --usuario." >&2; exit 1; }; USUARIO="$2"; shift 2 ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
+USUARIO="${USUARIO:-$(whoami)}"
 TAREA="${1:-}"
-[ -n "$TAREA" ] || { echo "Uso: ./tools/orquestacion/orquestar.sh [--clasificar|--descomponer] \"Tarea\"" >&2; exit 1; }
+[ -n "$TAREA" ] || { echo "Uso: ./tools/orquestacion/orquestar.sh [--clasificar|--descomponer] [--usuario nombre] \"Tarea\"" >&2; exit 1; }
 if [ "$MODO" = "clasificar" ]; then "$ROOT/tools/orquestacion/clasificar_tarea.sh" "$TAREA"; exit 0; fi
+
+echo "👤 Usuario: $USUARIO (solo se considerarán sus VMs/repositorios en vms.json)" >&2
 
 analysis_tmp="$(mktemp -d "${TMPDIR:-/tmp}/orquestacion-contexto.XXXXXX")"
 trap 'rm -rf "$analysis_tmp"' EXIT INT TERM
-"$ROOT/tools/orquestacion/recolectar_contexto_memoria.sh" "$TAREA" > "$analysis_tmp/contexto.json"
+"$ROOT/tools/orquestacion/recolectar_contexto_memoria.sh" "$TAREA" "$USUARIO" > "$analysis_tmp/contexto.json"
 REQUISITOS_JSON="$($ROOT/tools/orquestacion/analizar_requisitos.sh "$TAREA" "$analysis_tmp/contexto.json")"
 if [ "$MODO" = "descomponer" ]; then printf '%s\n' "$REQUISITOS_JSON"; exit 0; fi
 
@@ -88,7 +98,7 @@ while IFS= read -r group; do
     "La memoria de negocio privada del repositorio será incorporada localmente por pi-harness.\nEjecuta exclusivamente estos requisitos:\n" +
     ([.requirements[] | "- [" + .id + "] " + .text] | join("\n")) + "\nNo modifiques otros repositorios ni requisitos asignados a otros destinos."
   ' <<< "$group")"
-  args=("$category" "$PROJECT_DIR" "$task_payload" --profile "$profile" --repository "$repository" --dispatch-id "$dispatch_id")
+  args=("$category" "$PROJECT_DIR" "$task_payload" --profile "$profile" --repository "$repository" --usuario "$USUARIO" --dispatch-id "$dispatch_id")
   [ "$(jq -r '.execution_policy.read_only' <<< "$group")" != "true" ] || args+=(--read-only)
   [ "$multi_category" -eq 0 ] || args+=(--fullstack-confirmado)
   "$DESPACHADOR" "${args[@]}" &

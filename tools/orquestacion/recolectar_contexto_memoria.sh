@@ -6,7 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 PRIVATE_MEMORY="${PRUEBA_AGENTES_PRIVATE_TECH_MEMORY:-$ROOT/.private/tecnologias.json}"
 PROMPT="${1:-}"
-[ -n "$PROMPT" ] || { echo "Uso: ./tools/orquestacion/recolectar_contexto_memoria.sh \"prompt\"" >&2; exit 1; }
+USUARIO="${2:-}"
+[ -n "$PROMPT" ] || { echo "Uso: ./tools/orquestacion/recolectar_contexto_memoria.sh \"prompt\" [usuario]" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "Error: jq es obligatorio." >&2; exit 1; }
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/recolector-memoria.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT INT TERM
@@ -24,12 +25,13 @@ elif [ "${PRUEBA_AGENTES_PRIVATE_MEMORY_REQUIRED:-0}" = "1" ]; then
   exit 1
 fi
 
-inventory="$(jq -c --argjson private "$private_json" '
+inventory="$(jq -c --argjson private "$private_json" --arg usuario "$USUARIO" '
   [to_entries[] as $vm
    | $vm.value as $v
    | (
        if ($v.users | type) == "array" then
          $v.users[] as $u
+         | select(($usuario == "") or (($u.name // "" | ascii_downcase) == ($usuario | ascii_downcase)))
          | $u.repositories[] as $r
          | select(($r.engine == "pi" or $v.engine == "pi") and ($r.dispatch_enabled == true or $v.dispatch_enabled == true))
          | {

@@ -11,12 +11,14 @@ TAREA="${3:-}"
 shift "$([ "$#" -ge 3 ] && echo 3 || echo 0)"
 PROFILE_OVERRIDE=""
 REPOSITORY_ID=""
+USUARIO_OVERRIDE=""
 DISPATCH_ID="$ROLE"
 READ_ONLY=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --profile) [ "$#" -ge 2 ] || { echo "Error: falta --profile." >&2; exit 1; }; PROFILE_OVERRIDE="$2"; shift 2 ;;
     --repository) [ "$#" -ge 2 ] || { echo "Error: falta --repository." >&2; exit 1; }; REPOSITORY_ID="$2"; shift 2 ;;
+    --usuario) [ "$#" -ge 2 ] || { echo "Error: falta --usuario." >&2; exit 1; }; USUARIO_OVERRIDE="$2"; shift 2 ;;
     --dispatch-id) [ "$#" -ge 2 ] || { echo "Error: falta --dispatch-id." >&2; exit 1; }; DISPATCH_ID="$2"; shift 2 ;;
     --read-only) READ_ONLY=1; shift ;;
     *) echo "Error: opción no reconocida: $1" >&2; exit 1 ;;
@@ -24,7 +26,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$ROLE" ] || [ -z "$PROJECT_DIR" ] || [ -z "$TAREA" ]; then
-  echo "Uso: ./tools/despacho/despachar_vm.sh <rol> <directorio_proyecto> \"Tarea\" [--profile perfil --repository repo --dispatch-id id]" >&2
+  echo "Uso: ./tools/despacho/despachar_vm.sh <rol> <directorio_proyecto> \"Tarea\" [--profile perfil --repository repo --usuario usuario --dispatch-id id]" >&2
   exit 1
 fi
 [[ "$ROLE" =~ ^[a-z0-9-]+$ ]] || { echo "Error: rol no válido." >&2; exit 1; }
@@ -88,15 +90,24 @@ fi
 
 PROFILE="${perfiles[0]}"
 ip="$(GET_VM_FIELD "$PROFILE" ip)"
-user="$(GET_VM_FIELD "$PROFILE" user)"
-workspace_default="$(GET_VM_FIELD "$PROFILE" workspace)"
-remote_agent="$(GET_VM_FIELD "$PROFILE" remote_agent)"
-pi_harness="$(GET_VM_FIELD "$PROFILE" pi_harness)"
-pi_provider="$(GET_VM_FIELD "$PROFILE" pi_provider)"
-pi_model="$(GET_VM_FIELD "$PROFILE" pi_model)"
-node_version="$(GET_VM_FIELD "$PROFILE" node_version)"
 
-all_repos_json="$(jq -c --arg profile "$PROFILE" '[.[$profile].users[].repositories[]] // .[$profile].repositories // []' "$VMS_CONF")"
+# Con --usuario: se acota a los repositorios de ESE usuario puntual (necesario
+# en perfiles con varios usuarios, donde "users[0]" ya no identifica a quién
+# corresponde despachar). Sin --usuario: comportamiento previo (todos los
+# repos del perfil, primer usuario), para no romper llamadas existentes.
+if [ -n "$USUARIO_OVERRIDE" ]; then
+  all_repos_json="$(jq -c --arg profile "$PROFILE" --arg usuario "$USUARIO_OVERRIDE" '
+    [.[$profile].users[]? | select((.name // "" | ascii_downcase) == ($usuario | ascii_downcase)) | .repositories[]?]
+  ' "$VMS_CONF")"
+  [ "$(jq -r 'length' <<< "$all_repos_json")" -gt 0 ] || {
+    echo "Error: el usuario '$USUARIO_OVERRIDE' no tiene repositorios en el perfil '$PROFILE'." >&2
+    exit 1
+  }
+  user="$USUARIO_OVERRIDE"
+else
+  all_repos_json="$(jq -c --arg profile "$PROFILE" '[.[$profile].users[].repositories[]] // .[$profile].repositories // []' "$VMS_CONF")"
+  user="$(GET_VM_FIELD "$PROFILE" user)"
+fi
 repository_count="$(jq -r 'length' <<< "$all_repos_json")"
 if [ -z "$REPOSITORY_ID" ]; then
   if [ "$repository_count" -eq 1 ]; then
@@ -117,12 +128,29 @@ if [ -n "$REPOSITORY_ID" ]; then
   business_memory="$(jq -r '.business_memory // ""' <<< "$repository_json")"
 else
   repository_json="{}"
-  workspace="$workspace_default"
+  workspace="$(GET_VM_FIELD "$PROFILE" workspace)"
   module="$ROLE"
   repository_kind="$ROLE"
   business_memory=""
   REPOSITORY_ID="$ROLE"
 fi
+
+# pi_harness/pi_provider/pi_model/remote_agent/node_version se toman del
+# repositorio YA resuelto (repository_json), no de "users[0]" como antes:
+# en un perfil con varios usuarios, "users[0]" podía no ser el dueño del
+# repositorio efectivamente seleccionado. Si el repositorio no trae el campo
+# (esquema plano viejo, repository_json={}), se cae al valor de nivel-perfil.
+remote_agent="$(jq -r '.remote_agent // empty' <<< "$repository_json")"
+[ -n "$remote_agent" ] || remote_agent="$(GET_VM_FIELD "$PROFILE" remote_agent)"
+pi_harness="$(jq -r '.pi_harness // empty' <<< "$repository_json")"
+[ -n "$pi_harness" ] || pi_harness="$(GET_VM_FIELD "$PROFILE" pi_harness)"
+pi_provider="$(jq -r '.pi_provider // empty' <<< "$repository_json")"
+[ -n "$pi_provider" ] || pi_provider="$(GET_VM_FIELD "$PROFILE" pi_provider)"
+pi_model="$(jq -r '.pi_model // empty' <<< "$repository_json")"
+[ -n "$pi_model" ] || pi_model="$(GET_VM_FIELD "$PROFILE" pi_model)"
+node_version="$(jq -r '.node_version // empty' <<< "$repository_json")"
+[ -n "$node_version" ] || node_version="$(GET_VM_FIELD "$PROFILE" node_version)"
+
 memory_enabled="$(jq -r '.memory.enabled // false' <<< "$repository_json")"
 [ "$memory_enabled" != "false" ] || memory_enabled="$(jq -r --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].memory.enabled // .[$profile].memory.enabled // false' "$VMS_CONF")"
 memory_gateway_url="$(jq -r '.memory.gateway_url // ""' <<< "$repository_json")"

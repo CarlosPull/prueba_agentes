@@ -11,6 +11,7 @@ TAREA="${3:-}"
 MODO_FULLSTACK="${4:-}"
 PROFILE=""
 REPOSITORY=""
+USUARIO=""
 DISPATCH_ID="$ROLE"
 READ_ONLY=0
 
@@ -21,6 +22,7 @@ while [ "$#" -gt 0 ]; do
     --fullstack-confirmado) MODO_FULLSTACK="$1"; shift ;;
     --profile) [ "$#" -ge 2 ] || exit 1; PROFILE="$2"; shift 2 ;;
     --repository) [ "$#" -ge 2 ] || exit 1; REPOSITORY="$2"; shift 2 ;;
+    --usuario) [ "$#" -ge 2 ] || exit 1; USUARIO="$2"; shift 2 ;;
     --dispatch-id) [ "$#" -ge 2 ] || exit 1; DISPATCH_ID="$2"; shift 2 ;;
     --read-only) READ_ONLY=1; shift ;;
     *) echo "Error: opción no reconocida '$1'." >&2; exit 1 ;;
@@ -28,7 +30,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$ROLE" ] || [ -z "$PROJECT_DIR" ] || [ -z "$TAREA" ]; then
-  echo "Uso: ./tools/despacho/validar_y_despachar.sh <rol> <directorio_proyecto> \"Tarea\" [--fullstack-confirmado] [--profile perfil --repository repo --dispatch-id id]"
+  echo "Uso: ./tools/despacho/validar_y_despachar.sh <rol> <directorio_proyecto> \"Tarea\" [--fullstack-confirmado] [--profile perfil --repository repo --usuario usuario --dispatch-id id]"
   exit 1
 fi
 
@@ -91,6 +93,7 @@ fi
 dispatch_args=()
 [ -z "$PROFILE" ] || dispatch_args+=(--profile "$PROFILE")
 [ -z "$REPOSITORY" ] || dispatch_args+=(--repository "$REPOSITORY")
+[ -z "$USUARIO" ] || dispatch_args+=(--usuario "$USUARIO")
 dispatch_args+=(--dispatch-id "$DISPATCH_ID")
 [ "$READ_ONLY" -eq 0 ] || dispatch_args+=(--read-only)
 "$ROOT/tools/despacho/despachar_vm.sh" "$ROLE" "$PROJECT_DIR" "$TAREA" "${dispatch_args[@]}"
