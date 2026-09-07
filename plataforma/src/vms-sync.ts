@@ -63,6 +63,9 @@ export async function syncVmsConfigToDb(pool: Pool, vmsJsonPath: string) {
   const config = JSON.parse(content) as VmsConfigFile;
 
   await transaction(pool, async (db) => {
+    const validVmNames = Object.keys(config);
+    const validTargetKeys: Array<{ vmName: string; repoName: string }> = [];
+
     for (const [profileName, entry] of Object.entries(config)) {
       if (!entry.ip) continue;
 
@@ -71,6 +74,7 @@ export async function syncVmsConfigToDb(pool: Pool, vmsJsonPath: string) {
       const existingVm = (await db.query('SELECT id FROM vms WHERE name = $1', [profileName])).rows[0];
       if (existingVm) {
         vmId = existingVm.id;
+        await db.query('UPDATE vms SET active = true WHERE id = $1', [vmId]);
       } else {
         const insertVm = await db.query(
           'INSERT INTO vms(id, name, active) VALUES(gen_random_uuid(), $1, true) RETURNING id',
@@ -110,6 +114,8 @@ export async function syncVmsConfigToDb(pool: Pool, vmsJsonPath: string) {
         const containerName = `modulo-${repoName}`;
         const stack = repo.stack || entry.stack || 'backend';
 
+        validTargetKeys.push({ vmName: profileName, repoName });
+
         const existingTarget = (await db.query(
           'SELECT id FROM targets WHERE vm_id = $1 AND repository = $2',
           [vmId, repoName]
@@ -121,7 +127,23 @@ export async function syncVmsConfigToDb(pool: Pool, vmsJsonPath: string) {
              VALUES(gen_random_uuid(), $1, $2, $3, $4, $5, true, true)`,
             [vmId, `${profileName} (${repoName})`, repoName, containerName, stack]
           );
+        } else {
+          await db.query('UPDATE targets SET active = true WHERE id = $1', [existingTarget.id]);
         }
+      }
+    }
+
+    // Desactivar VMs eliminadas de vms.json
+    if (validVmNames.length > 0) {
+      await db.query('UPDATE vms SET active = false WHERE name NOT IN (SELECT unnest($1::text[]))', [validVmNames]);
+    }
+
+    // Desactivar Targets/Módulos eliminados de vms.json
+    const allDbTargets = (await db.query('SELECT t.id, v.name AS vm_name, t.repository FROM targets t JOIN vms v ON v.id = t.vm_id')).rows;
+    for (const t of allDbTargets) {
+      const isStillValid = validTargetKeys.some(k => k.vmName === t.vm_name && k.repoName === t.repository);
+      if (!isStillValid) {
+        await db.query('UPDATE targets SET active = false WHERE id = $1', [t.id]);
       }
     }
   });
