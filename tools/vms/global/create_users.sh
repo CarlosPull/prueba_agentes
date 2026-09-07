@@ -3,7 +3,8 @@
 # compartida) en TODAS las VMs registradas en vms.json. Se conecta como la
 # cuenta con permisos sudo (serveradmin) y usa la misma llave que instala
 # tools/vms/sync_ssh.sh, así los usuarios recién creados quedan accesibles
-# sin contraseña de inmediato.
+# de inmediato. También pide, una sola vez, una contraseña opcional para
+# esos mismos usuarios (ENTER para dejarlos solo con acceso por llave).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -18,6 +19,11 @@ SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=no)
 # Regla de nombre de usuario Linux estándar (la misma que exige adduser en
 # Debian/Ubuntu): letra o "_" inicial, y luego letras/números/._- .
 REGEX_USUARIO='^[a-z_][a-z0-9_-]*$'
+
+# Escapa un valor arbitrario para embeberlo entre comillas simples en un
+# comando remoto (mismo patrón que usa tools/despacho/despachar_vm.sh):
+# necesario para la contraseña, que puede traer cualquier carácter.
+SHELL_QUOTE() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
 USO() {
   echo "Uso: ./tools/vms/global/create_users.sh" >&2
@@ -73,14 +79,38 @@ CREAR_USUARIO_EN_VM() {
   "
 }
 
+# El "printf | sudo chpasswd" corre del lado REMOTO (no se canaliza desde el
+# stdin local): si le pasáramos la contraseña por el stdin del ssh local,
+# chocaría con el prompt de contraseña de sudo, que también necesita leer de
+# la terminal (por eso hace falta "-tt" acá). SHELL_QUOTE evita que un
+# caracter especial en la contraseña rompa el comando remoto.
+ESTABLECER_PASSWORD_EN_VM() {
+  local target="$1" usuario="$2" password="$3"
+  local q_usuario q_password
+  q_usuario="$(SHELL_QUOTE "$usuario")"
+  q_password="$(SHELL_QUOTE "$password")"
+  ssh -tt "${SSH_OPTS[@]}" "$target" "printf '%s:%s\n' $q_usuario $q_password | sudo chpasswd"
+}
+
 MAIN() {
   local usuarios=()
-  mapfile -t usuarios < <(PEDIR_USUARIOS)
+  local linea
+  # while+read en vez de "mapfile" (bash 4+): el bash de macOS es 3.2.
+  while IFS= read -r linea; do
+    [ -n "$linea" ] && usuarios+=("$linea")
+  done < <(PEDIR_USUARIOS)
 
   if [ "${#usuarios[@]}" -eq 0 ]; then
     echo "ℹ️ No se especificó ningún usuario; nada para hacer." >&2
     exit 0
   fi
+
+  # Se pide una sola vez: la misma contraseña se aplica a todos los usuarios
+  # de la lista, en todas las VMs. ENTER vacío = no asignar contraseña (el
+  # usuario queda solo con acceso por llave SSH, como antes).
+  local password
+  read -rs -p "🔑 Contraseña para estos usuarios (ENTER para no asignar ninguna): " password
+  echo ""
 
   echo ""
   echo "🔎 Leyendo VMs registradas en $VMS_CONF..."
@@ -114,10 +144,19 @@ MAIN() {
     local usuario ok_vm=1
     for usuario in "${usuarios[@]}"; do
       echo "   👤 $usuario..."
-      if CREAR_USUARIO_EN_VM "$target" "$usuario" "$pub_key"; then
-        echo "   ✓ $usuario listo."
-      else
+      if ! CREAR_USUARIO_EN_VM "$target" "$usuario" "$pub_key"; then
         echo "   ❌ Falló '$usuario' en '$perfil'." >&2
+        ok_vm=0
+        continue
+      fi
+      if [ -z "$password" ]; then
+        echo "   ✓ $usuario listo (sin contraseña, solo llave SSH)."
+        continue
+      fi
+      if ESTABLECER_PASSWORD_EN_VM "$target" "$usuario" "$password"; then
+        echo "   ✓ $usuario listo (con contraseña)."
+      else
+        echo "   ❌ '$usuario' se creó pero falló al asignar la contraseña en '$perfil'." >&2
         ok_vm=0
       fi
     done

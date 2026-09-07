@@ -77,7 +77,16 @@ BORRAR_USUARIO_EN_VM() {
     echo "  ⚠️ Se ignoró un intento de borrar '$ADMIN_USER'." >&2
     return 1
   fi
-  ssh -tt "${SSH_OPTS[@]}" "$target" "sudo userdel -r '$usuario'"
+  # "userdel -r" ya borra el home, pero se refuerza con un "rm -rf" explícito
+  # (corre siempre, incluso si userdel falla) para asegurar que la carpeta
+  # home no quede residual por algún caso borde (ej. userdel avisa pero no
+  # limpia del todo). El código de salida final es el de userdel.
+  ssh -tt "${SSH_OPTS[@]}" "$target" "
+    sudo userdel -r '$usuario';
+    codigo=\$?;
+    sudo rm -rf '/home/$usuario';
+    exit \$codigo
+  "
 }
 
 MAIN() {
@@ -90,8 +99,12 @@ MAIN() {
   fi
 
   local usuarios_fijos=()
+  local linea
   if [ "$MODO_TODOS" -eq 0 ]; then
-    mapfile -t usuarios_fijos < <(PEDIR_USUARIOS)
+    # while+read en vez de "mapfile" (bash 4+): el bash de macOS es 3.2.
+    while IFS= read -r linea; do
+      [ -n "$linea" ] && usuarios_fijos+=("$linea")
+    done < <(PEDIR_USUARIOS)
     if [ "${#usuarios_fijos[@]}" -eq 0 ]; then
       echo "ℹ️ No se especificó ningún usuario; nada para hacer." >&2
       exit 0
@@ -126,7 +139,11 @@ MAIN() {
         total_fallidas=$((total_fallidas + 1))
         continue
       fi
-      [ -z "$listado" ] || mapfile -t usuarios_vm <<< "$listado"
+      if [ -n "$listado" ]; then
+        while IFS= read -r linea; do
+          [ -n "$linea" ] && usuarios_vm+=("$linea")
+        done <<< "$listado"
+      fi
       if [ "${#usuarios_vm[@]}" -eq 0 ]; then
         echo "  ℹ️ No hay usuarios para borrar (además de '$ADMIN_USER')."
         total_ok=$((total_ok + 1))
