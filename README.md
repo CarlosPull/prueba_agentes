@@ -272,7 +272,31 @@ Abrir otra terminal en la VM del orquestador, desde la raíz del repositorio:
 
 ## Uso
 
-Ejecutar desde la raíz del repositorio. Reemplazar los valores entre `<...>`.
+Estos comandos se ejecutan **en la máquina orquestadora**, desde la raíz de este repositorio, no en las VMs de ejecución. Reemplazar los valores entre `<...>`.
+
+### 1. Conectarse a la máquina orquestadora
+
+Desde una terminal de tu equipo (omitir SSH si ya estás en el orquestador):
+
+```bash
+ssh <usuario_orquestador>@<ip_orquestador>
+```
+
+Dentro de la máquina orquestadora:
+
+```bash
+cd <ruta_del_repositorio>/prueba_agentes
+./tools/vms/probar_vms.sh
+```
+
+Si falta configurar el acceso SSH a una VM de ejecución, ejecutar desde el orquestador y repetir la comprobación:
+
+```bash
+./tools/vms/configurar_ssh_vm.sh <usuario_vm>@<ip_vm>
+./tools/vms/probar_vms.sh
+```
+
+### 2. Ejecutar una tarea desde el orquestador
 
 ```bash
 ./tools/orquestacion/orquestar.sh "objetivo"
@@ -281,3 +305,13 @@ Ejecutar desde la raíz del repositorio. Reemplazar los valores entre `<...>`.
 - Incluir el módulo de destino en la solicitud.
 - Usar `solo lectura` o `sin modificar` para impedir escrituras.
 - Los destinos independientes se ejecutan en paralelo.
+
+### Alternativa: lanzar una tarea desde un equipo remoto
+
+Cada usuario puede enviar su prompt por SSH sin abrir una sesión interactiva. La ejecución sigue ocurriendo en la máquina orquestadora:
+
+```bash
+ssh <usuario_orquestador>@<ip_orquestador> "cd '<ruta_del_repositorio>/prueba_agentes' && ./tools/orquestacion/orquestar.sh 'Prompt de cada usuario'"
+```
+
+Reemplazar usuario, IP, ruta absoluta del repositorio en el orquestador y prompt. El usuario remoto debe tener acceso SSH y el entorno del orquestador configurado.
