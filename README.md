@@ -108,6 +108,15 @@ Ejecutar desde la raíz del repositorio en la VM del orquestador. Mantener abier
 
 Requisitos: Node.js 24+, Python 3.10+, Git, SSH, jq y Ollama. Modelo: `hermes3:latest`.
 
+Requisitos de hardware para `hermes3:latest` (8B):
+
+| Recurso | Mínimo | Recomendado |
+| --- | --- | --- |
+| GPU | 6 GB VRAM (o CPU sin GPU) | 8 GB+ VRAM (NVIDIA/Apple Silicon) |
+| RAM | 8 GB | 16 GB |
+
+> Es posible utilizar el equipo local sin GPU dedicada siempre y cuando cuente con al menos 16 GB de RAM; la inferencia se ejecutará sobre CPU y será más lenta.
+
 ### 2. Preparar el entorno y los certificados — una sola vez
 
 No sobrescribir configuraciones privadas existentes. Para acceso desde VMs, configurar dirección accesible y certificados mediante las herramientas del Gateway.
