@@ -463,12 +463,28 @@ if [ "$stack" = "backend" ]; then
   [ -s "$PAQUETES_BACKEND_LOCAL" ] || { echo "Error: falta el instalador de paquetes backend." >&2; exit 1; }
 fi
 
+if [ "$source_mode" = "local" ] && [ ! -d "$project_local_path" ]; then
+  local_base="$(basename "$project_local_path")"
+  candidate="$(cd "$ROOT/.." && pwd)/$local_base"
+  if [ -d "$candidate" ]; then
+    echo "ℹ️ La ruta guardada '$project_local_path' no existe en esta máquina; usando la carpeta relativa '$candidate'."
+    project_local_path="$candidate"
+  elif [ -n "$project_git_url" ]; then
+    echo "ℹ️ La ruta local '$project_local_path' no existe en esta máquina; alternando automáticamente a modo Git ($project_git_url)..."
+    source_mode="git"
+  fi
+fi
+
 if [ "$source_mode" = "git" ]; then
   for valor in "$project_git_url" "$project_git_branch"; do
     [ -n "$valor" ] || { echo "Error: configuración Git del proyecto incompleta." >&2; exit 1; }
   done
 else
-  [ -d "$project_local_path" ] || { echo "Error: no existe el proyecto local '$project_local_path'." >&2; exit 1; }
+  [ -d "$project_local_path" ] || {
+    echo "Error: no existe el proyecto local '$project_local_path'." >&2
+    echo "Sugerencia: Si estás en otro equipo, cambia 'source_mode' a 'git' en config/vms.json o crea tu propio perfil con: ./tools/vms/provisionar_vm_pi.sh <nuevo-perfil> --con-sudo-interactivo" >&2
+    exit 1
+  }
   if [ "$stack" = "backend" ]; then
     [ -s "$project_local_path/composer.json" ] || { echo "Error: '$project_local_path' no contiene composer.json." >&2; exit 1; }
     [ "$project_kind" != "core" ] || [ -s "$project_local_path/artisan" ] || { echo "Error: el core '$project_local_path' no contiene artisan." >&2; exit 1; }
