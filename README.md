@@ -1,19 +1,8 @@
 # Orquestador distribuido de agentes con Pi y memoria compartida
 
-Este repositorio contiene un orquestador local escrito en shell script y respaldado por un **Analista Inteligente de Requisitos** impulsado por **LLM local (`Hermes 3` en Ollama)**. Recibe un prompt libre, recopila contexto de memoria, desglosa inteligente y semánticamente las subtareas sin duplicaciones redundantes, selecciona la VM y el repositorio correctos, ejecuta cada subtarea mediante **Pi** y `pi-harness` dentro de la VM en una **rama dedicada por tarea** (`feature/tarea-...`) y **publica automáticamente los Pull Requests en GitHub** (`https://github.com/Felix-Pull/.../compare/...`). La Mac no ejecuta Pi ni modifica directamente los repositorios remotos.
-
-> El flujo anterior basado en Python, OpenCode o `agent-runner` fue retirado. El motor de ejecución actual es exclusivamente Pi.
-
-## Novedades del Sistema
-
-* 🤖 **Análisis Inteligente con LLM Local (`Hermes 3`)**: `tools/orquestacion/analizar_con_llm.py` analiza semánticamente el prompt y distingue entre solicitudes de UI frontend (Vue) y endpoints backend (Laravel), evitando despachos redundantes o duplicados.
-* 🌿 **Flujo de Ramas Dedicadas por Tarea**: Cada despacho crea y conmuta automáticamente a una rama única por tarea (`feature/tarea-<id_despacho>-<timestamp>`) en la VM.
-* 🐙 **Publicación y Pull Requests Automáticos en GitHub**: Al finalizar la tarea, la VM realiza `git push -u origin feature/tarea-...` e incluye el enlace directo al **Pull Request** en `REPORTE_PI.md` y `EVIDENCIA_AGENTES.md`.
-* 🔑 **Sincronización de Identidad SSH y Git (`configurar_git_vms.sh`)**: Vinculación automática de remotos SSH (`git@github.com:...`) y claves SSH salientes entre la Mac y las VMs.
-* 🛡️ **Resiliencia no Bloqueante**: Verificación no bloqueante del Memory Gateway con fallback transparente a inventario local si el Gateway estuviera apagado.
+Orquestación local por SSH, ejecución con Pi en VMs y memoria central mediante Gateway, SQLite/OpenAPI y Cognee.
 
 ## Flujo completo
-
 
 ```mermaid
 flowchart TD
@@ -49,30 +38,16 @@ flowchart TD
     W --> R["Reporte y evidencia final"]
 ```
 
-El recolector obtiene el inventario, la tecnología privada, la memoria `company` y los contratos compartidos. En paralelo conceptual, el prompt se divide inicialmente por su texto; el analista combina esos requisitos con el contexto recolectado para seleccionar los módulos correctos y aplicar sus restricciones tecnológicas. La memoria de negocio del módulo se incorpora más tarde dentro de la VM elegida.
+## Directorios
 
-La entrada principal es:
-
-```bash
-./tools/orquestacion/orquestar.sh "En comments agrega un endpoint para consultar comentarios y publica su contrato"
-```
-
-Para analizar sin ejecutar agentes:
-
-```bash
-./tools/orquestacion/orquestar.sh --clasificar "objetivo"
-./tools/orquestacion/orquestar.sh --descomponer "objetivo"
-```
-
-Cuando un prompt contiene trabajo para más de un destino, los despachos se lanzan en paralelo en segundo plano y se esperan en conjunto. Un fallo no cancela silenciosamente el resto; el reporte conserva el resultado de cada VM.
-
-Una oración que menciona inequívocamente varios módulos se expande a todos ellos. Las expresiones `solo lectura`, `sin modificar`, `no edites` y equivalentes activan una política fail-closed que elimina la escritura del workspace y la publicación en el Memory Gateway para todos los despachos de la solicitud.
-
----
-
-## Estructura Modular de `tools/`
-
-Las herramientas del orquestador están organizadas en 7 subcarpetas temáticas especializadas:
+- `config/vms.json`: perfiles de VMs.
+- `skills/`: agentes y subagentes.
+- `pi-harness/`: harness, extensiones y políticas.
+- `memory-gateway/`: servidor mTLS y almacenamiento.
+- `memoria/`: plantillas de memoria.
+- `.private/`: configuración, datos y credenciales locales; fuera de Git.
+- `logs/`: solicitudes, reportes y evidencia.
+- `tests/`: pruebas automatizadas.
 
 ```text
 tools/
@@ -123,88 +98,87 @@ tools/
     └── prueba-agentes-bwrap.apparmor
 ```
 
----
+## Uso
 
-## Componentes y Ubicación
-
-| Componente | Dónde vive | Responsabilidad |
-|---|---|---|
-| Orquestador `tools/*/*.sh` | Mac | Contexto, análisis, enrutamiento, SSH y consolidación |
-| Generador de Agentes | Mac | `tools/agentes/crear_agente.sh` (crea automáticamente la suite en `skills/`) |
-| Explorador de Memoria | Mac | `tools/gateway/consultar_memoria.sh` (CLI interactivo de contratos y memoria) |
-| Visualizador de grafos | Mac | Python sirve el HTML local y consulta Cognee únicamente a través del Gateway |
-| Agentes `skills/*` | Git y copia versionada en cada VM | Instrucciones especializadas por rol (`dev-back`, `dev-front`, `dev-analytics`, `dev-security`, `qa`) |
-| Pi y `pi-harness` | Cada VM | Ejecución del agente y aislamiento del workspace |
-| Memoria de negocio | Cada VM | Reglas privadas del repositorio seleccionado |
-| Memory Gateway | Servidor central | mTLS, RBAC, contratos, auditoría y outbox con fallback SQLite |
-| SQLite + OpenAPI | Servidor del Gateway | Fuente autoritativa de contratos compartidos |
-| Cognee OSS | Servidor de memoria | Grafo de conocimiento y búsqueda semántica |
-| Ollama | Servidor de memoria en esta prueba | LLM local utilizado por Cognee; no ejecuta los agentes |
-
----
-
-## Guía de Instalación del Entorno Local
-
-Esta sección permite configurar la máquina de un nuevo desarrollador desde cero para dejar operativo todo el entorno local (Ollama, Cognee, Memory Gateway y el Visualizador de Grafos).
-
-### Paso 1: Requisitos Previos
-
-Asegúrate de contar con las siguientes herramientas en tu equipo:
-- **Node.js**: `v24.0.0` o superior (`node -v`).
-- **Python**: `3.10` o superior (`python3 --version`).
-- **Ollama**: Servicio activo con el modelo estructurado instalado:
-  ```bash
-  ollama pull hermes3:latest
-  ```
-
-### Paso 2: Inicializar la carpeta `.private/` (Ejecutar una sola vez)
-
-La carpeta `.private/` está ignorada en `.gitignore` para proteger credenciales y datos locales. En un equipo nuevo, ejecuta este bloque desde la raíz del proyecto (`prueba_agentes`):
+Ejecutar desde la raíz del repositorio. Reemplazar los valores entre `<...>`.
 
 ```bash
-# 1. Crear el entorno virtual e instalar dependencias de Cognee
+./tools/orquestacion/orquestar.sh "objetivo"
+./tools/orquestacion/orquestar.sh --clasificar "objetivo"
+./tools/orquestacion/orquestar.sh --descomponer "objetivo"
+```
+
+- Incluir el módulo de destino en la solicitud.
+- Usar `solo lectura` o `sin modificar` para impedir escrituras.
+- Los destinos independientes se ejecutan en paralelo.
+
+## Provisionamiento de una VM Pi
+
+`config/vms.json` está vacío: registrar los nuevos perfiles antes de ejecutar tareas.
+
+1. Habilitar SSH en la VM y disponer de acceso al repositorio Git.
+2. Configurar SSH, provisionar y verificar:
+
+```bash
+./tools/vms/configurar_ssh_vm.sh <usuario>@<ip>
+./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
+./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
+```
+
+El asistente registra el perfil, proyecto, agente y memoria; instala Pi y el harness.
+
+### Mantenimiento
+
+```bash
+./tools/vms/probar_vms.sh
+./tools/vms/sincronizar_mtls_vm.sh <perfil>
+./tools/vms/configurar_git_vms.sh --name "Tu Nombre" --email "tu-email@ejemplo.com"
+./tools/vms/actualizar_memoria_negocio_vm.sh
+./tools/vms/actualizar_memoria_negocio_vm.sh --anexar <perfil> <repo_id> "Regla adicional"
+```
+
+**Limpieza remota: retira artefactos administrados. Ejecutar sólo sobre el perfil previsto.**
+
+```bash
+./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza
+```
+
+## Sincronización de agentes
+
+- `agent_update_mode: git`: publicar con `git commit` y `git push` a `git_branch`.
+- `agent_update_mode: local`: copiar cambios mediante el monitor local.
+
+```bash
+./tools/sincronizacion/sincronizar_agente.sh <perfil>
+./tools/sincronizacion/sincronizar_agente_local.sh <perfil>
+./tools/sincronizacion/instalar_monitor_local.sh
+```
+
+## Memoria local en macOS
+
+Requisitos: Node.js 24+, Python 3.10+, Git, SSH, jq y Ollama. Modelo: `hermes3:latest`.
+
+### Preparación inicial — una sola vez
+
+```bash
+ollama pull hermes3:latest
 python3 -m venv .private/cognee-venv
 .private/cognee-venv/bin/pip install --upgrade pip
 .private/cognee-venv/bin/pip install cognee uvicorn fastembed
 
-# 2. Generar la PKI local mTLS para el Memory Gateway
 ./memory-gateway/bin/generar_pki.sh .private/memory-gateway-pki 127.0.0.1 backend frontend orchestrator-analyst memory-admin
 cp .private/memory-gateway-pki/server.key .private/memory-gateway-pki/server-local.key
 cp .private/memory-gateway-pki/server.crt .private/memory-gateway-pki/server-local.crt
-
-# 3. Crear directorios de datos, clientes de gateway e inventario inicial
-mkdir -p .private/memory-gateway-data .private/memory-gateway-data/openapi
+mkdir -p .private/memory-gateway-data/openapi
 cp memory-gateway/config/clients.example.json .private/memory-gateway-clients.json
 cp memoria/tecnologias.example.json .private/tecnologias.json
-
-# 4. Provisionar la VM e instalar sus certificados mTLS
-./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
-./tools/vms/sincronizar_mtls_vm.sh <perfil>
 ```
 
----
+No sobrescribir configuraciones privadas existentes. Para acceso desde VMs, configurar dirección accesible y certificados mediante las herramientas del Gateway.
 
-## Levantar los Servicios Locales en macOS
+### Cognee — terminal 1
 
-En este laboratorio, **Ollama, Cognee y el Memory Gateway se ejecutan en la Mac**. Los tres procesos se inician en terminales separadas y permanecen en primer plano (`Ctrl+C` para detenerlos).
-
-Todos los comandos siguientes deben ejecutarse desde la raíz del repositorio.
-
-### 1. Comprobar Ollama
-
-Cognee utiliza un modelo Ollama con soporte de generación estructurada JSON (`hermes3:latest` o `qwen3:8b`). Ollama debe estar activo antes de iniciar Cognee:
-
-```bash
-curl --fail --silent http://127.0.0.1:11434/api/tags | jq '.models[].name'
-```
-
-Si no responde, abre la aplicación Ollama o inicia su servicio local. La lista debe incluir el modelo configurado (`hermes3:latest` o `qwen3:8b`).
-
-### 2. Levantar Cognee — terminal 1
-
-Este comando utiliza explícitamente `.private/cognee-system` y `.private/cognee-data`, donde vive la memoria existente. No se deben omitir estas rutas porque Cognee utilizaría sus directorios predeterminados y parecería que el grafo está vacío.
-
-> *Nota*: Si no dispones de la biblioteca nativa `ladybug-v0.19.0`, omite las líneas de `GRAPH_DATABASE_PROVIDER`, `LBUG_C_API_LIB_PATH` y `DYLD_LIBRARY_PATH` para que Cognee utilice su proveedor por defecto (Kuzu/NetworkX).
+Ollama debe estar activo. Conservar las rutas de datos; omitir las variables de Ladybug si la biblioteca no está instalada.
 
 ```bash
 PROJECT_ROOT="$PWD"
@@ -229,15 +203,7 @@ env \
   cognee.api.client:app --host 127.0.0.1 --port 8000
 ```
 
-Cognee estará listo cuando muestre `Application startup complete`. Desde otra terminal se puede comprobar sin modificar la memoria:
-
-```bash
-curl --fail --silent http://127.0.0.1:8000/api/v1/datasets | jq 'map({id, name})'
-```
-
-### 3. Levantar el Memory Gateway — terminal 2
-
-El Gateway es la única puerta de entrada a Cognee para el orquestador y el visor. Conserva SQLite/OpenAPI como fuente autoritativa y protege el acceso mediante mTLS y permisos.
+### Memory Gateway — terminal 2
 
 ```bash
 PROJECT_ROOT="$PWD"
@@ -255,23 +221,7 @@ env \
   node memory-gateway/bin/memory-gateway.mjs
 ```
 
-El Gateway estará listo cuando muestre `Memory Gateway escuchando en https://127.0.0.1:9443`. Para comprobarlo con la identidad administrativa:
-
-```bash
-PROJECT_ROOT="$PWD"
-export MEMORY_GATEWAY_URL='https://127.0.0.1:9443'
-export MEMORY_GATEWAY_CLIENT_CERT="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.crt"
-export MEMORY_GATEWAY_CLIENT_KEY="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.key"
-export MEMORY_GATEWAY_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt"
-
-./tools/gateway/memoria_gateway.sh verificar
-```
-
-La respuesta correcta contiene `"status":"ok"` y `"semantic_backend":"cognee-oss"`. Al iniciar, el Gateway también reintenta gradualmente los elementos pendientes de su outbox; por eso Cognee puede comenzar a procesar memoria aunque no se envíe un prompt nuevo.
-
-### 4. Levantar el visualizador — terminal 3
-
-Las variables se deben exportar nuevamente porque cada terminal tiene su propio entorno:
+### Visualizador — terminal 3
 
 ```bash
 PROJECT_ROOT="$PWD"
@@ -283,376 +233,50 @@ export MEMORY_GATEWAY_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt"
 .private/cognee-venv/bin/python tools/gateway/visualizar_grafos.py --abrir
 ```
 
-El visor estará disponible en `http://127.0.0.1:8765`. Se usa el Python del entorno Cognee porque el Python del sistema incluido en macOS puede utilizar LibreSSL sin soporte TLS 1.3.
+- Visor: `http://127.0.0.1:8765`. Identidad requerida: `graphs:read`.
+- Detener con `Ctrl+C`: visor → Gateway → Cognee.
 
-### Detener y diagnosticar
-
-Para detener cada componente, presiona `Ctrl+C` en su terminal, comenzando por el visor, luego el Gateway y finalmente Cognee. Para saber si ya existe una instancia y evitar `Address already in use`:
-
-```bash
-lsof -nP -iTCP:8000 -sTCP:LISTEN   # Cognee
-lsof -nP -iTCP:9443 -sTCP:LISTEN   # Memory Gateway
-lsof -nP -iTCP:8765 -sTCP:LISTEN   # Visualizador
-```
-
-Si `8765` está ocupado y deseas conservar la instancia existente, abre `http://127.0.0.1:8765`. Para iniciar otra instancia deliberadamente, usa `--port 8766`.
-
-### Reconstrucción segura de grafos (`reconstruir-grafos.mjs`)
-
-Si necesitas borrar y regenerar todos los datasets de memoria semántica en Cognee a partir de las fuentes autoritativas (SQLite/OpenAPI para contratos y `.private/tecnologias.json` para tecnologías):
-
-> **IMPORTANTE**: El Memory Gateway debe estar detenido durante este proceso para evitar escrituras concurrentes.
+### Consultas y diagnóstico
 
 ```bash
-# 1. Crear respaldo y reconstruir datasets en Cognee
-node memory-gateway/bin/reconstruir-grafos.mjs --confirmar-limpieza
-```
-
-El proceso realiza lo siguiente de forma segura:
-- Genera automáticamente un respaldo completo con timestamp en `.private/graph-backups/YYYY-MM-DDTHH-MM-SS-sssZ/`.
-- Elimina únicamente los datasets que inician con el prefijo `prueba_agentes_`.
-- Indexa los modelos canónicos:
-  - **Contratos compartidos** (`shared_contracts`): `Repositorio → Módulo → Endpoint`.
-  - **Tecnologías privadas** (`company`): `Repositorio → Tecnología`.
-
----
-
-## Creación Automatizada de Nuevos Agentes (`crear_agente.sh`)
-
-Para crear un nuevo agente o skill con su suite completa de subagentes (`analista`, `generador-codigo`, `qa`, `documentador`), ejecuta:
-
-```bash
-# Modo interactivo (te preguntará nombre, descripción, misión y herramientas):
-./tools/agentes/crear_agente.sh
-
-# Modo directo de un solo comando:
-./tools/agentes/crear_agente.sh dev-sec "Especialista en Seguridad" "Auditar código contra OWASP" "pi-harness,snyk"
-```
-
-El script genera automáticamente la estructura en `skills/<nombre>/` y realiza el `git add` correspondiente.
-
----
-
-## Exploración CLI de Memoria y Contratos (`consultar_memoria.sh`)
-
-Puedes explorar los contratos JSON registrados y las reglas corporativas directamente desde la terminal:
-
-```bash
-# Ver resumen general de la memoria
-./tools/gateway/consultar_memoria.sh
-
-# Listar todos los contratos de endpoints en tabla formateada
+./tools/gateway/memoria_gateway.sh verificar
 ./tools/gateway/consultar_memoria.sh --contratos
-
-# Buscar contratos o memorias por palabra clave
 ./tools/gateway/consultar_memoria.sh --buscar stats
-
-# Inspeccionar el esquema JSON completo de un endpoint
-./tools/gateway/consultar_memoria.sh --ver GET /api/posts/{id}/stats
-
-# Listar las reglas de memoria corporativa (capa company)
 ./tools/gateway/consultar_memoria.sh --empresa
+curl --fail --silent http://127.0.0.1:8000/api/v1/datasets | jq 'map({id, name})'
+lsof -nP -iTCP:8000 -iTCP:9443 -iTCP:8765 -sTCP:LISTEN
 ```
 
-### Visualizador web del grafo de Cognee
+### Reconstruir grafos
 
-El visor propio muestra los datasets, nodos y relaciones que Cognee va generando. Se actualiza automáticamente cada 15 segundos, permite buscar por significado y **consolida en un único grafo por repositorio tanto las tecnologías como los módulos y endpoints** naciendo del nodo raíz del `Repositorio`. También permite seleccionar **🌐 Vista General del Proyecto (Todos los Datasets)** para consolidar todo el sistema en un único mapa global.
-
-El navegador **no recibe certificados ni credenciales de Cognee**. Se conecta al servidor Python local; Python usa la identidad administrativa mTLS para consultar dos endpoints protegidos del Memory Gateway, y el Gateway sólo entrega datasets cuyo nombre comienza con `prueba_agentes_`.
-
-La identidad usada debe incluir el permiso `graphs:read` en `clients.json`. Tanto `memory-gateway/config/clients.example.json` como la configuración privada actual contienen ese permiso. Para iniciar únicamente el visor cuando Cognee y el Gateway ya están activos:
+**Detener el Gateway y mantener Cognee activo.** Se respaldan los datos y se regeneran los datasets administrados.
 
 ```bash
-PROJECT_ROOT="$PWD"
-export MEMORY_GATEWAY_URL='https://127.0.0.1:9443'
-export MEMORY_GATEWAY_CLIENT_CERT="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.crt"
-export MEMORY_GATEWAY_CLIENT_KEY="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.key"
-export MEMORY_GATEWAY_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt"
-
-./tools/gateway/memoria_gateway.sh verificar
-.private/cognee-venv/bin/python tools/gateway/visualizar_grafos.py --abrir
+./tools/gateway/reconstruir_grafos.sh
 ```
 
-Ejecuta el bloque desde la raíz de este repositorio. La guía **Levantar la memoria local en macOS** documenta el arranque completo. Se utiliza el Python del entorno Cognee porque incluye OpenSSL con soporte TLS 1.3; el Python del sistema de macOS puede estar enlazado con una versión antigua de LibreSSL. La comprobación `verificar` debe responder antes de abrir el visor.
+## Reglas esenciales
 
-El visualizador permanece en primer plano. Para detenerlo, vuelve a su terminal y presiona `Ctrl+C`. Si el puerto quedó ocupado por otra instancia, comprueba qué proceso lo usa con `lsof -nP -iTCP:8765 -sTCP:LISTEN`; también puedes iniciar una instancia independiente con `--port 8766`.
+- Tecnología privada: `.private/tecnologias.json` y capa `company`.
+- Contratos compartidos: SQLite/OpenAPI autoritativos; Cognee para búsqueda semántica.
+- Memoria de negocio: archivo privado en la VM, definido por `business_memory`.
+- Acceso a memoria mediante Gateway con mTLS; sin acceso directo de las VMs a Cognee.
+- Aislamiento: Bubblewrap en Linux, Seatbelt en macOS y `pi-appcontainer` en Windows.
+- JSONL bruto y prompts enriquecidos permanecen en la VM; la Mac recibe salida saneada.
 
-Sin `--abrir`, visita `http://127.0.0.1:8765`. El servidor se enlaza sólo a localhost de forma predeterminada y no requiere paquetes Python externos. Cuando se agrega y procesa nueva memoria con `add → cognify`, la siguiente actualización refleja el crecimiento del grafo. Si Cognee está caído, la búsqueda normal conserva el fallback SQLite, pero el grafo no puede representarse porque SQLite no contiene las relaciones semánticas generadas por Cognee.
+## Resultados
 
----
+En `logs/<slug>/`:
+- `SOLICITUD.md`: solicitud original.
+- `CONTEXTO_RECOLECTADO.json`: contexto resumido.
+- `REQUISITOS.json` y `REQUISITOS.md`: requisitos y destinos.
+- `*_output.log`: salida por despacho.
+- `EVIDENCIA_AGENTES.md`: VM, agente, versión y `run_id`.
+- `REPORTE_PI.md`: resultado consolidado.
 
-## Las Tres Capas de Memoria
-
-### 1. Tecnología privada de la empresa
-
-La consume el recolector/analista antes de enrutar los requisitos. Puede mantenerse en `.private/tecnologias.json` usando [`memoria/tecnologias.example.json`](memoria/tecnologias.example.json) como plantilla, o publicarse en la capa `company` del Gateway.
-
-La identidad `orchestrator-analyst` sólo puede leer esta capa. Los agentes reciben únicamente el fragmento tecnológico relevante para su requisito.
-
-#### Detección automática al agregar un repositorio
-
-El asistente inicial `provisionar_vm_pi.sh` y el alta adicional `agregar_repositorio_vm.sh` inspeccionan el repositorio local antes de registrarlo. Leen únicamente sus manifiestos; no instalan dependencias ni ejecutan código del proyecto. Reconocen actualmente:
-
-- PHP, Laravel, Illuminate y Composer mediante `composer.json`.
-- Node.js, Vue, React, Next.js, Nuxt, Vite, TypeScript y el gestor de paquetes mediante `package.json` y sus archivos de lock.
-- Python, Go, Rust, Ruby, Java/Maven, Gradle, .NET y Docker mediante sus manifiestos convencionales.
-
-El resultado se guarda automáticamente en `.private/tecnologias.json` bajo una clave idéntica al `repo-id` registrado en `config/vms.json`:
-
-```json
-{
-  "version": 1,
-  "repositories": {
-    "modulo-inventario": {
-      "technologies": ["Composer", "Illuminate ^13.0", "PHP ^8.4"],
-      "architecture": "módulo backend Illuminate/Composer",
-      "constraints": [],
-      "detection": {
-        "mode": "automatic",
-        "sources": ["composer.json"]
-      }
-    }
-  }
-}
-```
-
-Si ya existe una entrada tecnológica para ese `repo-id`, por defecto se conserva. Para forzar la re-detección de manifiestos y actualizar el registro (por ejemplo, si agregaste nuevos paquetes o dependencias), usa el flag `--refrescar-tecnologias`:
+## Pruebas
 
 ```bash
-./tools/vms/agregar_repositorio_vm.sh perfil repo-id modulo module /ruta/local /home/user/remote 'alias1,alias2' --solo-configurar --refrescar-tecnologias
-```
-
-#### Sincronización Automática a la Capa `company` del Gateway
-Al registrar o refrescar la tecnología de un repositorio, el sistema sincroniza automáticamente un resumen estructurado con la capa `company` del Memory Gateway (`memoria_gateway.sh guardar-tecnologias`). Esto permite que el analista orquestador recupere la información tecnológica centralizada mediante mTLS.
-
-La detección también puede ejecutarse en consola sin registrar el repositorio:
-
-```bash
-./tools/vms/detectar_tecnologias_repositorio.sh /ruta/al/repositorio module
-```
-
-Los valores detectados son las restricciones declaradas en los manifiestos, no una garantía de las versiones instaladas en la VM.
-
-#### Soporte de Despacho Remoto para Roles `qa` y `dev-security`
-El orquestador (`orquestar.sh` y `analizar_requisitos.sh`) admite el despacho remoto automático por SSH para los cuatro stacks de agentes: `backend`, `frontend`, `qa` y `security`. Cuando configuras una VM con `"stack": "qa"` o `"stack": "security"`, las tareas de auditoría de código o generación de suites de pruebas E2E son asignadas y despachadas automáticamente a dicha máquina.
-
-### 2. Contratos compartidos
-
-Contiene endpoints necesarios para que el core, los módulos y el frontend se integren. Backend puede publicar mediante la herramienta de memoria expuesta por `pi-harness`; frontend normalmente sólo consulta.
-
-SQLite y OpenAPI son autoritativos. Cognee ofrece recuperación semántica. El Memory Gateway incluye **fallback automático a SQLite**: si Cognee OSS no responde o está en mantenimiento, el Gateway consulta directamente a SQLite sin interrumpir el flujo.
-
-### 3. Memoria de negocio local
-
-Cada repositorio declara `business_memory` en `config/vms.json`. El archivo vive únicamente en la VM, con permisos `0600`; no vuelve a la Mac, no aparece en los logs y no se guarda en el reporte. `pi-harness` lo incorpora sólo después de elegir el destino.
-
-#### Gestión y Actualización de la Memoria de Negocio:
-
-- **Modo Interactivo (despliega menú de selección de VM/repo y selección de modo)**:
-  ```bash
-  ./tools/vms/actualizar_memoria_negocio_vm.sh
-  ```
-
-- **Sobrescribir por completo el archivo existente en la VM**:
-  ```bash
-  ./tools/vms/actualizar_memoria_negocio_vm.sh <perfil> <repo_id> "/ruta/archivo.md"
-  # O por pipe:
-  echo "Regla totalmente nueva" | ./tools/vms/actualizar_memoria_negocio_vm.sh <perfil> <repo_id>
-  ```
-
-- **Anexar / Agregar al final (preservando las reglas existentes)**:
-  ```bash
-  ./tools/vms/actualizar_memoria_negocio_vm.sh --anexar <perfil> <repo_id> "- Regla adicional 2: ..."
-  # O por pipe:
-  cat nueva_regla.md | ./tools/vms/actualizar_memoria_negocio_vm.sh --anexar <perfil> <repo_id>
-  ```
-
----
-
-## Seguridad
-
-- Cada VM posee certificado y llave mTLS propios. El `CN` identifica el perfil.
-- El Gateway aplica permisos, `core_id` y `tenant_id` desde `clients.json`.
-- Las VMs nunca reciben credenciales directas de Cognee.
-- La visualización requiere una identidad administrativa con `graphs:read`; el Gateway filtra los datasets ajenos al sistema.
-- `pi-harness/policies/backend.json` y `frontend.json` definen rutas y comandos permitidos.
-- En Linux se usa Bubblewrap; macOS usa Seatbelt y Windows requiere `pi-appcontainer`.
-- El flujo es *fail-closed*: si falla la política, sincronización o memoria requerida, Pi no se ejecuta reutilizando estado antiguo.
-
----
-
-## Provisionamiento de una VM Pi
-
-Guía completa paso a paso para preparar una nueva Máquina Virtual de extremo a extremo:
-
-### Paso 0: Registrar tu clave pública SSH en tu cuenta de GitHub (Solo 1 vez)
-
-Para que las VMs puedan clonar y actualizar repositorios privados de GitHub automáticamente mediante SSH:
-
-> ℹ️ **Verificación automática**: Los scripts `./tools/vms/configurar_ssh_vm.sh` y `./tools/vms/provisionar_vm_pi.sh` comprueban automáticamente si tu clave SSH ya está vinculada con GitHub. Si no lo está, **imprimirán en pantalla tu clave pública y la URL directa** (`https://github.com/settings/keys`), haciendo una pausa hasta que presiones ENTER.
-
-Si deseas agregarla manualmente con anticipación:
-1. Muestra la clave pública SSH de tu Mac ejecutando en la terminal:
-   ```bash
-   cat ~/.ssh/id_ed25519.pub
-   ```
-2. Copia todo el contenido del texto (comienza con `ssh-ed25519 AAAAC3Nza...`).
-3. Ve a tu navegador ingresando a **GitHub.com → Settings → SSH and GPG keys**.
-4. Haz clic en **New SSH key**:
-   - **Title**: `Mi Mac`
-   - **Key type**: `Authentication Key`
-   - **Key**: Pega la clave pública copiada.
-5. Guarda con **Add SSH key**. *(Esta clave servirá para todas tus VMs presentes y futuras).*
-
-
-### Paso 1: Preparación del servidor SSH en la VM (Si es una VM recién creada)
-
-Si al intentar conectar obtienes un error del tipo `Connection refused (port 22)` o problemas de dependencias en `apt`:
-
-1. Abre la consola directamente dentro de la VM e instala/repara el servidor SSH:
-   ```bash
-   # 1. Reparar paquetes e índices de apt si hay caché corrupto o dependencias rotas
-   sudo apt clean && sudo rm -rf /var/cache/apt/archives/*.deb
-   sudo dpkg --configure -a
-   sudo apt --fix-broken install -y
-   sudo apt update
-
-   # 2. Instalar el servidor SSH y activar el servicio
-   sudo apt install -y openssh-server openssh-sftp-server
-   sudo systemctl enable --now ssh
-   sudo ufw allow ssh
-   ```
-
-### Paso 2: Configurar la conexión SSH sin contraseña hacia la VM
-
-```bash
-./tools/vms/configurar_ssh_vm.sh usuario@ip_de_la_vm
-# Ejemplo: ./tools/vms/configurar_ssh_vm.sh pruebaconfig@192.168.50.64
-```
-
-### Paso 3: Aprovisionar la VM con el asistente interactivo de extremo a extremo
-
-```bash
-./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
-# Ejemplo: ./tools/vms/provisionar_vm_pi.sh backend-prueba-config --con-sudo-interactivo
-```
-
-El flujo interactivo:
-1. Solicita la IP, usuario y el origen del proyecto (`local` o `git`).
-2. Detecta la URL remota de GitHub oficial del repositorio del proyecto (`https://github.com/...`) y su rama por defecto.
-3. Solicita de forma interactiva la configuración de **Memory Gateway (mTLS)** (URL, Core ID, Tenant ID).
-4. Registra el perfil en `config/vms.json` y las tecnologías en `.private/tecnologias.json`.
-5. Muestra una lista numerada limpia de los agentes en `skills/` para su selección.
-6. Instala los paquetes del sistema, Node, Pi y `pi-harness`.
-7. Genera y transfiere automáticamente las credenciales mTLS (`client.crt`, `client.key`, `ca.crt`).
-8. Ejecuta la vinculación del repositorio oficial Git dentro de la VM.
-
-### Paso 4: Vinculación o restablecimiento automatizado de Git en las VMs
-
-
-Puedes configurar o restablecer la identidad Git y la rama de trabajo en todas tus VMs con un solo comando sin entrar manualmente a cada una:
-
-```bash
-# Configurar la identidad Git y vincular los repositorios oficiales de GitHub en todas las VMs
-./tools/vms/configurar_git_vms.sh --name "Tu Nombre" --email "tu-email@ejemplo.com"
-
-# Desvincular y resetear Git desde cero en todas las VMs
-./tools/vms/configurar_git_vms.sh --reset --name "Tu Nombre" --email "tu-email@ejemplo.com"
-```
-
-### Comandos de Utilidad y Mantenimiento de VMs:
-
-```bash
-# Sincronizar únicamente los certificados mTLS del Memory Gateway
-./tools/vms/sincronizar_mtls_vm.sh <perfil>
-
-# Auditar o verificar un perfil en cualquier momento sin reinstalar
-./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
-
-# Retirar los artefactos administrados por este orquestador antes de reprovisionar
-./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza
-```
-
-
----
-
-## Sincronización Automática de Agentes desde Git
-
-Los agentes pueden actualizarse de dos maneras:
-
-- `agent_update_mode: git`: la VM consulta periódicamente `git_branch` y activa `remote_agent/actual` mediante enlace simbólico atómico.
-- `agent_update_mode: local`: el monitor de macOS copia el agente únicamente cuando cambia su hash de contenido.
-
-Flujo de actualización Git:
-
-```text
-editar agente en skills/ → git add → git commit → git push a git_branch
-                                         ↓
-VM consulta origin → descarga git_agent_path → activa nueva versión en ~/agentes/<agente>/actual
-```
-
-Para solicitar la comprobación inmediatamente sin esperar al cron:
-
-```bash
-./tools/sincronizacion/sincronizar_agente.sh <perfil>
-```
-
----
-
-## Pi Harness y Aislamiento
-
-El harness instalado en cada VM:
-
-1. Detecta el sistema operativo (Linux / macOS / Windows).
-2. Selecciona Bubblewrap en Linux, Seatbelt en macOS o `pi-appcontainer` en Windows.
-3. Carga `pi-harness/policies/<rol>.json`.
-4. Carga únicamente el agente y la extensión de seguridad seleccionados.
-5. Incorpora la memoria de negocio local del repositorio.
-6. Guarda manifiesto, eventos, errores y auditoría de herramientas.
-7. En modo solo lectura genera una política efectiva sin escritura y sin herramientas de publicación de memoria.
-8. Conserva el JSONL bruto en la VM y devuelve a la Mac únicamente la respuesta final saneada.
-
-Diagnóstico local del harness:
-
-```bash
-./tools/despacho/pi_harness.sh doctor \
-  --role backend \
-  --workspace /ruta/proyecto \
-  --agent-dir ./skills/dev-back
-
-./tools/despacho/pi_harness.sh start \
-  --role backend \
-  --workspace /ruta/proyecto \
-  --agent-dir ./skills/dev-back \
-  --task "Agrega una prueba" \
-  --dry-run
-```
-
----
-
-## Artefactos de una Ejecución
-
-Cada solicitud crea `logs/<slug>/` con:
-
-- `SOLICITUD.md`: prompt original.
-- `CONTEXTO_RECOLECTADO.json`: contexto mínimo utilizado por el analista.
-- `REQUISITOS.json` y `REQUISITOS.md`: requisitos y destinos seleccionados.
-- `*_output.log`: salida de cada ejecución remota.
-- `EVIDENCIA_AGENTES.md`: VM, agente, versión, hash, commit, Pi, workspace y `run_id`.
-- `REPORTE_PI.md`: consolidación final.
-
----
-
-## Diagnóstico y Suites de Pruebas
-
-```bash
-# Diagnóstico SSH a las VMs configuradas
-./tools/vms/probar_vms.sh
-
-# Verificación de perfiles
-./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
-
-# Suites de Pruebas Automatizadas
 ./tests/probar_automatizacion.sh
 node tests/probar_memory_gateway.mjs
 bash tests/probar_enrutamiento_modular.sh
@@ -668,18 +292,3 @@ bash tests/probar_creacion_agente.sh
 bash tests/probar_consultar_memoria.sh
 python3 tests/probar_visualizador_grafos.py
 ```
-
----
-
-## Estado del Laboratorio
-
-- `backend-core`: `192.168.50.193`, repositorio `api-monolitic`.
-- `backend-comments`: `192.168.50.40`, repositorio `api-monolitic-comments`.
-- `backend-posts`: `192.168.50.231`, repositorio `api-monolitic-posts`.
-- Las tres VMs responden por SSH, tienen Pi, `pi-harness`, identidad mTLS y memoria habilitada.
-- Cognee y el Gateway se ejecutan en la Mac. Para administración local, Cognee escucha en `127.0.0.1:8000` y el Gateway mTLS en `https://127.0.0.1:9443`.
-- Cognee 1.5.3 reutiliza la memoria persistente de `.private/cognee-system`; Ollama aporta `qwen3:8b` y FastEmbed genera los embeddings locales.
-- El Gateway local utiliza un certificado `server-local` válido para localhost. La identidad `memory-admin` dispone de `graphs:read`, sin entregar credenciales de Cognee al navegador.
-- El visor Python/HTML fue probado con los datasets reales `contracts` y `company`; durante la comprobación mostró 56 nodos y 110 relaciones en el grafo de contratos.
-- **100% de las suites de pruebas pasando de forma limpia.**
-- Ejecución distribuida paralela verificada en vivo enviando tareas simultáneas a los módulos `posts` y `comments`.
