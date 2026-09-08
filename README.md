@@ -98,79 +98,20 @@ tools/
     └── prueba-agentes-bwrap.apparmor
 ```
 
-## Uso
+## Guía de instalación de memoria local en macOS
 
-Ejecutar desde la raíz del repositorio. Reemplazar los valores entre `<...>`.
+Ejecutar desde la raíz del repositorio en la Mac. Mantener abiertas las terminales de los servicios.
 
-```bash
-./tools/orquestacion/orquestar.sh "objetivo"
-./tools/orquestacion/orquestar.sh --clasificar "objetivo"
-./tools/orquestacion/orquestar.sh --descomponer "objetivo"
-```
-
-- Incluir el módulo de destino en la solicitud.
-- Usar `solo lectura` o `sin modificar` para impedir escrituras.
-- Los destinos independientes se ejecutan en paralelo.
-
-## Provisionamiento de una VM Pi
-
-`config/vms.json` está vacío: registrar los nuevos perfiles antes de ejecutar tareas.
-
-1. Habilitar SSH en la VM y disponer de acceso al repositorio Git.
-2. Configurar SSH, provisionar y verificar:
-
-```bash
-./tools/vms/configurar_ssh_vm.sh <usuario>@<ip>
-./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
-./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
-```
-
-El provisionador instala automáticamente NVM, Node.js, Pi, el harness y los paquetes del sistema; configura el perfil, proyecto, agente y memoria. No es necesario instalar Node ni Pi manualmente.
-
-3. Después del provisionamiento, entrar en la VM con el usuario del perfil y abrir Pi:
-
-```bash
-ssh <usuario>@<ip>
-source "$HOME/.nvm/nvm.sh"
-pi
-```
-
-Iniciar sesión en Pi con la cuenta de Codex antes de ejecutar tareas.
-
-### Mantenimiento
-
-```bash
-./tools/vms/probar_vms.sh
-./tools/vms/sincronizar_mtls_vm.sh <perfil>
-./tools/vms/configurar_git_vms.sh --name "Tu Nombre" --email "tu-email@ejemplo.com"
-./tools/vms/actualizar_memoria_negocio_vm.sh
-./tools/vms/actualizar_memoria_negocio_vm.sh --anexar <perfil> <repo_id> "Regla adicional"
-```
-
-**Limpieza remota: retira artefactos administrados. Ejecutar sólo sobre el perfil previsto.**
-
-```bash
-./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza
-```
-
-## Sincronización de agentes
-
-- `agent_update_mode: git`: publicar con `git commit` y `git push` a `git_branch`.
-- `agent_update_mode: local`: copiar cambios mediante el monitor local.
-
-```bash
-./tools/sincronizacion/sincronizar_agente.sh <perfil>
-./tools/sincronizacion/sincronizar_agente_local.sh <perfil>
-./tools/sincronizacion/instalar_monitor_local.sh
-```
-
-## Memoria local en macOS
+### 1. Comprobar requisitos
 
 Requisitos: Node.js 24+, Python 3.10+, Git, SSH, jq y Ollama. Modelo: `hermes3:latest`.
 
-### Preparación inicial — una sola vez
+### 2. Preparar el entorno y los certificados — una sola vez
+
+No sobrescribir configuraciones privadas existentes. Para acceso desde VMs, configurar dirección accesible y certificados mediante las herramientas del Gateway.
 
 ```bash
+mkdir -p .private
 ollama pull hermes3:latest
 python3 -m venv .private/cognee-venv
 .private/cognee-venv/bin/pip install --upgrade pip
@@ -184,9 +125,7 @@ cp memory-gateway/config/clients.example.json .private/memory-gateway-clients.js
 cp memoria/tecnologias.example.json .private/tecnologias.json
 ```
 
-No sobrescribir configuraciones privadas existentes. Para acceso desde VMs, configurar dirección accesible y certificados mediante las herramientas del Gateway.
-
-### Cognee — terminal 1
+### 3. Iniciar Cognee — terminal 1
 
 Ollama debe estar activo. Conservar las rutas de datos; omitir las variables de Ladybug si la biblioteca no está instalada.
 
@@ -213,7 +152,7 @@ env \
   cognee.api.client:app --host 127.0.0.1 --port 8000
 ```
 
-### Memory Gateway — terminal 2
+### 4. Iniciar Memory Gateway — terminal 2
 
 ```bash
 PROJECT_ROOT="$PWD"
@@ -231,7 +170,7 @@ env \
   node memory-gateway/bin/memory-gateway.mjs
 ```
 
-### Visualizador — terminal 3
+### 5. Abrir el visualizador — terminal 3
 
 ```bash
 PROJECT_ROOT="$PWD"
@@ -246,7 +185,94 @@ export MEMORY_GATEWAY_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt"
 - Visor: `http://127.0.0.1:8765`. Identidad requerida: `graphs:read`.
 - Detener con `Ctrl+C`: visor → Gateway → Cognee.
 
-### Consultas y diagnóstico
+### 6. Verificar la memoria — otra terminal
+
+```bash
+./tools/gateway/memoria_gateway.sh verificar
+```
+
+## Provisionamiento de una VM Pi
+
+Registrar un perfil en `config/vms.json` por cada VM; el provisionador permite crear los perfiles nuevos. Reemplazar los valores entre `<...>`.
+
+### 1. Preparar el acceso SSH
+
+Habilitar SSH en la VM y disponer de acceso al repositorio Git. Desde la Mac:
+
+```bash
+./tools/vms/configurar_ssh_vm.sh <usuario>@<ip>
+```
+
+### 2. Ejecutar el provisionador desde la Mac
+
+```bash
+./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
+```
+
+Instala automáticamente NVM, Node.js, Pi, el harness y los paquetes del sistema; configura el perfil, proyecto, agente y memoria. No instalar Node ni Pi manualmente.
+
+### 3. Iniciar sesión en Pi dentro de la VM
+
+```bash
+ssh <usuario>@<ip>
+source "$HOME/.nvm/nvm.sh"
+pi
+```
+
+Iniciar sesión en Pi con la cuenta de Codex, sin `sudo`, antes de ejecutar tareas.
+
+### 4. Verificar la VM desde la Mac
+
+Abrir otra terminal en la Mac, desde la raíz del repositorio:
+
+```bash
+./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
+```
+
+## Uso
+
+Ejecutar desde la raíz del repositorio. Reemplazar los valores entre `<...>`.
+
+```bash
+./tools/orquestacion/orquestar.sh "objetivo"
+./tools/orquestacion/orquestar.sh --clasificar "objetivo"
+./tools/orquestacion/orquestar.sh --descomponer "objetivo"
+```
+
+- Incluir el módulo de destino en la solicitud.
+- Usar `solo lectura` o `sin modificar` para impedir escrituras.
+- Los destinos independientes se ejecutan en paralelo.
+
+## Mantenimiento
+
+### VMs
+
+```bash
+./tools/vms/probar_vms.sh
+./tools/vms/sincronizar_mtls_vm.sh <perfil>
+./tools/vms/configurar_git_vms.sh --name "Tu Nombre" --email "tu-email@ejemplo.com"
+./tools/vms/actualizar_memoria_negocio_vm.sh
+./tools/vms/actualizar_memoria_negocio_vm.sh --anexar <perfil> <repo_id> "Regla adicional"
+```
+
+**Limpieza remota: retira artefactos administrados. Ejecutar sólo sobre el perfil previsto.**
+
+```bash
+./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza
+```
+
+### Sincronización de agentes
+
+- `agent_update_mode: git`: publicar con `git commit` y `git push` a `git_branch`.
+- `agent_update_mode: local`: copiar cambios mediante el monitor local.
+
+```bash
+./tools/sincronizacion/sincronizar_agente.sh <perfil>
+./tools/sincronizacion/sincronizar_agente_local.sh <perfil>
+./tools/sincronizacion/instalar_monitor_local.sh
+```
+
+### Consultas y diagnóstico de memoria
 
 ```bash
 ./tools/gateway/memoria_gateway.sh verificar
