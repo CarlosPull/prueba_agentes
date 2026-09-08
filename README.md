@@ -2,6 +2,8 @@
 
 Orquestación local por SSH, ejecución con Pi en VMs y memoria central mediante Gateway, SQLite/OpenAPI y Cognee.
 
+Esta infraestructura requiere **una VM para el orquestador** y **una o más VMs de ejecución** para los agentes backend/frontend. La VM del orquestador aloja este repositorio, coordina los despachos por SSH y puede alojar los servicios de memoria; cada VM de ejecución contiene Pi, el agente y su proyecto. Debe existir conectividad SSH hacia las VMs de ejecución y HTTPS hacia el Memory Gateway.
+
 ## Flujo completo
 
 ```mermaid
@@ -98,9 +100,9 @@ tools/
     └── prueba-agentes-bwrap.apparmor
 ```
 
-## Guía de instalación de memoria local en macOS
+## Guía de instalación de memoria en la VM del orquestador
 
-Ejecutar desde la raíz del repositorio en la Mac. Mantener abiertas las terminales de los servicios.
+Ejecutar desde la raíz del repositorio en la VM del orquestador. Mantener abiertas las terminales de los servicios.
 
 ### 1. Comprobar requisitos
 
@@ -127,7 +129,7 @@ cp memoria/tecnologias.example.json .private/tecnologias.json
 
 ### 3. Iniciar Cognee — terminal 1
 
-Ollama debe estar activo. Conservar las rutas de datos; omitir las variables de Ladybug si la biblioteca no está instalada.
+Ollama debe estar activo. Conservar las rutas de datos; las variables de Ladybug del ejemplo corresponden a una biblioteca `.dylib`: omitirlas en Linux o si la biblioteca no está instalada.
 
 ```bash
 PROJECT_ROOT="$PWD"
@@ -197,13 +199,13 @@ Registrar un perfil en `config/vms.json` por cada VM; el provisionador permite c
 
 ### 1. Preparar el acceso SSH
 
-Habilitar SSH en la VM y disponer de acceso al repositorio Git. Desde la Mac:
+Habilitar SSH en la VM y disponer de acceso al repositorio Git. Desde la VM del orquestador:
 
 ```bash
 ./tools/vms/configurar_ssh_vm.sh <usuario>@<ip>
 ```
 
-### 2. Ejecutar el provisionador desde la Mac
+### 2. Ejecutar el provisionador desde la VM del orquestador
 
 ```bash
 ./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
@@ -211,19 +213,58 @@ Habilitar SSH en la VM y disponer de acceso al repositorio Git. Desde la Mac:
 
 Instala automáticamente NVM, Node.js, Pi, el harness y los paquetes del sistema; configura el perfil, proyecto, agente y memoria. No instalar Node ni Pi manualmente.
 
+Al crear un perfil nuevo, solicita estas opciones en orden. Pulsar **Enter** acepta el valor predeterminado mostrado:
+
+| Opción | Qué indicar |
+| --- | --- |
+| IP y usuario | Dirección de la VM y usuario de Ubuntu para SSH. |
+| Origen del proyecto | `local`: elegir un repositorio de la VM del orquestador o indicar su ruta. `git`: indicar URL y rama del proyecto. |
+| Stack | `backend` o `frontend`, según el proyecto. |
+| Repositorio y módulo | ID del repositorio, nombre del módulo y, para backend, tipo `core` o `module`. |
+| Alias | Nombres separados por comas para dirigir tareas al módulo. |
+| Agente | Elegir de la lista; se propone `dev-back` para backend y `dev-front` para frontend. |
+| Workspace remoto | Carpeta donde quedará el proyecto en la VM. |
+| Actualización del agente | `git`: consultar cambios publicados; pide repositorio, rama e intervalo (10/15/20/30/60 segundos). `local`: copiar cambios desde la VM del orquestador mediante el monitor local. Es independiente del origen del proyecto. |
+| Versiones | Node (`24.19.0`) y Pi (`latest`); para backend, PHP (`8.4`) y mínimo (`8.4.1`). |
+| Memory Gateway | `s` para habilitar memoria compartida mediante mTLS; `N` para omitirla (predeterminado). Con `s`, completar las tres opciones siguientes. |
+| ↳ URL del Memory Gateway | `https://<IP_O_DNS_DEL_GATEWAY>:9443`. El script propone `https://192.168.50.61:9443`: reemplazarla si no corresponde al servidor real. No usar `127.0.0.1` para acceder desde otra VM. |
+| ↳ Core ID | Identificador del core cuyos contratos se compartirán; propone el ID del repositorio. Ajustarlo al core real y a los permisos del Gateway. |
+| ↳ Tenant ID | Identificador de la empresa/tenant; propone `empresa-prueba`. Reemplazarlo por el tenant real autorizado en el Gateway. |
+
+Con `--con-sudo-interactivo`, también se solicita la contraseña `sudo` de la VM cuando sea necesaria.
+
+**Si la IP del Gateway es diferente o cambia:**
+
+1. Indicar la URL correcta durante el asistente o modificar `memory.gateway_url` del perfil en `config/vms.json`; revisar también `memory.core_id` y `memory.tenant_id`.
+2. En el servidor del Gateway, cambiar `MEMORY_GATEWAY_HOST=127.0.0.1` por la IP de su interfaz de red (o `0.0.0.0`) y permitir el puerto `9443` sólo desde los equipos autorizados. Mantener Cognee y el visor en localhost.
+3. Usar un certificado de servidor cuyo SAN incluya la IP/DNS real, actualizar las rutas `MEMORY_GATEWAY_TLS_CERT` y `MEMORY_GATEWAY_TLS_KEY` si cambian y reiniciar el Gateway. Cambiar la URL no actualiza el certificado.
+4. Verificar que la identidad cliente esté autorizada para el Core ID y Tenant ID en `.private/memory-gateway-clients.json`. Instalar o actualizar sus certificados en la VM de ejecución desde el orquestador:
+
+   ```bash
+   ./tools/vms/sincronizar_mtls_vm.sh <perfil>
+   ```
+
+Conservar la CA existente; si se reemplaza, actualizar también la confianza de todos los clientes afectados.
+
 ### 3. Iniciar sesión en Pi dentro de la VM
 
 ```bash
 ssh <usuario>@<ip>
+pi
+```
+
+Si no se reconoce `pi`, `node` o `npm`, cargar NVM en esa misma terminal de la VM y volver a abrir Pi:
+
+```bash
 source "$HOME/.nvm/nvm.sh"
 pi
 ```
 
 Iniciar sesión en Pi con la cuenta de Codex, sin `sudo`, antes de ejecutar tareas.
 
-### 4. Verificar la VM desde la Mac
+### 4. Verificar la VM desde la VM del orquestador
 
-Abrir otra terminal en la Mac, desde la raíz del repositorio:
+Abrir otra terminal en la VM del orquestador, desde la raíz del repositorio:
 
 ```bash
 ./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
@@ -235,96 +276,8 @@ Ejecutar desde la raíz del repositorio. Reemplazar los valores entre `<...>`.
 
 ```bash
 ./tools/orquestacion/orquestar.sh "objetivo"
-./tools/orquestacion/orquestar.sh --clasificar "objetivo"
-./tools/orquestacion/orquestar.sh --descomponer "objetivo"
 ```
 
 - Incluir el módulo de destino en la solicitud.
 - Usar `solo lectura` o `sin modificar` para impedir escrituras.
 - Los destinos independientes se ejecutan en paralelo.
-
-## Mantenimiento
-
-### VMs
-
-```bash
-./tools/vms/probar_vms.sh
-./tools/vms/sincronizar_mtls_vm.sh <perfil>
-./tools/vms/configurar_git_vms.sh --name "Tu Nombre" --email "tu-email@ejemplo.com"
-./tools/vms/actualizar_memoria_negocio_vm.sh
-./tools/vms/actualizar_memoria_negocio_vm.sh --anexar <perfil> <repo_id> "Regla adicional"
-```
-
-**Limpieza remota: retira artefactos administrados. Ejecutar sólo sobre el perfil previsto.**
-
-```bash
-./tools/vms/limpiar_vm_pi.sh <perfil> --confirmar-limpieza
-```
-
-### Sincronización de agentes
-
-- `agent_update_mode: git`: publicar con `git commit` y `git push` a `git_branch`.
-- `agent_update_mode: local`: copiar cambios mediante el monitor local.
-
-```bash
-./tools/sincronizacion/sincronizar_agente.sh <perfil>
-./tools/sincronizacion/sincronizar_agente_local.sh <perfil>
-./tools/sincronizacion/instalar_monitor_local.sh
-```
-
-### Consultas y diagnóstico de memoria
-
-```bash
-./tools/gateway/memoria_gateway.sh verificar
-./tools/gateway/consultar_memoria.sh --contratos
-./tools/gateway/consultar_memoria.sh --buscar stats
-./tools/gateway/consultar_memoria.sh --empresa
-curl --fail --silent http://127.0.0.1:8000/api/v1/datasets | jq 'map({id, name})'
-lsof -nP -iTCP:8000 -iTCP:9443 -iTCP:8765 -sTCP:LISTEN
-```
-
-### Reconstruir grafos
-
-**Detener el Gateway y mantener Cognee activo.** Se respaldan los datos y se regeneran los datasets administrados.
-
-```bash
-./tools/gateway/reconstruir_grafos.sh
-```
-
-## Reglas esenciales
-
-- Tecnología privada: `.private/tecnologias.json` y capa `company`.
-- Contratos compartidos: SQLite/OpenAPI autoritativos; Cognee para búsqueda semántica.
-- Memoria de negocio: archivo privado en la VM, definido por `business_memory`.
-- Acceso a memoria mediante Gateway con mTLS; sin acceso directo de las VMs a Cognee.
-- Aislamiento: Bubblewrap en Linux, Seatbelt en macOS y `pi-appcontainer` en Windows.
-- JSONL bruto y prompts enriquecidos permanecen en la VM; la Mac recibe salida saneada.
-
-## Resultados
-
-En `logs/<slug>/`:
-- `SOLICITUD.md`: solicitud original.
-- `CONTEXTO_RECOLECTADO.json`: contexto resumido.
-- `REQUISITOS.json` y `REQUISITOS.md`: requisitos y destinos.
-- `*_output.log`: salida por despacho.
-- `EVIDENCIA_AGENTES.md`: VM, agente, versión y `run_id`.
-- `REPORTE_PI.md`: resultado consolidado.
-
-## Pruebas
-
-```bash
-./tests/probar_automatizacion.sh
-node tests/probar_memory_gateway.mjs
-bash tests/probar_enrutamiento_modular.sh
-bash tests/probar_clasificacion.sh
-node tests/probar_extension_pi.mjs
-bash tests/probar_despacho_paralelo.sh
-bash tests/probar_pi_harness.sh
-bash tests/probar_provisionamiento_pi.sh
-bash tests/probar_sincronizacion.sh
-bash tests/probar_ciclo_actualizacion.sh
-bash tests/probar_monitor_local.sh
-bash tests/probar_creacion_agente.sh
-bash tests/probar_consultar_memoria.sh
-python3 tests/probar_visualizador_grafos.py
-```
