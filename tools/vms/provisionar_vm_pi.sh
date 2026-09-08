@@ -469,9 +469,21 @@ if [ "$source_mode" = "local" ] && [ ! -d "$project_local_path" ]; then
   if [ -d "$candidate" ]; then
     echo "ℹ️ La ruta guardada '$project_local_path' no existe en esta máquina; usando la carpeta relativa '$candidate'."
     project_local_path="$candidate"
-  elif [ -n "$project_git_url" ]; then
+  elif [ -n "${project_git_url:-}" ]; then
     echo "ℹ️ La ruta local '$project_local_path' no existe en esta máquina; alternando automáticamente a modo Git ($project_git_url)..."
     source_mode="git"
+  else
+    echo "⚠️ La ruta local guardada en el perfil ('$project_local_path') no existe en esta máquina."
+    read -r -p "Origen del proyecto para esta VM [local/git] (git): " resp_src
+    resp_src="${resp_src:-git}"
+    if [ "$resp_src" = "git" ]; then
+      source_mode="git"
+      read -r -p "URL Git del proyecto: " project_git_url
+      read -r -p "Rama Git del proyecto (main): " project_git_branch
+      project_git_branch="${project_git_branch:-main}"
+    else
+      read -r -p "Ruta absoluta del proyecto en tu máquina: " project_local_path
+    fi
   fi
 fi
 
