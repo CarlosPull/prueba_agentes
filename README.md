@@ -125,7 +125,17 @@ Ejecutar desde la raíz del repositorio. Reemplazar los valores entre `<...>`.
 ./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
 ```
 
-El asistente registra el perfil, proyecto, agente y memoria; instala Pi y el harness.
+El provisionador instala automáticamente NVM, Node.js, Pi, el harness y los paquetes del sistema; configura el perfil, proyecto, agente y memoria. No es necesario instalar Node ni Pi manualmente.
+
+3. Después del provisionamiento, entrar en la VM con el usuario del perfil y abrir Pi:
+
+```bash
+ssh <usuario>@<ip>
+source "$HOME/.nvm/nvm.sh"
+pi
+```
+
+Iniciar sesión en Pi con la cuenta de Codex antes de ejecutar tareas.
 
 ### Mantenimiento
 

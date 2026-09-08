@@ -642,5 +642,7 @@ jq --arg profile "$VM_PROFILE" '
 chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"
 mv "$config_tmp" "$VMS_CONF"
 
-echo "✅ VM '$VM_PROFILE' preparada con Pi, pi-harness y agente '$stack'."
+echo "✅ VM '$VM_PROFILE' preparada con Node $node_version, Pi, pi-harness y agente '$stack'."
+echo "🔑 Paso manual: abre Pi en la VM e inicia sesión con tu cuenta de Codex antes de ejecutar tareas:"
+printf '   ssh -t %s '\''export PATH="%s:$PATH"; pi'\''\n' "$target" "/home/$user/.nvm/versions/node/v$node_version/bin"
 echo "ℹ️ agent-runner y OpenCode no fueron instalados por este script."
