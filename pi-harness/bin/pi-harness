@@ -41,7 +41,7 @@ USAGE() {
   cat <<'EOF'
 Uso:
   pi-harness doctor --role <rol> --workspace <ruta> --agent-dir <ruta> [--json]
-  pi-harness start  --role <rol> --workspace <ruta> --agent-dir <ruta> [--business-memory <archivo>] [--backend auto|bwrap|seatbelt|appcontainer] [--provider <proveedor> --model <modelo>] [--read-only] [--task "texto"|--task -] [--dry-run]
+  pi-harness start  --role <rol> --workspace <ruta> --agent-dir <ruta> [--business-memory <archivo>] [--backend auto|bwrap|container|seatbelt|appcontainer] [--provider <proveedor> --model <modelo>] [--read-only] [--task "texto"|--task -] [--dry-run]
 EOF
 }
 
@@ -200,13 +200,19 @@ SELECT_BACKEND() {
   local requested="$1"
   if [ "$requested" != "auto" ]; then
     case "$requested" in
-      bwrap|seatbelt|appcontainer) printf '%s\n' "$requested" ;;
+      bwrap|container|seatbelt|appcontainer) printf '%s\n' "$requested" ;;
       *) ERROR "backend no reconocido: $requested" ;;
     esac
     return
   fi
   case "$PLATFORM" in
-    linux) printf '%s\n' "bwrap" ;;
+    linux)
+      if [ "${PI_HARNESS_CONTAINER_ENFORCED:-0}" = "1" ] && [ -f /run/.containerenv ]; then
+        printf '%s\n' "container"
+      else
+        printf '%s\n' "bwrap"
+      fi
+      ;;
     macos) printf '%s\n' "seatbelt" ;;
     windows) printf '%s\n' "appcontainer" ;;
     *) ERROR "no existe backend para la plataforma '$PLATFORM'" ;;
@@ -217,16 +223,32 @@ BACKEND="$(SELECT_BACKEND "$BACKEND_REQUESTED")"
 
 case "$PLATFORM:$BACKEND" in
   linux:bwrap) SANDBOX_COMMAND="bwrap" ;;
+  linux:container)
+    [ "${PI_HARNESS_CONTAINER_ENFORCED:-0}" = "1" ] && [ -f /run/.containerenv ] || {
+      echo "AISLAMIENTO_NO_DISPONIBLE: el backend 'container' exige la atestación de Podman." >&2
+      exit 4
+    }
+    SANDBOX_COMMAND="/run/.containerenv"
+    ;;
   macos:seatbelt) SANDBOX_COMMAND="sandbox-exec" ;;
   windows:appcontainer) SANDBOX_COMMAND="pi-appcontainer" ;;
   *) ERROR "el backend '$BACKEND' no es compatible con '$PLATFORM'" ;;
 esac
 
-command -v "$SANDBOX_COMMAND" >/dev/null 2>&1 || {
+if [ "$BACKEND" = "container" ]; then
+  [ -f "$SANDBOX_COMMAND" ]
+else
+  command -v "$SANDBOX_COMMAND" >/dev/null 2>&1
+fi || {
   echo "AISLAMIENTO_NO_DISPONIBLE: falta '$SANDBOX_COMMAND' para la plataforma '$PLATFORM'." >&2
   echo "Pi no será ejecutado sin una barrera compatible." >&2
   exit 4
 }
+if [ "$BACKEND" = "container" ]; then
+  RESOLVED_SANDBOX_COMMAND="$SANDBOX_COMMAND"
+else
+  RESOLVED_SANDBOX_COMMAND="$(command -v "$SANDBOX_COMMAND")"
+fi
 
 PI_BIN="$(command -v pi 2>/dev/null || true)"
 PI_VERSION=""
@@ -241,7 +263,7 @@ if [ "$ACCION" = "doctor" ]; then
     jq -n \
       --arg platform "$PLATFORM" \
       --arg backend "$BACKEND" \
-      --arg sandbox_command "$(command -v "$SANDBOX_COMMAND")" \
+      --arg sandbox_command "$RESOLVED_SANDBOX_COMMAND" \
       --arg pi_bin "$PI_BIN" \
       --arg pi_version "$PI_VERSION" \
       --arg role "$ROLE" \
@@ -253,7 +275,7 @@ if [ "$ACCION" = "doctor" ]; then
   else
     echo "Sistema operativo: $PLATFORM"
     echo "Backend seleccionado: $BACKEND"
-    echo "Aislamiento: $(command -v "$SANDBOX_COMMAND")"
+    echo "Aislamiento: $RESOLVED_SANDBOX_COMMAND"
     echo "Pi: ${PI_BIN:-no instalado}"
     echo "Versión de Pi: ${PI_VERSION:-no disponible}"
     echo "Rol: $ROLE"
@@ -337,7 +359,7 @@ STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 jq -n \
   --arg run_id "$RUN_ID" --arg role "$ROLE" --arg platform "$PLATFORM" \
-  --arg backend "$BACKEND" --arg sandbox_command "$(command -v "$SANDBOX_COMMAND")" \
+  --arg backend "$BACKEND" --arg sandbox_command "$RESOLVED_SANDBOX_COMMAND" \
   --arg workspace "$WORKSPACE" --arg agent_dir "$AGENT_DIR" \
   --arg policy "$POLICY_FILE" --arg policy_sha256 "$POLICY_SHA256" \
   --arg skill_sha256 "$SKILL_SHA256" --arg pi_bin "$PI_BIN" \
@@ -538,6 +560,13 @@ RUN_APPCONTAINER() {
     -- "${PI_ARGS[@]}" < "$PROMPT_FILE"
 }
 
+RUN_CONTAINER() {
+  # Podman ya proporciona la barrera del sistema operativo: rootfs de solo
+  # lectura, usuario sin privilegios, cero capacidades y montajes limitados.
+  # La extensión de Pi sigue aplicando la política fina dentro del workspace.
+  "${PI_ARGS[@]}" < "$PROMPT_FILE"
+}
+
 echo "run_id: $RUN_ID" >&2
 echo "manifest: $MANIFEST" >&2
 echo "platform: $PLATFORM" >&2
@@ -546,6 +575,7 @@ echo "sandbox_backend: $BACKEND" >&2
 RUN_SELECTED_BACKEND() {
   case "$BACKEND" in
     bwrap) RUN_BWRAP ;;
+    container) RUN_CONTAINER ;;
     seatbelt) RUN_SEATBELT ;;
     appcontainer) RUN_APPCONTAINER ;;
   esac

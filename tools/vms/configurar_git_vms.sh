@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
+source "$ROOT/tools/vms/lib_vms.sh"
 
 command -v jq >/dev/null 2>&1 || {
   echo "Error: jq es obligatorio." >&2
@@ -50,11 +51,9 @@ else
   while IFS= read -r profile; do
     [ -n "$profile" ] && perfiles+=("$profile")
   done < <(jq -r 'to_entries[] | select(
-    if (.value.users | type) == "array" then
-      .value.users[].repositories[] | select(.dispatch_enabled == true or .engine == "pi")
-    else
-      .value.dispatch_enabled == true or .value.engine == "pi"
-    end
+    ((.value.repositories // []) | any(.[]; .dispatch_enabled != false or .engine == "pi")) or
+    ((.value.repositories // []) | length) == 0 and
+      ([.value.users[]?.repositories[]?] | any(.[]; .dispatch_enabled == true or .engine == "pi"))
   ) | .key' "$VMS_CONF" | sort -u)
 fi
 
@@ -68,10 +67,10 @@ pub_key="$(cat "$PUB_KEY_FILE")"
 priv_key="$(cat "$KEY_FILE")"
 
 for profile in "${perfiles[@]}"; do
-  ip="$(jq -r --arg p "$profile" '.[$p].ip // ""' "$VMS_CONF")"
-  user="$(jq -r --arg p "$profile" '.[$p].users[0].name // .[$p].user // ""' "$VMS_CONF")"
-  workspace="$(jq -r --arg p "$profile" '.[$p].users[0].repositories[0].path // .[$p].workspace // ""' "$VMS_CONF")"
-  local_path="$(jq -r --arg p "$profile" '.[$p].users[0].repositories[0].project_local_path // .[$p].project_local_path // ""' "$VMS_CONF")"
+  ip="$(VMS_FIELD "$VMS_CONF" "$profile" ip)"
+  user="$(VMS_FIELD "$VMS_CONF" "$profile" user)"
+  workspace="$(VMS_FIELD "$VMS_CONF" "$profile" workspace)"
+  local_path="$(VMS_FIELD "$VMS_CONF" "$profile" project_local_path)"
 
   if [ -z "$ip" ] || [ -z "$user" ]; then
     echo "⚠️ Omitiendo '$profile': IP o usuario no definidos."
@@ -88,7 +87,8 @@ for profile in "${perfiles[@]}"; do
   fi
 
   if [ -z "$real_git_url" ]; then
-    real_git_url="$(jq -r --arg p "$profile" '.[$p].users[0].repositories[0].project_git_url // .[$p].project_git_url // .[$p].users[0].repositories[0].git_url // .[$p].repositories[0].git_url // ""' "$VMS_CONF")"
+    real_git_url="$(VMS_FIELD "$VMS_CONF" "$profile" project_git_url)"
+    [ -n "$real_git_url" ] || real_git_url="$(VMS_FIELD "$VMS_CONF" "$profile" git_url)"
   fi
 
   if [ -z "$real_git_url" ]; then

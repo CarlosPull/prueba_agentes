@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
+source "$ROOT/tools/vms/lib_vms.sh"
 PRIVATE_TECH_MEMORY="${PRUEBA_AGENTES_PRIVATE_TECH_MEMORY:-$ROOT/.private/tecnologias.json}"
 PROFILE="${1:-}"
 REPOSITORY="${2:-}"
@@ -36,16 +37,16 @@ done
 
 command -v jq >/dev/null 2>&1 || { echo "Error: jq es obligatorio." >&2; exit 1; }
 
-user="$(jq -er --arg profile "$PROFILE" '.[$profile].users[0].name // .[$profile].user // empty' "$VMS_CONF")" || { echo "Error: perfil '$PROFILE' inexistente." >&2; exit 1; }
+user="$(VMS_FIELD "$VMS_CONF" "$PROFILE" user)" || { echo "Error: perfil '$PROFILE' inexistente." >&2; exit 1; }
 ip="$(jq -er --arg profile "$PROFILE" '.[$profile].ip' "$VMS_CONF")"
-stack="$(jq -er --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].stack // .[$profile].stack // empty' "$VMS_CONF")"
+stack="$(VMS_FIELD "$VMS_CONF" "$PROFILE" stack)"
 [[ "$user" =~ ^[A-Za-z0-9._-]+$ ]] && [[ "$ip" =~ ^[A-Za-z0-9.:-]+$ ]] || { echo "Error: usuario o IP inseguros en '$PROFILE'." >&2; exit 1; }
 [[ "$REMOTE_PATH" =~ ^/home/$user/[A-Za-z0-9._/-]+$ ]] || { echo "Error: la ruta remota debe permanecer dentro de /home/$user/." >&2; exit 1; }
 if [ "$stack" = "frontend" ] && [ "$KIND" != "frontend" ]; then
   echo "Error: una VM frontend sólo admite repositorios de tipo frontend." >&2; exit 1
 fi
 jq -e --arg profile "$PROFILE" --arg repository "$REPOSITORY" \
-  'all(((.[$profile].users[].repositories // .[$profile].repositories) // [])[]; .id != $repository)' "$VMS_CONF" >/dev/null || {
+  'all((.[$profile].repositories // [.[$profile].users[]?.repositories[]?])[]; .id != $repository)' "$VMS_CONF" >/dev/null || {
     if [ "$REFRESCAR_TECH" -eq 0 ]; then
       echo "Error: '$REPOSITORY' ya está registrado en '$PROFILE'. Usa --refrescar-tecnologias para actualizar manifiestos." >&2; exit 1;
     fi
@@ -97,13 +98,20 @@ aliases_json="$(printf '%s' "$ALIASES_CSV" | jq -R 'split(",") | map(gsub("^[[:s
 config_tmp="$(mktemp "$VMS_CONF.repositorio.XXXXXX")"
 jq --arg profile "$PROFILE" --arg id "$REPOSITORY" --arg module "$MODULE" --arg kind "$KIND" \
   --arg path "$REMOTE_PATH" --arg business_memory "$memory_path" --argjson aliases "$aliases_json" '
-  if (.[$profile].users | type) == "array" and (.[$profile].users | length) > 0 then
-    .[$profile].users[0].repositories = ((.[$profile].users[0].repositories // []) + [{
+  if ((.[$profile].repositories // []) | length) > 0 then
+    (.[$profile].repositories[0] // {}) as $base
+    | .[$profile].repositories += [{
+        id:$id,module:$module,kind:$kind,path:$path,business_memory:$business_memory,aliases:$aliases,
+        stack:($base.stack // "backend"),engine:($base.engine // "pi"),dispatch_enabled:true
+      }]
+    | if ((.[$profile].users // []) | length) > 0 then
+        .[$profile].users[0].repositories += [{id:$id,can_read:true,can_write:true}]
+      else . end
+  elif (.[$profile].users | type) == "array" and (.[$profile].users | length) > 0 then
+    .[$profile].users[0].repositories += [{
       id:$id,module:$module,kind:$kind,path:$path,business_memory:$business_memory,aliases:$aliases,
-      stack: (.[$profile].users[0].repositories[0].stack // "backend"),
-      engine: (.[$profile].users[0].repositories[0].engine // "pi"),
-      dispatch_enabled: (.[$profile].users[0].repositories[0].dispatch_enabled // true)
-    }])
+      stack:"backend",engine:"pi",dispatch_enabled:true
+    }]
   else
     .[$profile].repositories = ((.[$profile].repositories // []) + [{
       id:$id,module:$module,kind:$kind,path:$path,business_memory:$business_memory,aliases:$aliases

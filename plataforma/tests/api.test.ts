@@ -6,10 +6,10 @@ import { hashPassword } from '../src/auth.ts';
 import { buildApi } from '../src/api.ts';
 import { claim, heartbeat, finish, quarantineStale, workOnce } from '../src/queue.ts';
 import { validateConnection } from '../src/driver.ts';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { syncVmsConfigToDb } from '../src/vms-sync.ts';
+import { syncVmsConfigToDb, updateVmsJsonState } from '../src/vms-sync.ts';
 
 const url = process.env.DATABASE_TEST_URL;
 if (!url || !new URL(url).pathname.endsWith('_pruebas')) throw new Error('DATABASE_TEST_URL debe apuntar a una base exclusiva terminada en _pruebas. Usa bin/probar_podman.sh.');
@@ -67,6 +67,22 @@ test('un perfil antiguo con workspace conserva su módulo implícito', async () 
   await writeFile(configPath, JSON.stringify({ antiguo: { ip: '192.0.2.1', workspace: '/proyecto' } }));
   await syncVmsConfigToDb(pool, configPath);
   assert.deepEqual((await pool.query('SELECT repository FROM targets WHERE active')).rows, [{ repository: 'antiguo' }]);
+});
+
+test('la sincronización conserva repositorios una vez y guarda grants mínimos por usuario', async () => {
+  await writeFile(configPath, JSON.stringify({
+    'VM asignada': {
+      ip: '192.0.2.1', user: 'serveradmin',
+      repositories: [{ id: 'comments', module: 'comentarios', kind: 'module', path: '/home/serveradmin/comments', stack: 'backend', engine: 'pi', dispatch_enabled: true }],
+      users: []
+    }
+  }));
+  await syncVmsConfigToDb(pool, configPath);
+  await updateVmsJsonState(pool, configPath);
+  const saved = JSON.parse(await readFile(configPath, 'utf8'));
+  assert.equal(saved['VM asignada'].repositories.length, 1);
+  assert.equal(saved['VM asignada'].repositories[0].path, '/home/serveradmin/comments');
+  assert.deepEqual(saved['VM asignada'].users, [{ name: 'alice', repositories: [{ id: 'comments', can_read: true, can_write: true }] }]);
 });
 
 test('archivo en blanco o inválido informa error sin mostrar una matriz obsoleta', async () => {

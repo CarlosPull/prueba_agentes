@@ -20,6 +20,7 @@ commit="$(git -C "$base" rev-parse "$base_ref^{commit}")"
 git -C "$run/repo" checkout --quiet -b "codex/tarea-$job" "$commit"
 export PI_HARNESS_RUNS_DIR="$run/evidencia"
 args=(start --role "$role" --workspace "$run/repo" --agent-dir /opt/agente/actual --backend auto --task -)
+[ -z "${BUSINESS_MEMORY_FILE:-}" ] || args+=(--business-memory "$BUSINESS_MEMORY_FILE")
 [ "$read_only" = false ] || args+=(--read-only)
 [ -z "${PI_PROVIDER:-}" ] || args+=(--provider "$PI_PROVIDER")
 [ -z "${PI_MODEL:-}" ] || args+=(--model "$PI_MODEL")

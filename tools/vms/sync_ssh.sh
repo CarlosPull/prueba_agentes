@@ -94,22 +94,18 @@ VERIFICAR_LLAVE_EN_GITHUB() {
   fi
 }
 
-# Una fila (perfil, ip, usuario) por cada entrada de users[] en vms.json.
-# No se filtra por repositorio ni por permisos (can_read/can_write): el
-# acceso SSH es un requisito previo a cualquier permiso puntual sobre un
-# repositorio, así que por defecto se provisiona para todo usuario registrado.
-# Si se pasa un nombre, se acota a ese usuario (comparación insensible a
-# mayúsculas, mismo criterio que sync_pi.sh).
+# Una fila por VM. `user` es la cuenta técnica SSH; users[].name representa
+# usuarios de la plataforma y nunca concede una shell en la VM.
 OBTENER_VMS_REGISTRADAS() {
   local usuario_filtro="$1"
   jq -r --arg usuario "$usuario_filtro" '
     to_entries[]
     | .key as $perfil | .value as $vm
     | select(($vm.ip // "") != "")
-    | ($vm.users // [])[]
-    | select((.name // "") != "")
-    | select(($usuario == "") or ((.name | ascii_downcase) == ($usuario | ascii_downcase)))
-    | [$perfil, $vm.ip, .name] | @tsv
+    | select(($usuario == "") or any($vm.users[]?; ((.name // "" | ascii_downcase) == ($usuario | ascii_downcase))))
+    | ($vm.user // $vm.users[0].name // "") as $ssh_user
+    | select($ssh_user != "")
+    | [$perfil, $vm.ip, $ssh_user] | @tsv
   ' "$VMS_CONF"
 }
 

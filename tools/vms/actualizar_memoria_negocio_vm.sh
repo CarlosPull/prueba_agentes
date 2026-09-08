@@ -6,6 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
+source "$ROOT/tools/vms/lib_vms.sh"
 
 MODE="overwrite"
 if [ "${1:-}" = "--anexar" ] || [ "${1:-}" = "--append" ]; then
@@ -48,7 +49,7 @@ if [ -z "$PROFILE" ]; then
   for i in "${!profiles[@]}"; do
     p="${profiles[$i]}"
     ip="$(jq -r --arg p "$p" '.[$p].ip // "sin IP"' "$VMS_CONF")"
-    repos_str="$(jq -r --arg p "$p" '([.[$p].users[].repositories[].id] // (.[$p].repositories | map(.id))) | join(", ")' "$VMS_CONF")"
+    repos_str="$(VMS_REPOSITORIES_JSON "$VMS_CONF" "$p" | jq -r 'map(.id) | join(", ")')"
     printf "%2d) %-22s (IP: %s) -> Repos: [%s]\n" "$((i+1))" "$p" "$ip" "$repos_str"
   done
 
@@ -70,7 +71,7 @@ if ! jq -e --arg p "$PROFILE" '.[$p]' "$VMS_CONF" >/dev/null 2>&1; then
 fi
 
 # 2. Selección de Repositorio dentro del Perfil
-repos_json="$(jq -c --arg p "$PROFILE" '[.[$p].users[].repositories[]] // .[$p].repositories // []' "$VMS_CONF")"
+repos_json="$(VMS_REPOSITORIES_JSON "$VMS_CONF" "$PROFILE")"
 repo_count="$(jq -r 'length' <<< "$repos_json")"
 
 if [ "$repo_count" -eq 0 ]; then
@@ -131,7 +132,7 @@ if [[ ! "$business_memory" =~ ^/home/[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+\.md$ ]]; t
 fi
 
 ip="$(jq -r --arg p "$PROFILE" '.[$p].ip // ""' "$VMS_CONF")"
-user="$(jq -r --arg p "$PROFILE" '.[$p].users[0].name // .[$p].user // ""' "$VMS_CONF")"
+user="$(VMS_FIELD "$VMS_CONF" "$PROFILE" user)"
 
 if [ -z "$ip" ] || [ -z "$user" ]; then
   echo "Error: El perfil '$PROFILE' no especifica usuario o IP en vms.json." >&2

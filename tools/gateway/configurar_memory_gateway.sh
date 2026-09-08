@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
+source "$ROOT/tools/vms/lib_vms.sh"
 GATEWAY_URL="${1:-}"
 CORE_ID="${2:-}"
 TENANT_ID="${3:-}"
@@ -28,25 +29,37 @@ while [ "$#" -gt 0 ]; do
 done
 if [ "${#profiles[@]}" -eq 0 ]; then
   while IFS= read -r profile; do profiles+=("$profile"); done < <(
-    jq -r 'to_entries[] | select(.value.engine == "pi" and .value.dispatch_enabled == true) | .key' "$VMS_CONF"
+    jq -r 'to_entries[] | select(
+      ((.value.repositories // []) | any(.[]; .engine == "pi" and .dispatch_enabled != false)) or
+      (.value.engine == "pi" and .value.dispatch_enabled == true)
+    ) | .key' "$VMS_CONF"
   )
 fi
 [ "${#profiles[@]}" -gt 0 ] || { echo "Error: no hay perfiles Pi habilitados." >&2; exit 1; }
 
 tmp="$(mktemp "$VMS_CONF.gateway.XXXXXX")"; cp "$VMS_CONF" "$tmp"
 for profile in "${profiles[@]}"; do
-  user="$(jq -er --arg profile "$profile" 'select(.[$profile].engine == "pi") | .[$profile].user' "$tmp")" || {
+  user="$(VMS_FIELD "$tmp" "$profile" user)" || {
     rm -f "$tmp"; echo "Error: '$profile' no es un perfil Pi válido." >&2; exit 1;
   }
   credential_dir="/home/$user/.config/prueba-agentes/memory-gateway"
   next="$(mktemp "$VMS_CONF.gateway-paso.XXXXXX")"
   jq --arg profile "$profile" --arg url "${GATEWAY_URL%/}" --arg core "$CORE_ID" --arg tenant "$TENANT_ID" \
     --arg dir "$credential_dir" --argjson business "$read_business" --argjson company "$read_company" '
-    .[$profile].memory = {
-      enabled:true, gateway_url:$url, core_id:$core, tenant_id:$tenant,
-      read_business:$business, read_company:$company,
-      tls_key:($dir + "/client.key"), tls_cert:($dir + "/client.crt"), tls_ca:($dir + "/ca.crt")
-    }
+    if ((.[$profile].repositories // []) | length) > 0 then
+      .[$profile].repositories as $repos
+      | .[$profile].repositories |= map(.memory = {
+        enabled:true, gateway_url:$url, core_id:(if ($repos | length) == 1 then $core else .id end), tenant_id:$tenant,
+        read_business:$business, read_company:$company,
+        tls_key:($dir + "/client.key"), tls_cert:($dir + "/client.crt"), tls_ca:($dir + "/ca.crt")
+      })
+    else
+      .[$profile].memory = {
+        enabled:true, gateway_url:$url, core_id:$core, tenant_id:$tenant,
+        read_business:$business, read_company:$company,
+        tls_key:($dir + "/client.key"), tls_cert:($dir + "/client.crt"), tls_ca:($dir + "/ca.crt")
+      }
+    end
   ' "$tmp" > "$next"; mv "$next" "$tmp"
 done
 chmod --reference="$VMS_CONF" "$tmp" 2>/dev/null || chmod 0644 "$tmp"; mv "$tmp" "$VMS_CONF"

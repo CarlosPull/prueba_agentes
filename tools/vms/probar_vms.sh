@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
+source "$ROOT/tools/vms/lib_vms.sh"
 
 command -v jq >/dev/null 2>&1 || {
   echo "Error: jq es obligatorio para leer vms.json." >&2
@@ -13,11 +14,9 @@ command -v jq >/dev/null 2>&1 || {
 GET_ROLES() {
   if [ -f "$VMS_CONF" ]; then
     jq -r 'to_entries[] | select(
-      if (.value.users | type) == "array" then
-        .value.users[].repositories[] | select(.engine == "pi" and .dispatch_enabled == true)
-      else
-        .value.engine == "pi" and .value.dispatch_enabled == true
-      end
+      ((.value.repositories // []) | any(.[]; .engine == "pi" and .dispatch_enabled != false)) or
+      ((.value.repositories // []) | length) == 0 and
+        ([.value.users[]?.repositories[]?] | any(.[]; .engine == "pi" and .dispatch_enabled == true))
     ) | .key' "$VMS_CONF" | sort -u
   else
     echo "backend frontend"
@@ -25,23 +24,7 @@ GET_ROLES() {
 }
 
 GET_VM_FIELD() {
-  local role="$1"
-  local field="$2"
-  jq -er --arg role "$role" --arg field "$field" '
-    if (.[$role] | type) == "object" then
-      if $field == "ip" then
-        .[$role].ip // empty
-      elif $field == "user" then
-        .[$role].users[0].name // .[$role].user // empty
-      elif $field == "workspace" then
-        .[$role].users[0].repositories[0].path // .[$role].users[0].repositories[0].workspace // .[$role].workspace // empty
-      else
-        .[$role].users[0].repositories[0][$field] // .[$role][$field] // empty
-      end
-    else
-      empty
-    end
-  ' "$VMS_CONF" 2>/dev/null || true
+  VMS_FIELD "$VMS_CONF" "$1" "$2"
 }
 
 SSH_OPTS="-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes"

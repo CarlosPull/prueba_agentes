@@ -75,7 +75,7 @@ if [ "$STACK" = "backend" ]; then
 fi
 
 faltantes=()
-for comando in git curl crontab tar flock jq bwrap; do
+for comando in git curl crontab tar flock jq bwrap podman; do
   command -v "$comando" >/dev/null 2>&1 || faltantes+=("$comando")
 done
 if [ "$STACK" = "backend" ]; then
@@ -90,6 +90,10 @@ if [ "${#faltantes[@]}" -gt 0 ]; then
   exit 20
 fi
 systemctl is-active --quiet cron || { echo "REQUISITO_SISTEMA_FALTANTE: cron inactivo." >&2; exit 20; }
+[ "$(podman info --format '{{.Host.Security.Rootless}}')" = true ] || {
+  echo "Error: Podman debe funcionar en modo rootless para el usuario de la VM." >&2
+  exit 1
+}
 
 NVM_DIR="$HOME/.nvm"
 NODE_BIN="$NVM_DIR/versions/node/v$NODE_VERSION/bin"
@@ -172,6 +176,8 @@ VERIFICAR() {
   test -s "$REMOTE_HARNESS/extension/index.ts" || { echo "❌ Falta extensión de seguridad de Pi"; errores=1; }
   test -s "$REMOTE_HARNESS/policies/$STACK.json" || { echo "❌ Falta política del stack $STACK"; errores=1; }
   test -s "$REMOTE_AGENT/actual/SKILL.md" || { echo "❌ Falta agente activo"; errores=1; }
+  command -v podman >/dev/null 2>&1 || { echo "❌ Falta Podman"; errores=1; }
+  [ "$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null || true)" = true ] || { echo "❌ Podman no está configurado como rootless"; errores=1; }
   if command -v bwrap >/dev/null 2>&1; then
     bwrap --ro-bind / / --dev /dev --proc /proc -- true >/dev/null 2>&1 || {
       echo "❌ Bubblewrap está instalado, pero el sistema no permite crear el aislamiento"

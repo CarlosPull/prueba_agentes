@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="$ROOT/config/vms.json"
 PKI_DIR="$ROOT/.private/memory-gateway-pki"
+source "$ROOT/tools/vms/lib_vms.sh"
 
 TARGET_PROFILE="${1:-}"
 
@@ -30,11 +31,9 @@ else
     [ -n "$line" ] || continue
     profiles+=("$line")
   done < <(jq -r 'to_entries[] | select(
-    if (.value.users | type) == "array" then
-      .value.users[].repositories[] | select(.engine == "pi" and (.dispatch_enabled // true))
-    else
-      .value.engine == "pi" and (.value.dispatch_enabled // true)
-    end
+    ((.value.repositories // []) | any(.[]; .engine == "pi" and .dispatch_enabled != false)) or
+    ((.value.repositories // []) | length) == 0 and
+      ([.value.users[]?.repositories[]?] | any(.[]; .engine == "pi" and .dispatch_enabled != false))
   ) | .key' "$VMS_CONF" | sort -u)
 fi
 
@@ -46,9 +45,10 @@ for profile in "${profiles[@]}"; do
   exists="$(jq -r --arg p "$profile" '.[$p] // empty' "$VMS_CONF")"
   [ -n "$exists" ] || { echo "Error: el perfil '$profile' no existe en vms.json." >&2; exit 1; }
 
-  ip="$(jq -r --arg p "$profile" '.[$p].ip' "$VMS_CONF")"
-  user="$(jq -r --arg p "$profile" '.[$p].users[0].name // .[$p].user' "$VMS_CONF")"
-  stack="$(jq -r --arg p "$profile" '.[$p].users[0].repositories[0].stack // .[$p].stack // "backend"' "$VMS_CONF")"
+  ip="$(VMS_FIELD "$VMS_CONF" "$profile" ip)"
+  user="$(VMS_FIELD "$VMS_CONF" "$profile" user)"
+  stack="$(VMS_FIELD "$VMS_CONF" "$profile" stack)"
+  [ -n "$stack" ] || stack=backend
 
   [ -n "$ip" ] && [ "$ip" != "null" ] && [ -n "$user" ] && [ "$user" != "null" ] || {
     echo "⚠️ Omitiendo perfil '$profile': falta IP o usuario en vms.json." >&2

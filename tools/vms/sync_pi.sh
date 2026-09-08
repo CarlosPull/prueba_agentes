@@ -6,6 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
+source "$ROOT/tools/vms/lib_vms.sh"
 
 PI_PROVEEDOR="openai-codex"
 AUTH_LOCAL="$HOME/.pi/agent/auth.json"
@@ -59,14 +60,23 @@ VERIFICAR_SESION_LOCAL() {
 # pi_version se necesitan para poder instalar "pi" remotamente si hiciera falta.
 OBTENER_VMS_CON_ACCESO() {
   jq -r --arg usuario "$USUARIO_NOMBRE" '
+    def valor_booleano($objeto; $campo; $predeterminado):
+      if ($objeto | has($campo)) then $objeto[$campo] else $predeterminado end;
     to_entries[]
     | .key as $perfil | .value as $vm
     | ($vm.users // [])[]
     | select((.name // "" | ascii_downcase) == ($usuario | ascii_downcase))
     | .name as $nombre
-    | (.repositories // [])[]
-    | select((.can_read // false) and ((.engine // "pi") == "pi") and (.dispatch_enabled // true))
-    | [$perfil, $vm.ip, $nombre, (.node_version // ""), (.pi_version // "latest")] | @tsv
+    | (.repositories // [])[] as $grant
+    | if (($vm.repositories // []) | length) > 0 then
+        $vm.repositories[] | select(.id == ($grant.id // $grant.repository))
+        | . + {
+            can_read:valor_booleano($grant; "can_read"; true),
+            dispatch_enabled:(valor_booleano(.; "dispatch_enabled"; true) and valor_booleano($grant; "can_read"; true))
+          }
+      else $grant end
+    | select(.can_read == true and ((.engine // "pi") == "pi") and .dispatch_enabled != false)
+    | [$perfil, $vm.ip, ($vm.user // $nombre), (.node_version // ""), (.pi_version // "latest")] | @tsv
   ' "$VMS_CONF" | sort -u -t $'\t' -k2,2 -k3,3
 }
 

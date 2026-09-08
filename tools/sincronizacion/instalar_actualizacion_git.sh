@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/tools/vms/lib_vms.sh"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 ACTUALIZADOR_LOCAL="$ROOT/tools/remotos/actualizar_agente_git.sh"
 CICLO_LOCAL="$ROOT/tools/remotos/ciclo_actualizacion_git.sh"
@@ -24,9 +25,7 @@ command -v jq >/dev/null 2>&1 || {
 }
 
 GET_VM_FIELD() {
-  local role="$1"
-  local field="$2"
-  jq -er --arg role "$role" --arg field "$field" '.[$role][$field]' "$VMS_CONF" 2>/dev/null || true
+  VMS_FIELD "$VMS_CONF" "$1" "$2"
 }
 
 ip="$(GET_VM_FIELD "$VM_PROFILE" "ip")"

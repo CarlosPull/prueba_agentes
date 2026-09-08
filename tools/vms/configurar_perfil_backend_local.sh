@@ -39,22 +39,18 @@ jq --arg profile "$PROFILE" --arg ip "$IP" --arg user "$USER_VM" --arg workspace
   --arg local_path "$LOCAL_PATH" --arg kind "$KIND" --arg repository "$REPOSITORY" --arg module "$MODULE" \
   --argjson aliases "$aliases_json" --arg agent_url "$agent_url" --arg agent_branch "$agent_branch" '
   .[$profile] = {
-    ip:$ip,user:$user,workspace:$workspace,stack:"backend",
+    ip:$ip,user:$user,
     repositories:[{
       id:$repository,module:$module,kind:$kind,path:$workspace,
       business_memory:("/home/" + $user + "/.local/share/prueba-agentes/business/" + $repository + ".md"),
-      aliases:$aliases
+      aliases:$aliases,stack:"backend",engine:"pi",dispatch_enabled:false,
+      memory:{enabled:false},source_mode:"local",project_local_path:$local_path,
+      agent_update_mode:"git",node_version:"24.19.0",pi_version:"latest",
+      php_version:"8.4",php_min_version:"8.4.1",install_dependencies:($kind == "core"),
+      remote_agent:("/home/" + $user + "/agentes/dev-back"),
+      git_url:$agent_url,git_branch:$agent_branch,git_agent_path:"skills/dev-back",agent_poll_seconds:30
     }],
-    engine:"pi",dispatch_enabled:false,
-    pi_harness:("/home/" + $user + "/.local/bin/pi-harness"),
-    pi_provider:"openai-codex",pi_model:"gpt-5.4-mini",
-    memory:{enabled:false,gateway_url:"",core_id:"",tenant_id:"",read_business:false,read_company:false,tls_key:"",tls_cert:"",tls_ca:""},
-    source_mode:"local",project_local_path:$local_path,
-    agent_update_mode:"git",node_version:"24.19.0",pi_version:"latest",
-    php_version:"8.4",php_min_version:"8.4.1",
-    install_dependencies:($kind == "core"),
-    local_agent:"skills/dev-back",remote_agent:("/home/" + $user + "/agentes/backend"),
-    git_url:$agent_url,git_branch:$agent_branch,git_agent_path:"skills/dev-back",agent_poll_seconds:30
+    users:[{name:$user,repositories:[{id:$repository,can_read:true,can_write:true}]}]
   }
 ' "$VMS_CONF" > "$config_tmp"
 chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"

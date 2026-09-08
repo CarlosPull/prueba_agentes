@@ -6,9 +6,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 PRIVATE_TECH_MEMORY="${PRUEBA_AGENTES_PRIVATE_TECH_MEMORY:-$ROOT/.private/tecnologias.json}"
 BOOTSTRAP_LOCAL="$ROOT/tools/remotos/provisionar_vm_pi.sh"
+CONTAINER_BOOTSTRAP_LOCAL="$ROOT/tools/remotos/provisionar_contenedor_pi.sh"
 PAQUETES_BACKEND_LOCAL="$ROOT/tools/remotos/instalar_paquetes_backend.sh"
 APPARMOR_BWRAP_LOCAL="$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor"
 HARNESS_LOCAL="$ROOT/pi-harness"
+source "$ROOT/tools/vms/lib_vms.sh"
 VM_PROFILE="${1:-}"
 OPCION="${2:-}"
 
@@ -60,7 +62,7 @@ CONFIGURAR_PERFIL_NUEVO() {
 
 	local pub_key_file="$HOME/.ssh/id_ed25519.pub"
 	local gh_check=""
-	if [ -f "$pub_key_file" ]; then
+	if [ -f "$pub_key_file" ] && [ -t 0 ]; then
 		gh_check="$(ssh -T -o StrictHostKeyChecking=no -o ConnectTimeout=4 git@github.com 2>&1 || true)"
 		if ! printf '%s\n' "$gh_check" | grep -q "successfully authenticated"; then
 			echo ""
@@ -375,23 +377,19 @@ CONFIGURAR_PERFIL_NUEVO() {
         id:$repository_id, module:$module, kind:$repository_kind, path:$workspace,
         business_memory:("/home/" + $user + "/.local/share/prueba-agentes/business/" + $repository_id + ".md"),
         aliases:$aliases, stack:$stack, engine:"pi", dispatch_enabled:false,
-        can_read:true, can_write:true,
-        pi_harness:("/home/" + $user + "/.local/bin/pi-harness"),
-        pi_provider:"openai-codex", pi_model:"gpt-5.4-mini",
         memory:{
           enabled:($memory_enabled == "true"),
           gateway_url:$memory_gateway_url,
           core_id:$memory_core_id,
           tenant_id:$memory_tenant_id,
           read_business:($memory_enabled == "true"),
-          read_company:false,
           tls_key:("/home/" + $user + "/.config/prueba-agentes/memory-gateway/client.key"),
           tls_cert:("/home/" + $user + "/.config/prueba-agentes/memory-gateway/client.crt"),
           tls_ca:("/home/" + $user + "/.config/prueba-agentes/memory-gateway/ca.crt")
         },
         source_mode:$source_mode, agent_update_mode:$agent_update_mode,
         node_version:$node_version, pi_version:$pi_version,
-        install_dependencies:($repository_kind != "module"), local_agent:$local_agent,
+        install_dependencies:($repository_kind != "module"),
         remote_agent:$remote_agent
       } as $repo_obj
       | (if $source_mode == "local" then $repo_obj + {project_local_path:$project_local_path}
@@ -404,13 +402,15 @@ CONFIGURAR_PERFIL_NUEVO() {
              git_agent_path:$git_agent_path,
              agent_poll_seconds:($agent_poll_seconds | tonumber)
            }
-         else $repo_obj end) as $repo_obj
+         else $repo_obj + {local_agent:$local_agent} end) as $repo_obj
       | .[$profile] = {
           ip: $ip,
+          user: $user,
+          repositories: [$repo_obj],
           users: [
             {
               name: $user,
-              repositories: [$repo_obj]
+              repositories: [{id:$repository_id,can_read:true,can_write:true}]
             }
           ]
         }
@@ -439,7 +439,7 @@ if [ "$OPCION" = "--solo-configurar" ]; then
 	jq --arg profile "$VM_PROFILE" '.[$profile]' "$VMS_CONF"
 	exit 0
 fi
-for archivo in "$BOOTSTRAP_LOCAL" "$APPARMOR_BWRAP_LOCAL" "$HARNESS_LOCAL/bin/pi-harness" "$HARNESS_LOCAL/bin/filtrar_salida_pi.sh" "$HARNESS_LOCAL/extension/index.ts"; do
+for archivo in "$BOOTSTRAP_LOCAL" "$CONTAINER_BOOTSTRAP_LOCAL" "$APPARMOR_BWRAP_LOCAL" "$HARNESS_LOCAL/bin/pi-harness" "$HARNESS_LOCAL/bin/filtrar_salida_pi.sh" "$HARNESS_LOCAL/extension/index.ts" "$ROOT/plataforma/Containerfile.modulo" "$ROOT/plataforma/remoto/ejecutar_tarea.sh"; do
 	[ -s "$archivo" ] || {
 		echo "Error: falta el recurso local '$archivo'." >&2
 		exit 1
@@ -447,22 +447,7 @@ for archivo in "$BOOTSTRAP_LOCAL" "$APPARMOR_BWRAP_LOCAL" "$HARNESS_LOCAL/bin/pi
 done
 
 GET_VM_FIELD() {
-	local field="$1"
-	jq -r --arg profile "$VM_PROFILE" --arg field "$field" '
-    if (.[$profile] | type) == "object" then
-      if $field == "ip" then
-        .[$profile].ip // empty
-      elif $field == "user" then
-        .[$profile].users[0].name // .[$profile].user // empty
-      elif $field == "workspace" then
-        .[$profile].users[0].repositories[0].path // .[$profile].users[0].repositories[0].workspace // .[$profile].workspace // empty
-      else
-        .[$profile].users[0].repositories[0][$field] // .[$profile][$field] // empty
-      end
-    else
-      empty
-    end
-  ' "$VMS_CONF" 2>/dev/null || true
+	VMS_FIELD "$VMS_CONF" "$VM_PROFILE" "$1"
 }
 
 ip="$(GET_VM_FIELD ip)"
@@ -482,7 +467,7 @@ pi_version="$(GET_VM_FIELD pi_version)"
 php_version="$(GET_VM_FIELD php_version)"
 php_min_version="$(GET_VM_FIELD php_min_version)"
 install_dependencies="$(GET_VM_FIELD install_dependencies)"
-project_kind="$(jq -r --arg profile "$VM_PROFILE" '.[$profile].users[0].repositories[0].kind // .[$profile].repositories[0].kind // empty' "$VMS_CONF")"
+project_kind="$(GET_VM_FIELD kind)"
 local_agent="$(GET_VM_FIELD local_agent)"
 remote_agent="$(GET_VM_FIELD remote_agent)"
 agent_git_url="$(GET_VM_FIELD git_url)"
@@ -599,7 +584,7 @@ if ! ssh "${SSH_OPTS[@]}" "$target" "echo OK" >/dev/null 2>&1; then
 fi
 
 if [ "$OPCION" = "--con-sudo-interactivo" ]; then
-	paquetes=(git curl ca-certificates cron jq tar rsync util-linux bubblewrap apparmor build-essential locales software-properties-common)
+	paquetes=(git curl ca-certificates cron jq tar rsync util-linux bubblewrap apparmor build-essential locales software-properties-common podman uidmap slirp4netns fuse-overlayfs dbus-user-session)
 	remote_apparmor_profile="/home/$user/.local/lib/prueba-agentes/prueba-agentes-bwrap.apparmor"
 	ssh "${SSH_OPTS[@]}" "$target" \
 		"mkdir -p '/home/$user/.local/lib/prueba-agentes' && install -m 0644 /dev/stdin '$remote_apparmor_profile.nuevo' && mv -f '$remote_apparmor_profile.nuevo' '$remote_apparmor_profile'" \
@@ -630,9 +615,14 @@ if [ "$OPCION" = "--con-sudo-interactivo" ]; then
 fi
 
 remote_bootstrap="/home/$user/.local/lib/prueba-agentes/provisionar_vm_pi.sh"
+remote_container_bootstrap="/home/$user/.local/lib/prueba-agentes/provisionar_contenedor_pi.sh"
+remote_container_context="/home/$user/.local/lib/prueba-agentes/contenedor-pi"
 ssh "${SSH_OPTS[@]}" "$target" \
 	"mkdir -p '/home/$user/.local/lib/prueba-agentes' && install -m 0755 /dev/stdin '$remote_bootstrap.nuevo' && mv -f '$remote_bootstrap.nuevo' '$remote_bootstrap'" \
 	<"$BOOTSTRAP_LOCAL"
+ssh "${SSH_OPTS[@]}" "$target" \
+	"mkdir -p '/home/$user/.local/lib/prueba-agentes' && install -m 0755 /dev/stdin '$remote_container_bootstrap.nuevo' && mv -f '$remote_container_bootstrap.nuevo' '$remote_container_bootstrap'" \
+	<"$CONTAINER_BOOTSTRAP_LOCAL"
 
 modo="provisionar"
 [ "$OPCION" != "--solo-verificar" ] || modo="verificar"
@@ -643,6 +633,14 @@ if [ "$modo" = "provisionar" ]; then
 	rsync -az --delete --exclude='.git/' "$HARNESS_LOCAL/" "$target:$remote_harness/"
 	ssh "${SSH_OPTS[@]}" "$target" \
 		"chmod 0755 '$remote_harness/bin/pi-harness' '$remote_harness/bin/filtrar_salida_pi.sh' && ln -sfn '$remote_harness/bin/pi-harness' '$remote_pi_harness'"
+
+	echo "📤 Copiando contexto reproducible del contenedor Pi..."
+	ssh "${SSH_OPTS[@]}" "$target" "mkdir -p '$remote_container_context/pi-harness' '$remote_container_context/skills/dev-back' '$remote_container_context/skills/dev-front' '$remote_container_context/plataforma/remoto'"
+	rsync -az --delete --exclude='.git/' "$HARNESS_LOCAL/" "$target:$remote_container_context/pi-harness/"
+	rsync -az --delete --exclude='.git/' "$ROOT/skills/dev-back/" "$target:$remote_container_context/skills/dev-back/"
+	rsync -az --delete --exclude='.git/' "$ROOT/skills/dev-front/" "$target:$remote_container_context/skills/dev-front/"
+	rsync -az "$ROOT/plataforma/Containerfile.modulo" "$target:$remote_container_context/plataforma/Containerfile.modulo"
+	rsync -az --delete "$ROOT/plataforma/remoto/" "$target:$remote_container_context/plataforma/remoto/"
 
 	if [ "$source_mode" = "local" ]; then
 		echo "📤 Copiando proyecto local a '$target:$workspace'..."
@@ -673,6 +671,19 @@ ENVIAR_CONFIG() {
 		"$remote_pi_harness" "${GITHUB_TOKEN:-}"
 }
 
+repository_id="$(GET_VM_FIELD id)"
+business_memory="$(GET_VM_FIELD business_memory)"
+[[ "$repository_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "Error: el repositorio no puede convertirse en un nombre seguro de contenedor." >&2; exit 1; }
+container_name="modulo-$repository_id"
+workspace_volume="prueba-agentes-$VM_PROFILE-$repository_id-codigo"
+memory_volume="prueba-agentes-$VM_PROFILE-$repository_id-memoria"
+
+ENVIAR_CONFIG_CONTENEDOR() {
+	printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+		"$VM_PROFILE" "$stack" "$repository_id" "$workspace" "$business_memory" "$pi_version" \
+		"$remote_container_context" "$container_name" "$workspace_volume" "$memory_volume"
+}
+
 # Asegurar llaves SSH e identidad Git en la VM antes del bootstrap remoto
 "$ROOT/tools/vms/configurar_git_vms.sh" "$VM_PROFILE" || true
 
@@ -687,7 +698,10 @@ else
 	exit "$codigo"
 fi
 
-[ "$modo" != "verificar" ] || exit 0
+if [ "$modo" = "verificar" ]; then
+	ENVIAR_CONFIG_CONTENEDOR | ssh "${SSH_OPTS[@]}" "$target" "'$remote_container_bootstrap' verificar"
+	exit 0
+fi
 
 if [ "$agent_update_mode" = "git" ]; then
 	"$ROOT/tools/sincronizacion/instalar_actualizacion_git.sh" "$VM_PROFILE"
@@ -695,11 +709,13 @@ else
 	echo "✓ Agente instalado desde la Mac; no se configura cron Git."
 fi
 
-ENVIAR_CONFIG | ssh "${SSH_OPTS[@]}" "$target" "'$remote_bootstrap' verificar"
 "$ROOT/tools/vms/inicializar_memorias_negocio_vm.sh" "$VM_PROFILE"
+ENVIAR_CONFIG_CONTENEDOR | ssh "${SSH_OPTS[@]}" "$target" "'$remote_container_bootstrap' provisionar"
+ENVIAR_CONFIG | ssh "${SSH_OPTS[@]}" "$target" "'$remote_bootstrap' verificar"
+ENVIAR_CONFIG_CONTENEDOR | ssh "${SSH_OPTS[@]}" "$target" "'$remote_container_bootstrap' verificar"
 [ "$agent_update_mode" != "local" ] || "$ROOT/tools/sincronizacion/instalar_monitor_local.sh"
 
-if [ "$(jq -r --arg p "$VM_PROFILE" '.[$p].users[0].repositories[0].memory.enabled // .[$p].memory.enabled // false' "$VMS_CONF")" = "true" ]; then
+if [ "$(GET_VM_FIELD memory | jq -r '.enabled // false')" = "true" ]; then
 	"$ROOT/tools/vms/sincronizar_mtls_vm.sh" "$VM_PROFILE" || true
 fi
 "$ROOT/tools/vms/configurar_git_vms.sh" "$VM_PROFILE" || true
@@ -707,17 +723,20 @@ fi
 # Solo se habilita este perfil después de una verificación correcta. Pueden
 # coexistir varias VMs backend; el analista elige perfil y repositorio.
 config_tmp="$(mktemp "$VMS_CONF.activar.XXXXXX")"
+trap 'rm -f "$config_tmp"' EXIT
 jq --arg profile "$VM_PROFILE" '
   if (.[$profile].users | type) == "array" and (.[$profile].users | length) > 0 then
-    .[$profile].users |= map(
-      .repositories |= map(
-        .engine = "pi"
-        | .dispatch_enabled = true
-        | .pi_harness = (.pi_harness // ("/home/" + (..name? // "serveradmin") + "/.local/bin/pi-harness"))
-        | .pi_provider = (.pi_provider // "openai-codex")
-        | .pi_model = (.pi_model // "gpt-5.4-mini")
-      )
-    )
+    if ((.[$profile].repositories // []) | length) > 0 then
+      .[$profile].repositories |= map(.engine = "pi" | .dispatch_enabled = true)
+    else
+      .[$profile].users |= map(. as $vm_user |
+        .repositories |= map(
+          .engine = "pi" | .dispatch_enabled = true
+          | .pi_harness = (.pi_harness // ("/home/" + ($vm_user.name // "serveradmin") + "/.local/bin/pi-harness"))
+          | .pi_provider = (.pi_provider // "openai-codex")
+          | .pi_model = (.pi_model // "gpt-5.4-mini")
+        ))
+    end
   else
     .[$profile].engine = "pi"
     | .[$profile].dispatch_enabled = true
@@ -728,6 +747,10 @@ jq --arg profile "$VM_PROFILE" '
 ' "$VMS_CONF" >"$config_tmp"
 chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"
 mv "$config_tmp" "$VMS_CONF"
+trap - EXIT
 
-echo "✅ VM '$VM_PROFILE' preparada con Pi, pi-harness y agente '$stack'."
+echo "✅ VM '$VM_PROFILE' preparada con Podman rootless y contenedor '$container_name'."
+echo "   Agente: /opt/agente/actual"
+echo "   Repositorio: /workspace/repositorio"
+echo "   Memoria de negocio: /opt/memoria-negocio/memoria.md (solo lectura)"
 echo "ℹ️ agent-runner y OpenCode no fueron instalados por este script."

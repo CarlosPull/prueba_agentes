@@ -4,11 +4,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
+source "$ROOT/tools/vms/lib_vms.sh"
 PROFILE="${1:-}"
 [ -n "$PROFILE" ] || { echo "Uso: ./tools/vms/inicializar_memorias_negocio_vm.sh <perfil>" >&2; exit 1; }
 ip="$(jq -er --arg profile "$PROFILE" '.[$profile].ip' "$VMS_CONF")"
-user="$(jq -er --arg profile "$PROFILE" '.[$profile].users[0].name // .[$profile].user' "$VMS_CONF")"
-count="$(jq -r --arg profile "$PROFILE" '([.[$profile].users[].repositories[]] // .[$profile].repositories // []) | length' "$VMS_CONF")"
+user="$(VMS_FIELD "$VMS_CONF" "$PROFILE" user)"
+repos_json="$(VMS_REPOSITORIES_JSON "$VMS_CONF" "$PROFILE")"
+count="$(jq -r 'length' <<< "$repos_json")"
 [ "$count" -gt 0 ] || { echo "Error: '$PROFILE' no declara repositorios." >&2; exit 1; }
 
 SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes)
@@ -20,4 +22,4 @@ while IFS=$'\t' read -r repository module memory_path; do
   ssh "${SSH_OPTS[@]}" "$user@$ip" \
     "install -d -m 0700 '$parent'; if [ ! -e '$memory_path' ]; then printf '# Memoria de negocio: %s (%s)\n\nDescribe aquí únicamente las reglas privadas de este módulo.\n' '$module' '$repository' > '$memory_path'; fi; chmod 0600 '$memory_path'"
   echo "✓ Memoria privada preservada: $PROFILE/$repository → $memory_path"
-done < <(jq -r --arg profile "$PROFILE" '([.[$profile].users[].repositories[]] // .[$profile].repositories // [])[] | [.id,.module,.business_memory] | @tsv' "$VMS_CONF")
+done < <(jq -r '.[] | [.id,.module,.business_memory] | @tsv' <<< "$repos_json")

@@ -16,6 +16,7 @@ for prueba in \
   probar_enrutamiento_modular.sh \
   probar_despacho_paralelo.sh \
   probar_pi_harness.sh \
+  probar_config_vms_normalizada.sh \
   probar_provisionamiento_pi.sh \
   probar_sincronizacion.sh \
   probar_ciclo_actualizacion.sh \

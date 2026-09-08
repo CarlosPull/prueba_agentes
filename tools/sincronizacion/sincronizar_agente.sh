@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/tools/vms/lib_vms.sh"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 ROLE="${1:-}"
 
@@ -22,9 +23,7 @@ command -v jq >/dev/null 2>&1 || {
 }
 
 GET_VM_FIELD() {
-  local role="$1"
-  local field="$2"
-  jq -er --arg role "$role" --arg field "$field" '.[$role][$field]' "$VMS_CONF" 2>/dev/null || true
+  VMS_FIELD "$VMS_CONF" "$1" "$2"
 }
 
 ip="$(GET_VM_FIELD "$ROLE" "ip")"

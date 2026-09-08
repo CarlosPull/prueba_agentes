@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/tools/vms/lib_vms.sh"
 TOOLS_DIR="$ROOT/tools"
 VMS_CONF="${PRUEBA_AGENTES_VMS_CONF:-$([ -f "$ROOT/config/vms.json" ] && echo "$ROOT/config/vms.json" || echo "$ROOT/vms.json")}"
 ROLE="${1:-}"
@@ -36,45 +37,23 @@ command -v jq >/dev/null 2>&1 || { echo "Error: jq es obligatorio." >&2; exit 1;
 
 SHELL_QUOTE() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 GET_VM_FIELD() {
-  jq -er --arg profile "$1" --arg field "$2" '
-    if (.[$profile] | type) == "object" then
-      if $field == "ip" then
-        .[$profile].ip // empty
-      elif $field == "user" then
-        .[$profile].users[0].name // .[$profile].user // empty
-      elif $field == "workspace" then
-        .[$profile].users[0].repositories[0].path // .[$profile].users[0].repositories[0].workspace // .[$profile].workspace // empty
-      else
-        .[$profile].users[0].repositories[0][$field] // .[$profile][$field] // empty
-      end
-    else
-      empty
-    end
-  ' "$VMS_CONF" 2>/dev/null || true
+  VMS_FIELD "$VMS_CONF" "$1" "$2"
 }
 
 perfiles=()
 if [ -n "$PROFILE_OVERRIDE" ]; then
-  jq -e --arg profile "$PROFILE_OVERRIDE" --arg role "$ROLE" '
-    if (.[$profile].users | type) == "array" then
-      .[$profile].users[].repositories[] | select(.stack == $role and .engine == "pi" and .dispatch_enabled == true)
-    else
-      .[$profile].stack == $role and .[$profile].engine == "pi" and .[$profile].dispatch_enabled == true
-    end
-  ' "$VMS_CONF" >/dev/null || { echo "Error: perfil '$PROFILE_OVERRIDE' no está habilitado para '$ROLE'." >&2; exit 1; }
+  repos_habilitados="$(VMS_USER_REPOSITORIES_JSON "$VMS_CONF" "$PROFILE_OVERRIDE" "$USUARIO_OVERRIDE")"
+  jq -e --arg role "$ROLE" 'any(.[]; .stack == $role and .engine == "pi" and .dispatch_enabled != false and .can_read != false)' \
+    <<< "$repos_habilitados" >/dev/null || { echo "Error: perfil '$PROFILE_OVERRIDE' no está habilitado para '$ROLE'." >&2; exit 1; }
   perfiles+=("$PROFILE_OVERRIDE")
 else
   while IFS= read -r profile; do
     [ -n "$profile" ] && perfiles+=("$profile")
-  done < <(jq -r --arg role "$ROLE" '
-    to_entries[] | select(
-      if (.value.users | type) == "array" then
-        .value.users[].repositories[] | select(.stack == $role and .engine == "pi" and .dispatch_enabled == true)
-      else
-        .value.stack == $role and .value.engine == "pi" and .value.dispatch_enabled == true
-      end
-    ) | .key
-  ' "$VMS_CONF" | sort -u)
+  done < <(while IFS= read -r candidate; do
+    VMS_USER_REPOSITORIES_JSON "$VMS_CONF" "$candidate" "$USUARIO_OVERRIDE" \
+      | jq -e --arg role "$ROLE" 'any(.[]; .stack == $role and .engine == "pi" and .dispatch_enabled != false and .can_read != false)' >/dev/null \
+      && printf '%s\n' "$candidate"
+  done < <(jq -r 'to_entries[] | select(.value.ip != null) | .key' "$VMS_CONF") | sort -u)
 fi
 
 if [ "${#perfiles[@]}" -eq 0 ]; then
@@ -91,22 +70,17 @@ fi
 PROFILE="${perfiles[0]}"
 ip="$(GET_VM_FIELD "$PROFILE" ip)"
 
-# Con --usuario: se acota a los repositorios de ESE usuario puntual (necesario
-# en perfiles con varios usuarios, donde "users[0]" ya no identifica a quién
-# corresponde despachar). Sin --usuario: comportamiento previo (todos los
-# repos del perfil, primer usuario), para no romper llamadas existentes.
+# Con --usuario se filtran sus grants, pero la conexión siempre utiliza la
+# cuenta técnica VM.user; un usuario de plataforma nunca recibe acceso SSH.
+user="$(GET_VM_FIELD "$PROFILE" user)"
 if [ -n "$USUARIO_OVERRIDE" ]; then
-  all_repos_json="$(jq -c --arg profile "$PROFILE" --arg usuario "$USUARIO_OVERRIDE" '
-    [.[$profile].users[]? | select((.name // "" | ascii_downcase) == ($usuario | ascii_downcase)) | .repositories[]?]
-  ' "$VMS_CONF")"
+  all_repos_json="$(VMS_USER_REPOSITORIES_JSON "$VMS_CONF" "$PROFILE" "$USUARIO_OVERRIDE")"
   [ "$(jq -r 'length' <<< "$all_repos_json")" -gt 0 ] || {
     echo "Error: el usuario '$USUARIO_OVERRIDE' no tiene repositorios en el perfil '$PROFILE'." >&2
     exit 1
   }
-  user="$USUARIO_OVERRIDE"
 else
-  all_repos_json="$(jq -c --arg profile "$PROFILE" '[.[$profile].users[].repositories[]] // .[$profile].repositories // []' "$VMS_CONF")"
-  user="$(GET_VM_FIELD "$PROFILE" user)"
+  all_repos_json="$(VMS_USER_REPOSITORIES_JSON "$VMS_CONF" "$PROFILE" "")"
 fi
 repository_count="$(jq -r 'length' <<< "$all_repos_json")"
 if [ -z "$REPOSITORY_ID" ]; then
@@ -122,6 +96,17 @@ if [ -n "$REPOSITORY_ID" ]; then
     echo "Error: el repositorio '$REPOSITORY_ID' no pertenece al perfil '$PROFILE'." >&2
     exit 1
   }
+  jq -e --arg role "$ROLE" '.stack == $role and .engine == "pi" and .dispatch_enabled != false and .can_read != false' \
+    <<< "$repository_json" >/dev/null || {
+    echo "Error: el repositorio '$REPOSITORY_ID' no está habilitado para el usuario en '$PROFILE'." >&2
+    exit 1
+  }
+  if [ "$READ_ONLY" -eq 0 ]; then
+    jq -e '.can_write != false' <<< "$repository_json" >/dev/null || {
+      echo "Error: el usuario no tiene permiso de escritura en '$REPOSITORY_ID'." >&2
+      exit 1
+    }
+  fi
   workspace="$(jq -r '.path // .workspace' <<< "$repository_json")"
   module="$(jq -r '.module' <<< "$repository_json")"
   repository_kind="$(jq -r '.kind' <<< "$repository_json")"
@@ -152,21 +137,20 @@ node_version="$(jq -r '.node_version // empty' <<< "$repository_json")"
 [ -n "$node_version" ] || node_version="$(GET_VM_FIELD "$PROFILE" node_version)"
 
 memory_enabled="$(jq -r '.memory.enabled // false' <<< "$repository_json")"
-[ "$memory_enabled" != "false" ] || memory_enabled="$(jq -r --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].memory.enabled // .[$profile].memory.enabled // false' "$VMS_CONF")"
 memory_gateway_url="$(jq -r '.memory.gateway_url // ""' <<< "$repository_json")"
-[ -n "$memory_gateway_url" ] || memory_gateway_url="$(jq -r --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].memory.gateway_url // .[$profile].memory.gateway_url // ""' "$VMS_CONF")"
+[ -n "$memory_gateway_url" ] || memory_gateway_url="$(GET_VM_FIELD "$PROFILE" memory | jq -r '.gateway_url // ""')"
 memory_core_id="$(jq -r '.memory.core_id // ""' <<< "$repository_json")"
-[ -n "$memory_core_id" ] || memory_core_id="$(jq -r --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].memory.core_id // .[$profile].memory.core_id // ""' "$VMS_CONF")"
+[ -n "$memory_core_id" ] || memory_core_id="$(GET_VM_FIELD "$PROFILE" memory | jq -r '.core_id // ""')"
 memory_tenant_id="$(jq -r '.memory.tenant_id // ""' <<< "$repository_json")"
-[ -n "$memory_tenant_id" ] || memory_tenant_id="$(jq -r --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].memory.tenant_id // .[$profile].memory.tenant_id // ""' "$VMS_CONF")"
+[ -n "$memory_tenant_id" ] || memory_tenant_id="$(GET_VM_FIELD "$PROFILE" memory | jq -r '.tenant_id // ""')"
 memory_read_business="$(jq -r '.memory.read_business // false' <<< "$repository_json")"
 memory_read_company="$(jq -r '.memory.read_company // false' <<< "$repository_json")"
 memory_tls_key="$(jq -r '.memory.tls_key // ""' <<< "$repository_json")"
-[ -n "$memory_tls_key" ] || memory_tls_key="$(jq -r --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].memory.tls_key // .[$profile].memory.tls_key // ""' "$VMS_CONF")"
+[ -n "$memory_tls_key" ] || memory_tls_key="$(GET_VM_FIELD "$PROFILE" memory | jq -r '.tls_key // ""')"
 memory_tls_cert="$(jq -r '.memory.tls_cert // ""' <<< "$repository_json")"
-[ -n "$memory_tls_cert" ] || memory_tls_cert="$(jq -r --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].memory.tls_cert // .[$profile].memory.tls_cert // ""' "$VMS_CONF")"
+[ -n "$memory_tls_cert" ] || memory_tls_cert="$(GET_VM_FIELD "$PROFILE" memory | jq -r '.tls_cert // ""')"
 memory_tls_ca="$(jq -r '.memory.tls_ca // ""' <<< "$repository_json")"
-[ -n "$memory_tls_ca" ] || memory_tls_ca="$(jq -r --arg profile "$PROFILE" '.[$profile].users[0].repositories[0].memory.tls_ca // .[$profile].memory.tls_ca // ""' "$VMS_CONF")"
+[ -n "$memory_tls_ca" ] || memory_tls_ca="$(GET_VM_FIELD "$PROFILE" memory | jq -r '.tls_ca // ""')"
 [ -n "$pi_harness" ] || pi_harness="/home/$user/.local/bin/pi-harness"
 [ -n "$pi_provider" ] || pi_provider="openai-codex"
 [ -n "$pi_model" ] || pi_model="gpt-5.4-mini"
@@ -374,4 +358,3 @@ echo "▶️ Ejecutando con Pi '$ROLE' mediante '$PROFILE' ($user@$ip)..." >&2
 "$ROOT/tools/despacho/generar_evidencia_agente.sh" "$ROLE" "$PROJECT_DIR" "$DISPATCH_ID" >/dev/null
 "$ROOT/tools/despacho/generar_reporte.sh" "$PROJECT_DIR" "$TAREA" --actualizar "$DISPATCH_ID" >/dev/null 2>&1 || true
 echo "$LOG_FILE"
-

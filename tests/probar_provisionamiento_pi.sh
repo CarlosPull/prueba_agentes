@@ -5,13 +5,20 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCAL="$ROOT/tools/vms/provisionar_vm_pi.sh"
 REMOTE="$ROOT/tools/remotos/provisionar_vm_pi.sh"
+CONTAINER_REMOTE="$ROOT/tools/remotos/provisionar_contenedor_pi.sh"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/prueba-config-pi.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT INT TERM
 
-bash -n "$LOCAL" "$REMOTE" "$ROOT/pi-harness/bin/pi-harness"
+bash -n "$LOCAL" "$REMOTE" "$CONTAINER_REMOTE" "$ROOT/pi-harness/bin/pi-harness"
 
 grep -F '@earendil-works/pi-coding-agent@' "$REMOTE" >/dev/null
 grep -F 'npm install -g --ignore-scripts' "$REMOTE" >/dev/null
+grep -F 'podman info --format' "$REMOTE" >/dev/null
+grep -F 'podman build --build-arg' "$CONTAINER_REMOTE" >/dev/null
+grep -F '/opt/agente/actual/SKILL.md' "$CONTAINER_REMOTE" >/dev/null
+grep -F '/workspace/repositorio/.git' "$CONTAINER_REMOTE" >/dev/null
+grep -F '/opt/memoria-negocio/memoria.md' "$CONTAINER_REMOTE" >/dev/null
+grep -F -- '--volume "$MEMORY_VOLUME:/opt/memoria-negocio:ro"' "$CONTAINER_REMOTE" >/dev/null
 grep -F 'bwrap --ro-bind / /' "$REMOTE" >/dev/null
 grep -F 'apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict' "$LOCAL" >/dev/null
 grep -F 'apparmor_parser -R /etc/apparmor.d/prueba-agentes-bwrap' "$LOCAL" >/dev/null
@@ -71,17 +78,19 @@ jq -e --arg branch "$branch_actual" '
   .["backend-pi-automatico"] |
   .ip == "192.168.50.231" and
   .user == "carlos2" and
-  .workspace == "/home/carlos2/laravel-dev" and
-  (.repositories | length) == 1 and
-  .repositories[0].id == "laravel-dev" and
+  .users[0].name == "carlos2" and
+  (.users[0].repositories | length) == 1 and
+  .users[0].repositories[0].id == "laravel-dev" and
+  .users[0].repositories[0].can_read == true and
+  .users[0].repositories[0].can_write == true and
   .repositories[0].path == "/home/carlos2/laravel-dev" and
   .repositories[0].kind == "module" and
   (.repositories[0].business_memory | endswith(".md")) and
-  .stack == "backend" and
-  .source_mode == "local" and
-  .agent_update_mode == "git" and
-  .git_branch == $branch and
-  .pi_version == "latest"
+  .repositories[0].stack == "backend" and
+  .repositories[0].source_mode == "local" and
+  .repositories[0].agent_update_mode == "git" and
+  .repositories[0].git_branch == $branch and
+  .repositories[0].pi_version == "latest"
 ' "$TEMP_DIR/vms.json" >/dev/null
 
 jq -e '.repositories."laravel-dev"
@@ -102,10 +111,10 @@ printf '%s\n' "${respuestas_frontend[@]}" \
     PRUEBA_AGENTES_PRIVATE_TECH_MEMORY="$TEMP_DIR/tecnologias.json" \
     "$LOCAL" frontend-pi-automatico --solo-configurar >/dev/null
 jq -e '."frontend-pi-automatico"
-  | .stack == "frontend"
+  | .repositories[0].stack == "frontend"
     and .repositories[0].id == "vue-dev"
     and .repositories[0].kind == "frontend"
-    and (.project_local_path | endswith("/repos/vue-dev"))' "$TEMP_DIR/vms.json" >/dev/null
+    and (.repositories[0].project_local_path | endswith("/repos/vue-dev"))' "$TEMP_DIR/vms.json" >/dev/null
 jq -e '.repositories."vue-dev"
   | (.technologies | index("Vue ^3.5.0") != null)
     and (.technologies | index("TypeScript ^5.8.0") != null)

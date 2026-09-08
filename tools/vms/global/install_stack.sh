@@ -48,7 +48,7 @@ OBTENER_VERSION() {
   local perfil="$1" campo="$2" valor_por_defecto="$3"
   local valor
   valor="$(jq -r --arg perfil "$perfil" --arg campo "$campo" '
-    .[$perfil].users[]?.repositories[]? | .[$campo] // empty
+    (.[$perfil].repositories // [.[$perfil].users[]?.repositories[]?])[] | .[$campo] // empty
   ' "$VMS_CONF" | head -n 1)"
   printf '%s' "${valor:-$valor_por_defecto}"
 }

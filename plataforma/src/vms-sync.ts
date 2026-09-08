@@ -90,7 +90,12 @@ export async function syncVmsConfigToDb(pool: Pool, vmsJsonPath: string) {
 
       // 2. Extraer repositorios
       const repos: RepositoryConfigEntry[] = [];
-      if (Array.isArray(entry.users)) {
+      if (Array.isArray(entry.repositories)) {
+        repos.push(...entry.repositories);
+      }
+      // Compatibilidad: el formato anterior repetía toda la definición
+      // técnica dentro de cada usuario.
+      if (repos.length === 0 && Array.isArray(entry.users)) {
         for (const u of entry.users) {
           if (Array.isArray(u.repositories)) {
             for (const r of u.repositories) {
@@ -100,9 +105,6 @@ export async function syncVmsConfigToDb(pool: Pool, vmsJsonPath: string) {
             }
           }
         }
-      }
-      if (repos.length === 0 && Array.isArray(entry.repositories)) {
-        repos.push(...entry.repositories);
       }
       // Compatibilidad con perfiles antiguos que declaran un workspace único.
       // Las listas explícitas vacías nunca representan un módulo implícito.
@@ -204,23 +206,22 @@ export async function updateVmsJsonState(pool: Pool, vmsJsonPath: string) {
         }
       }
 
-      if (Array.isArray(entry.users)) {
-        for (const u of entry.users) {
-          if (Array.isArray(u.repositories)) {
-            for (const r of u.repositories) {
-              const key = r.id || r.module || profileName;
-              if (!repoTemplatesMap.has(key)) {
-                repoTemplatesMap.set(key, { ...topLevelDefaults, ...r });
-              }
-            }
-          }
-        }
-      }
       if (Array.isArray(entry.repositories)) {
         for (const r of entry.repositories) {
           const key = r.id || r.module || profileName;
           if (!repoTemplatesMap.has(key)) {
             repoTemplatesMap.set(key, { ...topLevelDefaults, ...r });
+          }
+        }
+      }
+      // Compatibilidad con el formato antiguo, donde cada usuario contenía
+      // una copia completa del repositorio. En el formato normalizado las
+      // entradas del usuario son únicamente grants y no son plantillas.
+      if (repoTemplatesMap.size === 0 && Array.isArray(entry.users)) {
+        for (const u of entry.users) {
+          for (const r of u.repositories ?? []) {
+            const key = r.id || r.module || profileName;
+            if (!repoTemplatesMap.has(key)) repoTemplatesMap.set(key, { ...topLevelDefaults, ...r });
           }
         }
       }
@@ -238,60 +239,24 @@ export async function updateVmsJsonState(pool: Pool, vmsJsonPath: string) {
         }
 
         const repoKey = r.repository;
-        const template = repoTemplatesMap.get(repoKey) ?? {
-          ...topLevelDefaults,
-          id: repoKey,
-          module: repoKey,
-          kind: profileName.includes('core') ? 'core' : profileName.includes('frontend') ? 'frontend' : 'module',
-          path: entry.workspace ?? `/home/${r.user_name.toLowerCase()}/${repoKey}`,
-          stack: r.stack || entry.stack || 'backend'
-        };
-
-        const userPath = template.path ? template.path.replace(/\/home\/[^/]+\//, `/home/${r.user_name.toLowerCase()}/`) : template.path;
-        const userBusinessMemory = template.business_memory ? template.business_memory.replace(/\/home\/[^/]+\//, `/home/${r.user_name.toLowerCase()}/`) : template.business_memory;
-
-        const repoObj: RepositoryConfigEntry = {
-          id: template.id || repoKey,
-          module: template.module || repoKey,
-          kind: template.kind || 'module',
-          path: userPath,
-          business_memory: userBusinessMemory,
-          aliases: template.aliases ?? [repoKey],
-          stack: template.stack || r.stack || entry.stack || 'backend',
-          engine: template.engine ?? 'pi',
-          dispatch_enabled: r.can_read,
-          can_read: r.can_read,
-          can_write: r.can_write,
-          pi_harness: template.pi_harness,
-          pi_provider: template.pi_provider,
-          pi_model: template.pi_model,
-          memory: template.memory,
-          source_mode: template.source_mode,
-          project_local_path: template.project_local_path,
-          agent_update_mode: template.agent_update_mode,
-          node_version: template.node_version,
-          pi_version: template.pi_version,
-          php_version: template.php_version,
-          php_min_version: template.php_min_version,
-          install_dependencies: template.install_dependencies,
-          local_agent: template.local_agent,
-          remote_agent: template.remote_agent,
-          git_url: template.git_url,
-          git_branch: template.git_branch,
-          git_agent_path: template.git_agent_path,
-          agent_poll_seconds: template.agent_poll_seconds
-        };
-
-        // Clean undefined properties
-        for (const k of Object.keys(repoObj)) {
-          if (repoObj[k] === undefined) delete repoObj[k];
+        if (!repoTemplatesMap.has(repoKey)) {
+          repoTemplatesMap.set(repoKey, {
+            ...topLevelDefaults,
+            id: repoKey,
+            module: repoKey,
+            kind: profileName.includes('core') ? 'core' : profileName.includes('frontend') ? 'frontend' : 'module',
+            path: entry.workspace ?? `/home/${entry.user ?? 'serveradmin'}/${repoKey}`,
+            stack: r.stack || entry.stack || 'backend'
+          });
         }
 
-        userEntry.repositories.push(repoObj);
+        userEntry.repositories.push({ id: repoKey, can_read: r.can_read, can_write: r.can_write });
       }
 
       newConfig[profileName] = {
         ip: entry.ip,
+        user: entry.user ?? entry.users?.[0]?.name,
+        repositories: Array.from(repoTemplatesMap.values()),
         users: Array.from(usersMap.values())
       };
     }

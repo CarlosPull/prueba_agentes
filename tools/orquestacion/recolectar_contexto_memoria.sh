@@ -29,7 +29,20 @@ inventory="$(jq -c --argjson private "$private_json" --arg usuario "$USUARIO" '
   [to_entries[] as $vm
    | $vm.value as $v
    | (
-       if ($v.users | type) == "array" then
+       if (($v.repositories // []) | length) > 0 and ($v.users | type) == "array" then
+         $v.users[] as $u
+         | select(($usuario == "") or (($u.name // "" | ascii_downcase) == ($usuario | ascii_downcase)))
+         | $u.repositories[] as $grant
+         | $v.repositories[] as $r
+         | select($r.id == ($grant.id // $grant.repository))
+         | select(($r.engine == "pi" or $v.engine == "pi") and ($r.dispatch_enabled != false) and ($grant.can_read != false))
+         | {
+             profile:$vm.key, stack:($r.stack // $v.stack), ip:$v.ip, user:($v.user // "serveradmin"),
+             repository:$r.id, module:$r.module, kind:$r.kind, workspace:$r.path,
+             business_memory:($r.business_memory // ""), aliases:($r.aliases // []),
+             technology:($private.repositories[$r.id] // null)
+           }
+       elif ($v.users | type) == "array" then
          $v.users[] as $u
          | select(($usuario == "") or (($u.name // "" | ascii_downcase) == ($usuario | ascii_downcase)))
          | $u.repositories[] as $r
@@ -59,10 +72,12 @@ technology_semantic='[]'
 enabled_memory_count="$(jq '
   [to_entries[] as $vm
    | select(
-       if ($vm.value.users | type) == "array" then
-         $vm.value.users[].repositories[] | select((.memory.enabled // false) and (.dispatch_enabled // true))
+       if (($vm.value.repositories // []) | length) > 0 then
+         $vm.value.repositories[] | select((.memory.enabled // false) and (.dispatch_enabled != false))
+       elif ($vm.value.users | type) == "array" then
+         $vm.value.users[].repositories[] | select((.memory.enabled // false) and (.dispatch_enabled != false))
        else
-         ($vm.value.memory.enabled // false) and ($vm.value.dispatch_enabled // true)
+         ($vm.value.memory.enabled // false) and ($vm.value.dispatch_enabled != false)
        end
      )] | length
 ' "$VMS_CONF")"
@@ -70,7 +85,9 @@ if [ "$enabled_memory_count" -gt 0 ]; then
   gateway_status="unavailable"
   gateway_url="${MEMORY_GATEWAY_URL:-$(jq -r '
     [to_entries[] as $vm
-     | if ($vm.value.users | type) == "array" then
+     | if (($vm.value.repositories // []) | length) > 0 then
+         $vm.value.repositories[] | select(.memory.enabled // false) | .memory.gateway_url
+       elif ($vm.value.users | type) == "array" then
          $vm.value.users[].repositories[] | select(.memory.enabled // false) | .memory.gateway_url
        else
          select($vm.value.memory.enabled // false) | .value.memory.gateway_url
@@ -94,7 +111,14 @@ if [ "$enabled_memory_count" -gt 0 ]; then
           -H 'Content-Type: application/json' -X POST "$gateway_url/v1/memory/search" \
           --data "$(jq -cn --arg query "$PROMPT" --arg core "$core_id" '{layer:"shared_contracts",query:$query,core_id:$core}')" 2>/dev/null || true)"
         [ -z "$response" ] || jq -cn --arg core_id "$core_id" --argjson response "$response" '{core_id:$core_id,response:$response}' >> "$tmp_contracts" 2>/dev/null || true
-      done < <(jq -r '[to_entries[] | select(.value.engine == "pi" and .value.dispatch_enabled == true and (.value.memory.enabled // false)) | .value.memory.core_id] | unique[]' "$VMS_CONF")
+      done < <(jq -r '[to_entries[] as $vm
+        | if (($vm.value.repositories // []) | length) > 0 then
+            $vm.value.repositories[] | select((.engine // $vm.value.engine) == "pi" and (.dispatch_enabled != false) and (.memory.enabled // false)) | .memory.core_id
+          elif ($vm.value.users | type) == "array" then
+            $vm.value.users[].repositories[] | select(.engine == "pi" and .dispatch_enabled == true and (.memory.enabled // false)) | .memory.core_id
+          else
+            $vm.value | select(.engine == "pi" and .dispatch_enabled == true and (.memory.enabled // false)) | .memory.core_id
+          end] | unique[]' "$VMS_CONF")
       [ ! -f "$tmp_contracts" ] || contracts="$(jq -s '.' "$tmp_contracts" 2>/dev/null || echo '[]')"
 
       technology_response="$(curl --fail-with-body --silent --connect-timeout 3 --cacert "$collector_ca" --cert "$collector_cert" --key "$collector_key" \
