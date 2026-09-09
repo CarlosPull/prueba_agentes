@@ -47,7 +47,7 @@ jq --arg profile "$PROFILE" --arg ip "$IP" --arg user "$USER_VM" --arg workspace
     }],
     engine:"pi",dispatch_enabled:false,
     pi_harness:("/home/" + $user + "/.local/bin/pi-harness"),
-    pi_provider:"openai-codex",pi_model:"gpt-5.4-mini",
+    pi_provider:"openai-codex",pi_model:"gpt-5.5",
     memory:{enabled:false,gateway_url:"",core_id:"",tenant_id:"",read_business:false,read_company:false,tls_key:"",tls_cert:"",tls_ca:""},
     source_mode:"local",project_local_path:$local_path,
     agent_update_mode:"git",node_version:"24.19.0",pi_version:"latest",

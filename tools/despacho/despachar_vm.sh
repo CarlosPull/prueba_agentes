@@ -107,7 +107,7 @@ memory_tls_cert="$(jq -r --arg profile "$PROFILE" '.[$profile].memory.tls_cert /
 memory_tls_ca="$(jq -r --arg profile "$PROFILE" '.[$profile].memory.tls_ca // ""' "$VMS_CONF")"
 [ -n "$pi_harness" ] || pi_harness="/home/$user/.local/bin/pi-harness"
 [ -n "$pi_provider" ] || pi_provider="openai-codex"
-[ -n "$pi_model" ] || pi_model="gpt-5.4-mini"
+[ -n "$pi_model" ] || pi_model="gpt-5.5"
 
 for value in "$ip" "$user" "$workspace" "$remote_agent" "$node_version"; do
   [ -n "$value" ] || { echo "Error: configuración Pi incompleta para '$PROFILE'." >&2; exit 1; }
@@ -312,4 +312,3 @@ echo "▶️ Ejecutando con Pi '$ROLE' mediante '$PROFILE' ($user@$ip)..." >&2
 "$ROOT/tools/despacho/generar_evidencia_agente.sh" "$ROLE" "$PROJECT_DIR" "$DISPATCH_ID" >/dev/null
 "$ROOT/tools/despacho/generar_reporte.sh" "$PROJECT_DIR" "$TAREA" --actualizar "$DISPATCH_ID" >/dev/null 2>&1 || true
 echo "$LOG_FILE"
-

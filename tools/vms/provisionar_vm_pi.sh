@@ -11,6 +11,7 @@ APPARMOR_BWRAP_LOCAL="$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor"
 HARNESS_LOCAL="$ROOT/pi-harness"
 VM_PROFILE="${1:-}"
 OPCION="${2:-}"
+PI_MODEL_DEFAULT="gpt-5.5"
 
 USO() {
   echo "Uso: ./tools/vms/provisionar_vm_pi.sh <perfil-vm> [--con-sudo-interactivo|--solo-verificar|--solo-configurar]" >&2
@@ -320,6 +321,7 @@ CONFIGURAR_PERFIL_NUEVO() {
     --arg agent_poll_seconds "$poll_nuevo" --arg repository_id "$repository_id_nuevo" \
     --arg module "$module_nuevo" --arg repository_kind "$repository_kind_nuevo" --argjson aliases "$aliases_json" \
     --arg memory_enabled "$memory_enabled_nuevo" --arg memory_gateway_url "$memory_gateway_url_nuevo" \
+    --arg pi_model_default "$PI_MODEL_DEFAULT" \
     --arg memory_core_id "$memory_core_id_nuevo" --arg memory_tenant_id "$memory_tenant_id_nuevo" '
       .[$profile] = {
         ip:$ip, user:$user, workspace:$workspace, stack:$stack,
@@ -330,7 +332,7 @@ CONFIGURAR_PERFIL_NUEVO() {
         }],
         engine:"pi", dispatch_enabled:false,
         pi_harness:("/home/" + $user + "/.local/bin/pi-harness"),
-        pi_provider:"openai-codex", pi_model:"gpt-5.4-mini",
+        pi_provider:"openai-codex", pi_model:$pi_model_default,
         memory:{
           enabled:($memory_enabled == "true"),
           gateway_url:$memory_gateway_url,
@@ -632,12 +634,12 @@ fi
 # Solo se habilita este perfil después de una verificación correcta. Pueden
 # coexistir varias VMs backend; el analista elige perfil y repositorio.
 config_tmp="$(mktemp "$VMS_CONF.activar.XXXXXX")"
-jq --arg profile "$VM_PROFILE" '
+jq --arg profile "$VM_PROFILE" --arg pi_model_default "$PI_MODEL_DEFAULT" '
   .[$profile].engine = "pi"
   | .[$profile].dispatch_enabled = true
   | .[$profile].pi_harness = ("/home/" + .[$profile].user + "/.local/bin/pi-harness")
   | .[$profile].pi_provider = (.[$profile].pi_provider // "openai-codex")
-  | .[$profile].pi_model = (.[$profile].pi_model // "gpt-5.4-mini")
+  | .[$profile].pi_model = (.[$profile].pi_model // $pi_model_default)
 ' "$VMS_CONF" > "$config_tmp"
 chmod --reference="$VMS_CONF" "$config_tmp" 2>/dev/null || chmod 0644 "$config_tmp"
 mv "$config_tmp" "$VMS_CONF"

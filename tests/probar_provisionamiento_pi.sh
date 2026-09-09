@@ -55,7 +55,7 @@ JSON
 branch_actual="$(git -C "$ROOT" branch --show-current)"
 respuestas=(
   "192.168.50.231" "carlos2"
-  "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" ""
+  "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" ""
 )
 salida_configuracion="$(printf '%s\n' "${respuestas[@]}" \
   | PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json" \
@@ -80,6 +80,7 @@ jq -e --arg branch "$branch_actual" '
   .source_mode == "local" and
   .agent_update_mode == "git" and
   .git_branch == $branch and
+  .pi_model == "gpt-5.5" and
   .pi_version == "latest"
 ' "$TEMP_DIR/vms.json" >/dev/null
 
@@ -92,7 +93,7 @@ jq -e '.repositories."laravel-dev"
 # Una selección distinta de la lista infiere frontend desde sus manifiestos.
 respuestas_frontend=(
   "192.168.50.232" "carlos3"
-  "" "2" "" "" "" "" "" "" "" "" "" "" "" ""
+  "" "2" "" "" "" "" "" "" "" "" "" "" "" "" ""
 )
 printf '%s\n' "${respuestas_frontend[@]}" \
   | PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json" \
