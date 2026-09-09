@@ -27,6 +27,26 @@ if [ -n "$OPCION" ] && [ "$OPCION" != "--con-sudo-interactivo" ] && [ "$OPCION" 
   exit 1
 fi
 
+URL_GITHUB_SANEADA=""
+GITHUB_USUARIO_URL=""
+
+NORMALIZAR_URL_GITHUB() {
+  local url="$1"
+  URL_GITHUB_SANEADA=""
+  GITHUB_USUARIO_URL=""
+
+  if [[ "$url" =~ ^https://([A-Za-z0-9-]+):([^@/]+)@github\.com/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+\.git)$ ]]; then
+    GITHUB_USUARIO_URL="${BASH_REMATCH[1]}"
+    GITHUB_TOKEN="${BASH_REMATCH[2]}"
+    URL_GITHUB_SANEADA="https://github.com/${BASH_REMATCH[3]}/${BASH_REMATCH[4]}"
+  elif [[ "$url" =~ ^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.git$ ]]; then
+    URL_GITHUB_SANEADA="$url"
+  else
+    echo "Error: URL GitHub no válida. Usa https://github.com/owner/repo.git o https://usuario:TOKEN@github.com/owner/repo.git." >&2
+    return 1
+  fi
+}
+
 for comando in jq ssh rsync; do
   command -v "$comando" >/dev/null 2>&1 || { echo "Error: '$comando' es obligatorio en la Mac." >&2; exit 1; }
 done
@@ -108,10 +128,17 @@ CONFIGURAR_PERFIL_NUEVO() {
     project_git_url_nuevo="$(git -C "$project_local_nuevo" remote get-url origin 2>/dev/null || true)"
     project_git_branch_nuevo="$(git -C "$project_local_nuevo" branch --show-current 2>/dev/null || echo "main")"
   else
-    read -r -p "URL Git del proyecto: " project_git_url_nuevo
+    echo "La URL se ocultará porque puede contener una credencial."
+    read -r -s -p "URL Git del proyecto: " project_git_url_nuevo
+    echo ""
     read -r -p "Rama Git del proyecto (main): " project_git_branch_nuevo
     project_git_branch_nuevo="${project_git_branch_nuevo:-main}"
     [ -n "$project_git_url_nuevo" ] || { echo "Error: URL Git obligatoria." >&2; exit 1; }
+    NORMALIZAR_URL_GITHUB "$project_git_url_nuevo" || exit 1
+    project_git_url_nuevo="$URL_GITHUB_SANEADA"
+    if [ -n "$GITHUB_USUARIO_URL" ]; then
+      echo "✓ Credencial HTTPS recibida; la URL se guardará sin usuario ni token."
+    fi
     default_repository="$(basename "${project_git_url_nuevo%.git}")"
   fi
 
@@ -494,24 +521,32 @@ else
   [ -s "$ROOT/$local_agent/SKILL.md" ] || { echo "Error: el agente local no contiene SKILL.md." >&2; exit 1; }
 fi
 
-# El token se solicita sólo para el aprovisionamiento de proyectos obtenidos
-# desde Git. Se mantiene en memoria y se envía por la entrada estándar al
-# bootstrap remoto; nunca se guarda en vms.json ni en archivos de la VM.
+# Para repositorios privados se acepta una URL HTTPS autenticada. La credencial
+# se extrae en memoria y sólo la URL saneada llega a vms.json y al origin remoto.
 if [ "$source_mode" = "git" ] && [ "$OPCION" != "--solo-verificar" ]; then
   if [ -n "${GITHUB_TOKEN:-}" ]; then
-    echo "✓ GITHUB_TOKEN detectado para acceder al repositorio Git."
+    echo "✓ Credencial de GitHub detectada para acceder al repositorio Git."
   elif [ -t 0 ]; then
     echo "🔐 El proyecto se obtendrá desde GitHub."
-    read -r -s -p "Token de GitHub para repositorios privados (Enter para continuar sin token): " GITHUB_TOKEN
+    read -r -s -p "URL autenticada https://usuario:TOKEN@github.com/owner/repo.git (Enter para continuar sin credencial): " url_git_autenticada
     echo ""
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-      echo "✓ Token recibido de forma temporal; no se guardará en la configuración."
+    if [ -n "$url_git_autenticada" ]; then
+      NORMALIZAR_URL_GITHUB "$url_git_autenticada" || exit 1
+      [ "$URL_GITHUB_SANEADA" = "$project_git_url" ] || {
+        echo "Error: la URL autenticada no corresponde al repositorio configurado '$project_git_url'." >&2
+        exit 1
+      }
+      [ -n "$GITHUB_USUARIO_URL" ] || {
+        echo "Error: la URL no contiene usuario y token de GitHub." >&2
+        exit 1
+      }
+      echo "✓ Credencial recibida de forma temporal; no se guardará en la configuración ni en origin."
     else
-      echo "ℹ️ Sin token: se intentará acceso público y, si falla, autenticación SSH."
+      echo "ℹ️ Sin credencial HTTPS: se intentará acceso público y, si falla, autenticación SSH."
     fi
   else
-    echo "ℹ️ No hay terminal interactiva ni GITHUB_TOKEN; se intentará acceso público o SSH."
-    echo "   Para un repositorio privado, vuelve a ejecutar con GITHUB_TOKEN definido." >&2
+    echo "ℹ️ No hay terminal interactiva ni credencial de GitHub; se intentará acceso público o SSH."
+    echo "   Para un repositorio privado, vuelve a ejecutar interactivamente o con GITHUB_TOKEN definido." >&2
   fi
 fi
 

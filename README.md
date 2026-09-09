@@ -272,8 +272,8 @@ Al crear un perfil nuevo, solicita estas opciones en orden. Pulsar **Enter** ace
 | Opción | Qué indicar |
 | --- | --- |
 | IP y usuario | Dirección de la VM y usuario de Ubuntu para SSH. |
-| Origen del proyecto | `local`: elegir un repositorio de la VM del orquestador o indicar su ruta. `git`: indicar URL y rama del proyecto. |
-| Token de GitHub | Si el origen es `git` y no existe `GITHUB_TOKEN`, solicita el token de forma oculta. Para repositorios públicos se puede pulsar **Enter**. El token sólo se mantiene durante la ejecución y no se guarda en `vms.json` ni en la VM. |
+| Origen del proyecto | `local`: elegir un repositorio de la VM del orquestador o indicar su ruta. `git`: indicar URL y rama del proyecto. Para un repositorio privado acepta `https://usuario:TOKEN@github.com/owner/repo.git`; la entrada se oculta. |
+| Credencial de GitHub | Si el perfil Git todavía no recibió una credencial, solicita una URL HTTPS autenticada de forma oculta. Para repositorios públicos se puede pulsar **Enter**. El provisionador extrae el token en memoria y guarda únicamente `https://github.com/owner/repo.git`. |
 | Stack | `backend` o `frontend`, según el proyecto. |
 | Repositorio y módulo | ID del repositorio, nombre del módulo y, para backend, tipo `core` o `module`. |
 | Alias | Nombres separados por comas para dirigir tareas al módulo. |
@@ -288,7 +288,13 @@ Al crear un perfil nuevo, solicita estas opciones en orden. Pulsar **Enter** ace
 
 Con `--con-sudo-interactivo`, también se solicita la contraseña `sudo` de la VM cuando sea necesaria.
 
-Para un repositorio privado, el token debe pertenecer a una cuenta que ya tenga acceso y debe incluir permiso de lectura de contenido. Como alternativa al prompt, se puede exportar temporalmente antes de ejecutar el provisionador:
+Para un repositorio privado, el token incluido en la URL debe pertenecer a una cuenta que ya tenga acceso y debe incluir permiso de lectura de contenido. Por ejemplo:
+
+```text
+https://usuario:TOKEN@github.com/owner/repo.git
+```
+
+El provisionador no usa esa URL literalmente como `origin`: separa la credencial y clona mediante un `GIT_ASKPASS` temporal para impedir que el token quede almacenado en Git. Como alternativa compatible con automatizaciones, se puede exportar temporalmente antes de ejecutar el provisionador:
 
 ```bash
 export GITHUB_TOKEN='TOKEN_CON_ACCESO_AL_REPOSITORIO'

@@ -20,8 +20,9 @@ grep -F 'profile prueba-agentes-bwrap /usr/bin/bwrap flags=(unconfined)' "$ROOT/
 grep -F 'userns,' "$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor" >/dev/null
 grep -F 'instalar_actualizacion_git.sh' "$LOCAL" >/dev/null
 grep -F 'configurar_ssh_vm.sh' "$LOCAL" >/dev/null
-grep -F 'Token de GitHub para repositorios privados' "$LOCAL" >/dev/null
-grep -F 'Token recibido de forma temporal; no se guardará en la configuración.' "$LOCAL" >/dev/null
+grep -F 'URL autenticada https://usuario:TOKEN@github.com/owner/repo.git' "$LOCAL" >/dev/null
+grep -F 'la URL se guardará sin usuario ni token.' "$LOCAL" >/dev/null
+grep -F 'no se guardará en la configuración ni en origin.' "$LOCAL" >/dev/null
 grep -F 'GitHub rechazó la clonación por HTTPS y SSH.' "$REMOTE" >/dev/null
 grep -F 'pi-harness' "$LOCAL" >/dev/null
 grep -F "rsync -az --delete --exclude='.git/'" "$LOCAL" >/dev/null
@@ -112,6 +113,26 @@ jq -e '.repositories."vue-dev"
   | (.technologies | index("Vue ^3.5.0") != null)
     and (.technologies | index("TypeScript ^5.8.0") != null)
     and (.technologies | index("Vite ^7.0.0") != null)' "$TEMP_DIR/tecnologias.json" >/dev/null
+
+# Una URL HTTPS autenticada se acepta, pero su usuario y token nunca se
+# persisten en la configuración ni se imprimen en la salida del asistente.
+token_prueba="github_pat_TOKEN_FICTICIO_123"
+respuestas_git_privado=(
+  "192.168.50.233" "carlos4"
+  "git" "https://Alguien-Pull:${token_prueba}@github.com/Ivan-Pull/frontend-base-angular.git"
+  "" "frontend" "" "" "" "" "" "local" "" "" ""
+)
+salida_git_privado="$(printf '%s\n' "${respuestas_git_privado[@]}" \
+  | PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json" \
+    PRUEBA_AGENTES_REPOSITORIES_ROOT="$TEMP_DIR/repos" \
+    PRUEBA_AGENTES_PRIVATE_TECH_MEMORY="$TEMP_DIR/tecnologias.json" \
+    "$LOCAL" frontend-git-privado --solo-configurar)"
+jq -e '."frontend-git-privado".project_git_url == "https://github.com/Ivan-Pull/frontend-base-angular.git"' \
+  "$TEMP_DIR/vms.json" >/dev/null
+if grep -F "$token_prueba" "$TEMP_DIR/vms.json" >/dev/null || grep -F "$token_prueba" <<< "$salida_git_privado" >/dev/null; then
+  echo "FALLO: el token incluido en la URL autenticada quedó expuesto." >&2
+  exit 1
+fi
 
 jq -e 'has("backend-pi-automatico") | not' "$ROOT/config/vms.json" >/dev/null
 
