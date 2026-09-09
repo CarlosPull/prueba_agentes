@@ -223,6 +223,20 @@ nvm install "$NODE_VERSION"
 nvm alias default "$NODE_VERSION"
 export PATH="$NODE_BIN:$HOME/.local/bin:$PATH"
 
+# git clone no ejecuta el instalador oficial de NVM, que es quien agrega estas
+# líneas a ~/.bashrc. Sin ellas, una sesión SSH interactiva nueva no ve nvm,
+# node, npm ni pi hasta que se hace `source ~/.nvm/nvm.sh` a mano.
+BASHRC="$HOME/.bashrc"
+touch "$BASHRC"
+if ! grep -q 'NVM_DIR="\$HOME/\.nvm"' "$BASHRC" 2>/dev/null; then
+  {
+    echo ''
+    echo 'export NVM_DIR="$HOME/.nvm"'
+    echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"'
+    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+  } >> "$BASHRC"
+fi
+
 pi_instalada="$(npm list -g --depth=0 --json 2>/dev/null | jq -r '.dependencies["@earendil-works/pi-coding-agent"].version // empty' || true)"
 if [ "$PI_VERSION" = "latest" ] || [ "$pi_instalada" != "$PI_VERSION" ]; then
   echo "📦 Instalando Pi $PI_VERSION..."
