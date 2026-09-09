@@ -247,22 +247,6 @@ env \
   node memory-gateway/bin/memory-gateway.mjs
 ```
 
-### 5. Abrir el visualizador — terminal 3
-
-```bash
-cd <ruta_del_repositorio>
-PROJECT_ROOT="$PWD"
-export MEMORY_GATEWAY_URL='https://127.0.0.1:9443'
-export MEMORY_GATEWAY_CLIENT_CERT="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.crt"
-export MEMORY_GATEWAY_CLIENT_KEY="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.key"
-export MEMORY_GATEWAY_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt"
-
-.private/cognee-venv/bin/python tools/gateway/visualizar_grafos.py --abrir
-```
-
-- Visor: `http://127.0.0.1:8765`. Identidad requerida: `graphs:read`.
-- Detener con `Ctrl+C`: visor → Gateway → Cognee.
-
 ## Provisionamiento de una VM Pi
 
 ### 1. Preparar el acceso SSH
