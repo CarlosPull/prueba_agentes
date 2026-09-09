@@ -106,7 +106,48 @@ Ejecutar desde la raíz del repositorio en la VM del orquestador. Mantener abier
 
 ### 1. Comprobar requisitos
 
-Requisitos: Node.js 24+, Python 3.10+, Git, SSH, jq y Ollama. Modelo: `hermes3:latest`.
+Requisitos: Node.js 24+, Python 3.10+ (con el módulo `venv`), Git, SSH, jq y Ollama. Modelo: `hermes3:latest`.
+
+**a) Paquetes del sistema (jq y Python venv)**
+
+macOS (Homebrew):
+
+```bash
+brew install jq
+```
+
+Linux (Debian/Ubuntu):
+
+```bash
+sudo apt-get update && sudo apt-get install -y jq python3-venv "python3.$(python3 -c 'import sys; print(sys.version_info[1])')-venv"
+```
+
+**b) Instalar Ollama**
+
+macOS (Homebrew):
+
+```bash
+brew install ollama
+```
+
+Linux:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+**c) Descargar y verificar el modelo**
+
+```bash
+ollama pull hermes3:latest
+ollama list | grep hermes3
+```
+
+**d) Cambiar a la rama de trabajo del repositorio**
+
+```bash
+git checkout dev
+```
 
 Requisitos de hardware para `hermes3:latest` (8B):
 
@@ -121,16 +162,32 @@ Requisitos de hardware para `hermes3:latest` (8B):
 
 No sobrescribir configuraciones privadas existentes. Para acceso desde VMs, configurar dirección accesible y certificados mediante las herramientas del Gateway.
 
+**a) Crear el directorio privado y el entorno virtual de Python**
+
+Aísla las dependencias de Cognee (`uvicorn`, `fastembed`, etc.) del resto del sistema.
+
 ```bash
 mkdir -p .private
-ollama pull hermes3:latest
 python3 -m venv .private/cognee-venv
 .private/cognee-venv/bin/pip install --upgrade pip
 .private/cognee-venv/bin/pip install cognee uvicorn fastembed
+```
 
+**b) Generar los certificados PKI del Memory Gateway**
+
+Crea la autoridad certificadora y los certificados mTLS que usarán el Gateway y sus clientes (backend, frontend, analista, admin).
+
+```bash
 ./memory-gateway/bin/generar_pki.sh .private/memory-gateway-pki 127.0.0.1 backend frontend orchestrator-analyst memory-admin
 cp .private/memory-gateway-pki/server.key .private/memory-gateway-pki/server-local.key
 cp .private/memory-gateway-pki/server.crt .private/memory-gateway-pki/server-local.crt
+```
+
+**c) Preparar la configuración local del Gateway**
+
+Copia las plantillas de ejemplo a `.private/` (fuera de Git) para personalizarlas sin afectar el repositorio.
+
+```bash
 mkdir -p .private/memory-gateway-data/openapi
 cp memory-gateway/config/clients.example.json .private/memory-gateway-clients.json
 cp memoria/tecnologias.example.json .private/tecnologias.json
@@ -141,6 +198,7 @@ cp memoria/tecnologias.example.json .private/tecnologias.json
 Ollama debe estar activo. Conservar las rutas de datos; las variables de Ladybug del ejemplo corresponden a una biblioteca `.dylib`: omitirlas en Linux o si la biblioteca no está instalada.
 
 ```bash
+cd <ruta_del_repositorio>
 PROJECT_ROOT="$PWD"
 
 env \
@@ -166,6 +224,7 @@ env \
 ### 4. Iniciar Memory Gateway — terminal 2
 
 ```bash
+cd <ruta_del_repositorio>
 PROJECT_ROOT="$PWD"
 
 env \
@@ -184,6 +243,7 @@ env \
 ### 5. Abrir el visualizador — terminal 3
 
 ```bash
+cd <ruta_del_repositorio>
 PROJECT_ROOT="$PWD"
 export MEMORY_GATEWAY_URL='https://127.0.0.1:9443'
 export MEMORY_GATEWAY_CLIENT_CERT="$PROJECT_ROOT/.private/memory-gateway-pki/clients/memory-admin.crt"
@@ -196,15 +256,7 @@ export MEMORY_GATEWAY_CA="$PROJECT_ROOT/.private/memory-gateway-pki/ca.crt"
 - Visor: `http://127.0.0.1:8765`. Identidad requerida: `graphs:read`.
 - Detener con `Ctrl+C`: visor → Gateway → Cognee.
 
-### 6. Verificar la memoria — otra terminal
-
-```bash
-./tools/gateway/memoria_gateway.sh verificar
-```
-
 ## Provisionamiento de una VM Pi
-
-Registrar un perfil en `config/vms.json` por cada VM; el provisionador permite crear los perfiles nuevos. Reemplazar los valores entre `<...>`.
 
 ### 1. Preparar el acceso SSH
 
@@ -213,6 +265,8 @@ Habilitar SSH en la VM y disponer de acceso al repositorio Git. Desde la VM del 
 ```bash
 ./tools/vms/configurar_ssh_vm.sh <usuario>@<ip>
 ```
+
+se debe copiar el contenido de la llave publica SSH a GitHub.
 
 ### 2. Ejecutar el provisionador desde la VM del orquestador
 
@@ -255,7 +309,7 @@ Con `--con-sudo-interactivo`, también se solicita la contraseña `sudo` de la V
 
 Conservar la CA existente; si se reemplaza, actualizar también la confianza de todos los clientes afectados.
 
-### 3. Iniciar sesión en Pi dentro de la VM
+### 3. Iniciar sesión en Pi dentro de la VM provisionada
 
 ```bash
 ssh <usuario>@<ip>
@@ -269,9 +323,25 @@ source "$HOME/.nvm/nvm.sh"
 pi
 ```
 
-Iniciar sesión en Pi con la cuenta de Codex, sin `sudo`, antes de ejecutar tareas.
+Iniciar sesión en Pi con la cuenta de Codex, sin `sudo`, antes de ejecutar tareas. Una vez dentro de Pi, seguir:
 
-### 4. Verificar la VM desde la VM del orquestador
+```text
+/login
+ → Sign in with an account
+   OpenAI Codex unconfigured
+   Device code login (headless)
+```
+
+### 4. Modificar el archivo de memoria de lógica de negocio
+
+Editar el archivo de memoria de negocio del repositorio dentro de la VM provisionada, en `~/.local/share/prueba-agentes/business/<repositorio>.md`, y describir allí las reglas o lógica de negocio propias del módulo. El agente lee este archivo y lo tiene en cuenta durante el desarrollo, por lo que debe mantenerse actualizado con el conocimiento privado de ese repositorio.
+
+```bash
+ssh <usuario>@<ip>
+nano ~/.local/share/prueba-agentes/business/<repositorio>.md
+```
+
+### 5. Verificar la VM desde la VM del orquestador
 
 Abrir otra terminal en la VM del orquestador, desde la raíz del repositorio:
 
