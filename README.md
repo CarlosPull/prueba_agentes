@@ -161,7 +161,7 @@ Requisitos de hardware para `hermes3:latest` (8B):
 | Recurso | Mínimo | Recomendado |
 | --- | --- | --- |
 | GPU | 6 GB VRAM (o CPU sin GPU) | 8 GB+ VRAM (NVIDIA/Apple Silicon) |
-| RAM | 8 GB | 16 GB |
+| RAM | 6 GB | 16 GB |
 
 > Es posible utilizar el equipo local sin GPU dedicada siempre y cuando cuente con al menos 16 GB de RAM; la inferencia se ejecutará sobre CPU y será más lenta.
 
