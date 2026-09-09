@@ -143,7 +143,14 @@ ollama pull hermes3:latest
 ollama list | grep hermes3
 ```
 
-**d) Cambiar a la rama de trabajo del repositorio**
+**d) Descargar el repositorio**
+
+```bash
+git clone git@github.com:CarlosPull/prueba_agentes.git
+cd prueba_agentes
+```
+
+**e) Cambiar a la rama de trabajo del repositorio**
 
 ```bash
 git checkout dev
