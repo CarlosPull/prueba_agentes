@@ -273,6 +273,7 @@ Al crear un perfil nuevo, solicita estas opciones en orden. Pulsar **Enter** ace
 | --- | --- |
 | IP y usuario | Dirección de la VM y usuario de Ubuntu para SSH. |
 | Origen del proyecto | `local`: elegir un repositorio de la VM del orquestador o indicar su ruta. `git`: indicar URL y rama del proyecto. |
+| Token de GitHub | Si el origen es `git` y no existe `GITHUB_TOKEN`, solicita el token de forma oculta. Para repositorios públicos se puede pulsar **Enter**. El token sólo se mantiene durante la ejecución y no se guarda en `vms.json` ni en la VM. |
 | Stack | `backend` o `frontend`, según el proyecto. |
 | Repositorio y módulo | ID del repositorio, nombre del módulo y, para backend, tipo `core` o `module`. |
 | Alias | Nombres separados por comas para dirigir tareas al módulo. |
@@ -286,6 +287,13 @@ Al crear un perfil nuevo, solicita estas opciones en orden. Pulsar **Enter** ace
 | ↳ Tenant ID | Identificador de la empresa/tenant; propone `empresa-prueba`. Reemplazarlo por el tenant real autorizado en el Gateway. |
 
 Con `--con-sudo-interactivo`, también se solicita la contraseña `sudo` de la VM cuando sea necesaria.
+
+Para un repositorio privado, el token debe pertenecer a una cuenta que ya tenga acceso y debe incluir permiso de lectura de contenido. Como alternativa al prompt, se puede exportar temporalmente antes de ejecutar el provisionador:
+
+```bash
+export GITHUB_TOKEN='TOKEN_CON_ACCESO_AL_REPOSITORIO'
+./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
+```
 
 **Si la IP del Gateway es diferente o cambia:**
 

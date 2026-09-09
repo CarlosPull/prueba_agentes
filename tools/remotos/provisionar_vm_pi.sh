@@ -129,8 +129,12 @@ ACTUALIZAR_REPOSITORIO() {
     if ! git clone --branch "$rama" --single-branch "$url" "$destino" 2>/dev/null; then
       if [[ "$url" =~ ^https://github\.com/([^/]+)/([^/]+)(\.git)?$ ]]; then
         local ssh_url="git@github.com:${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}.git"
-        echo "ℹ️ Clonación HTTPS requirió autenticación; reintentando por SSH ($ssh_url)..."
-        git clone --branch "$rama" --single-branch "$ssh_url" "$destino"
+        echo "ℹ️ Falló la clonación HTTPS; reintentando por SSH ($ssh_url)..."
+        if ! git clone --branch "$rama" --single-branch "$ssh_url" "$destino"; then
+          echo "Error: GitHub rechazó la clonación por HTTPS y SSH." >&2
+          echo "Verifica la URL, la rama y que el token o la llave SSH tengan acceso al repositorio privado." >&2
+          exit 1
+        fi
       else
         echo "Error: no se pudo clonar el repositorio '$url'." >&2
         exit 1

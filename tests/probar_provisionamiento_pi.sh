@@ -20,6 +20,9 @@ grep -F 'profile prueba-agentes-bwrap /usr/bin/bwrap flags=(unconfined)' "$ROOT/
 grep -F 'userns,' "$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor" >/dev/null
 grep -F 'instalar_actualizacion_git.sh' "$LOCAL" >/dev/null
 grep -F 'configurar_ssh_vm.sh' "$LOCAL" >/dev/null
+grep -F 'Token de GitHub para repositorios privados' "$LOCAL" >/dev/null
+grep -F 'Token recibido de forma temporal; no se guardará en la configuración.' "$LOCAL" >/dev/null
+grep -F 'GitHub rechazó la clonación por HTTPS y SSH.' "$REMOTE" >/dev/null
 grep -F 'pi-harness' "$LOCAL" >/dev/null
 grep -F "rsync -az --delete --exclude='.git/'" "$LOCAL" >/dev/null
 

@@ -50,27 +50,6 @@ CONFIGURAR_PERFIL_NUEVO() {
 
   echo "🧭 El perfil '$VM_PROFILE' no existe; iniciando configuración inicial."
 
-  local pub_key_file="$HOME/.ssh/id_ed25519.pub"
-  local gh_check=""
-  if [ -f "$pub_key_file" ]; then
-    gh_check="$(ssh -T -o StrictHostKeyChecking=no -o ConnectTimeout=4 git@github.com 2>&1 || true)"
-    if ! printf '%s\n' "$gh_check" | grep -q "successfully authenticated"; then
-      echo ""
-      echo "------------------------------------------------------------"
-      echo "⚠️ ATENCIÓN: Tu llave SSH aún no está registrada en tu cuenta de GitHub."
-      echo "Para que la VM pueda clonar repositorios privados automáticamente:"
-      echo "------------------------------------------------------------"
-      cat "$pub_key_file"
-      echo "------------------------------------------------------------"
-      echo "👉 Agrégala en: https://github.com/settings/keys (New SSH key)"
-      echo "------------------------------------------------------------"
-      read -r -p "Presiona ENTER una vez que la hayas agregado a tu cuenta de GitHub..." _
-      echo ""
-    fi
-  fi
-
-
-
   read -r -p "IP de la VM: " ip_nuevo
   read -r -p "Usuario de Ubuntu: " user_nuevo
 
@@ -513,6 +492,27 @@ if [ "$agent_update_mode" = "git" ]; then
   done
 else
   [ -s "$ROOT/$local_agent/SKILL.md" ] || { echo "Error: el agente local no contiene SKILL.md." >&2; exit 1; }
+fi
+
+# El token se solicita sólo para el aprovisionamiento de proyectos obtenidos
+# desde Git. Se mantiene en memoria y se envía por la entrada estándar al
+# bootstrap remoto; nunca se guarda en vms.json ni en archivos de la VM.
+if [ "$source_mode" = "git" ] && [ "$OPCION" != "--solo-verificar" ]; then
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    echo "✓ GITHUB_TOKEN detectado para acceder al repositorio Git."
+  elif [ -t 0 ]; then
+    echo "🔐 El proyecto se obtendrá desde GitHub."
+    read -r -s -p "Token de GitHub para repositorios privados (Enter para continuar sin token): " GITHUB_TOKEN
+    echo ""
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+      echo "✓ Token recibido de forma temporal; no se guardará en la configuración."
+    else
+      echo "ℹ️ Sin token: se intentará acceso público y, si falla, autenticación SSH."
+    fi
+  else
+    echo "ℹ️ No hay terminal interactiva ni GITHUB_TOKEN; se intentará acceso público o SSH."
+    echo "   Para un repositorio privado, vuelve a ejecutar con GITHUB_TOKEN definido." >&2
+  fi
 fi
 
 target="$user@$ip"
