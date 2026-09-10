@@ -2,7 +2,7 @@
 
 Orquestación local por SSH, ejecución con Pi en VMs y memoria central mediante Gateway, SQLite/OpenAPI y Cognee.
 
-Esta infraestructura requiere **una VM para el orquestador** y **una o más VMs de ejecución** para los agentes backend/frontend. La VM del orquestador aloja este repositorio, coordina los despachos por SSH y puede alojar los servicios de memoria; cada VM de ejecución contiene Pi, el agente y su proyecto. Debe existir conectividad SSH hacia las VMs de ejecución y HTTPS hacia el Memory Gateway.
+Esta infraestructura requiere **una VM para el orquestador** y **una o más VMs de ejecución** para los agentes backend/frontend.
 
 ## Flujo completo
 
@@ -38,66 +38,6 @@ flowchart TD
 
     H -- "Consulta o publica contratos" --> GW
     W --> R["Reporte y evidencia final"]
-```
-
-## Directorios
-
-- `config/vms.json`: perfiles de VMs.
-- `skills/`: agentes y subagentes.
-- `pi-harness/`: harness, extensiones y políticas.
-- `memory-gateway/`: servidor mTLS y almacenamiento.
-- `memoria/`: plantillas de memoria.
-- `.private/`: configuración, datos y credenciales locales; fuera de Git.
-- `logs/`: solicitudes, reportes y evidencia.
-- `tests/`: pruebas automatizadas.
-
-```text
-tools/
-├── orquestacion/              # Entrada principal, clasificación, análisis de requisitos y memoria
-│   ├── orquestar.sh
-│   ├── descomponer_requisitos.sh
-│   ├── analizar_requisitos.sh
-│   ├── clasificar_tarea.sh
-│   ├── recolectar_contexto_memoria.sh
-│   └── preparar_proyecto.sh
-├── despacho/                  # Validación, candados de ejecución física y generación de reportes
-│   ├── validar_y_despachar.sh
-│   ├── despachar_vm.sh
-│   ├── generar_evidencia_agente.sh
-│   ├── generar_reporte.sh
-│   └── pi_harness.sh
-├── vms/                       # Provisionamiento, perfiles, llaves SSH y auditoría de VMs
-│   ├── provisionar_vm_pi.sh
-│   ├── configurar_perfil_backend_local.sh
-│   ├── agregar_repositorio_vm.sh
-│   ├── detectar_tecnologias_repositorio.sh
-│   ├── limpiar_vm_pi.sh
-│   ├── configurar_ssh_vm.sh
-│   ├── probar_vms.sh
-│   ├── inicializar_memorias_negocio_vm.sh
-│   └── actualizar_memoria_negocio_vm.sh
-├── sincronizacion/            # Sincronización Git de agentes y monitores de versión
-│   ├── sincronizar_agente.sh
-│   ├── sincronizar_agente_local.sh
-│   ├── instalar_actualizacion_git.sh
-│   ├── instalar_monitor_local.sh
-│   └── monitor_agentes_locales.sh
-├── gateway/                   # Servidor mTLS y exploradores CLI/visual de memoria
-│   ├── provisionar_memory_gateway.sh
-│   ├── configurar_memory_gateway.sh
-│   ├── instalar_identidad_gateway.sh
-│   ├── memoria_gateway.sh
-│   ├── consultar_memoria.sh
-│   ├── visualizar_grafos.py
-│   └── visualizador_grafos.html
-├── agentes/                   # Generación automatizada de nuevos agentes/skills
-│   └── crear_agente.sh
-└── remotos/                   # Bootstraps remotos ejecutados en VMs
-    ├── actualizar_agente_git.sh
-    ├── ciclo_actualizacion_git.sh
-    ├── instalar_paquetes_backend.sh
-    ├── provisionar_vm_pi.sh
-    └── prueba-agentes-bwrap.apparmor
 ```
 
 ## Guía de instalación de memoria en la VM del orquestador
