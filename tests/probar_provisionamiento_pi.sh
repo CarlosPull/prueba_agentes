@@ -5,10 +5,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCAL="$ROOT/tools/vms/provisionar_vm_pi.sh"
 REMOTE="$ROOT/tools/remotos/provisionar_vm_pi.sh"
+CONFIGURAR_SSH="$ROOT/tools/vms/configurar_ssh_vm.sh"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/prueba-config-pi.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT INT TERM
 
-bash -n "$LOCAL" "$REMOTE" "$ROOT/pi-harness/bin/pi-harness"
+bash -n "$LOCAL" "$REMOTE" "$CONFIGURAR_SSH" "$ROOT/pi-harness/bin/pi-harness"
 
 grep -F '@earendil-works/pi-coding-agent@' "$REMOTE" >/dev/null
 grep -F 'npm install -g --ignore-scripts' "$REMOTE" >/dev/null
@@ -21,8 +22,16 @@ grep -F 'userns,' "$ROOT/tools/remotos/prueba-agentes-bwrap.apparmor" >/dev/null
 grep -F 'instalar_actualizacion_git.sh' "$LOCAL" >/dev/null
 grep -F 'configurar_ssh_vm.sh' "$LOCAL" >/dev/null
 grep -F 'URL autenticada https://usuario:TOKEN@github.com/owner/repo.git' "$LOCAL" >/dev/null
+grep -F '[2] Generar una clave SSH en la VM' "$LOCAL" >/dev/null
+grep -F 'id_ed25519_github_provisionador' "$LOCAL" >/dev/null
+grep -F 'git ls-remote --heads' "$LOCAL" >/dev/null
+grep -F 'La clave privada nunca sale de la VM.' "$ROOT/README.md" >/dev/null
 grep -F 'la URL se guardará sin usuario ni token.' "$LOCAL" >/dev/null
 grep -F 'no se guardará en la configuración ni en origin.' "$LOCAL" >/dev/null
+if grep -F 'git@github.com' "$CONFIGURAR_SSH" >/dev/null; then
+  echo "FALLO: configurar_ssh_vm.sh todavía mezcla el acceso a la VM con la autenticación de GitHub." >&2
+  exit 1
+fi
 grep -F 'GitHub rechazó la clonación por HTTPS y SSH.' "$REMOTE" >/dev/null
 grep -F 'pi-harness' "$LOCAL" >/dev/null
 grep -F "rsync -az --delete --exclude='.git/'" "$LOCAL" >/dev/null
