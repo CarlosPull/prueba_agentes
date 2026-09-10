@@ -274,12 +274,6 @@ https://usuario:TOKEN@github.com/owner/repo.git
 
 El provisionador no usa esa URL literalmente como `origin`: separa la credencial y clona mediante un `GIT_ASKPASS` temporal para impedir que el token quede almacenado en Git. Como alternativa compatible con automatizaciones, se puede exportar temporalmente antes de ejecutar el provisionador:
 
-**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
-
-```bash
-export GITHUB_TOKEN='TOKEN_CON_ACCESO_AL_REPOSITORIO'
-./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
-```
 
 **Si la IP del Gateway es diferente o cambia:**
 
