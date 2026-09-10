@@ -112,11 +112,15 @@ Requisitos: Node.js 24+, Python 3.10+ (con el módulo `venv`), Git, SSH, jq y Ol
 
 macOS (Homebrew):
 
+**Dónde se ejecuta:** en la VM del orquestador, o en el equipo donde se esté instalando el orquestador.
+
 ```bash
 brew install jq
 ```
 
 Linux (Debian/Ubuntu):
+
+**Dónde se ejecuta:** en la VM del orquestador, o en el equipo donde se esté instalando el orquestador.
 
 ```bash
 sudo apt-get update && sudo apt-get install -y jq python3-venv "python3.$(python3 -c 'import sys; print(sys.version_info[1])')-venv"
@@ -126,17 +130,23 @@ sudo apt-get update && sudo apt-get install -y jq python3-venv "python3.$(python
 
 macOS (Homebrew):
 
+**Dónde se ejecuta:** en la VM del orquestador, o en el equipo donde se esté instalando el orquestador.
+
 ```bash
 brew install ollama
 ```
 
 Linux:
 
+**Dónde se ejecuta:** en la VM del orquestador, o en el equipo donde se esté instalando el orquestador.
+
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
 **c) Descargar y verificar el modelo**
+
+**Dónde se ejecuta:** en la VM del orquestador, o en el equipo donde se esté instalando el orquestador.
 
 ```bash
 ollama pull hermes3:latest
@@ -145,12 +155,16 @@ ollama list | grep hermes3
 
 **d) Descargar el repositorio**
 
+**Dónde se ejecuta:** en la VM del orquestador, o en el equipo donde se esté instalando el orquestador.
+
 ```bash
 git clone git@github.com:CarlosPull/prueba_agentes.git
 cd prueba_agentes
 ```
 
 **e) Cambiar a la rama de trabajo del repositorio**
+
+**Dónde se ejecuta:** en la VM o equipo donde se esté instalando el orquestador, dentro del repositorio recién descargado.
 
 ```bash
 git checkout dev
@@ -173,6 +187,8 @@ No sobrescribir configuraciones privadas existentes. Para acceso desde VMs, conf
 
 Aísla las dependencias de Cognee (`uvicorn`, `fastembed`, etc.) del resto del sistema.
 
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
+
 ```bash
 mkdir -p .private
 python3 -m venv .private/cognee-venv
@@ -184,6 +200,8 @@ python3 -m venv .private/cognee-venv
 
 Crea la autoridad certificadora y los certificados mTLS que usarán el Gateway y sus clientes (backend, frontend, analista, admin).
 
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
+
 ```bash
 ./memory-gateway/bin/generar_pki.sh .private/memory-gateway-pki 127.0.0.1 backend frontend orchestrator-analyst memory-admin
 cp .private/memory-gateway-pki/server.key .private/memory-gateway-pki/server-local.key
@@ -194,6 +212,8 @@ cp .private/memory-gateway-pki/server.crt .private/memory-gateway-pki/server-loc
 
 Copia las plantillas de ejemplo a `.private/` (fuera de Git) para personalizarlas sin afectar el repositorio.
 
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
+
 ```bash
 mkdir -p .private/memory-gateway-data/openapi
 cp memory-gateway/config/clients.example.json .private/memory-gateway-clients.json
@@ -203,6 +223,8 @@ cp memoria/tecnologias.example.json .private/tecnologias.json
 ### 3. Iniciar Cognee — terminal 1
 
 Ollama debe estar activo. Conservar las rutas de datos; las variables de Ladybug del ejemplo corresponden a una biblioteca `.dylib`: omitirlas en Linux o si la biblioteca no está instalada.
+
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, en una terminal que debe permanecer abierta mientras Cognee esté en uso.
 
 ```bash
 cd <ruta_del_repositorio>
@@ -230,6 +252,8 @@ env \
 
 ### 4. Iniciar Memory Gateway — terminal 2
 
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, en una segunda terminal que debe permanecer abierta mientras el Gateway esté en uso.
+
 ```bash
 cd <ruta_del_repositorio>
 PROJECT_ROOT="$PWD"
@@ -253,6 +277,8 @@ env \
 
 Habilitar SSH en la VM y disponer de acceso al repositorio Git. Desde la VM del orquestador:
 
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
+
 ```bash
 ./tools/vms/configurar_ssh_vm.sh <usuario>@<ip>
 ```
@@ -261,30 +287,42 @@ se debe copiar el contenido de la llave publica SSH a GitHub.
 
 ### 2. Ejecutar el provisionador desde la VM del orquestador
 
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio. El script se conecta a la VM de destino y realiza allí la instalación necesaria.
+
 ```bash
 ./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
 ```
 
 Instala automáticamente NVM, Node.js, Pi, el harness y los paquetes del sistema; configura el perfil, proyecto, agente y memoria. No instalar Node ni Pi manualmente.
 
-Al crear un perfil nuevo, solicita estas opciones en orden. Pulsar **Enter** acepta el valor predeterminado mostrado:
+Al crear un perfil nuevo, el asistente solicita los siguientes datos en este orden. En esta guía, **VM** significa máquina virtual: el equipo remoto donde se instalará el proyecto y trabajará el agente. Cada dato permite identificar esa máquina, instalar el proyecto correcto y decidir qué agente atenderá sus tareas. Pulsar **Enter** acepta el valor predeterminado que aparece entre paréntesis.
 
-| Opción | Qué indicar |
-| --- | --- |
-| IP y usuario | Dirección de la VM y usuario de Ubuntu para SSH. |
-| Origen del proyecto | `local`: elegir un repositorio de la VM del orquestador o indicar su ruta. `git`: indicar URL y rama del proyecto. Para un repositorio privado acepta `https://usuario:TOKEN@github.com/owner/repo.git`; la entrada se oculta. |
-| Credencial de GitHub | Si el perfil Git todavía no recibió una credencial, solicita una URL HTTPS autenticada de forma oculta. Para repositorios públicos se puede pulsar **Enter**. El provisionador extrae el token en memoria y guarda únicamente `https://github.com/owner/repo.git`. |
-| Stack | `backend` o `frontend`, según el proyecto. |
-| Repositorio y módulo | ID del repositorio, nombre del módulo y, para backend, tipo `core` o `module`. |
-| Alias | Nombres separados por comas para dirigir tareas al módulo. |
-| Agente | Elegir de la lista; se propone `dev-back` para backend y `dev-front` para frontend. |
-| Workspace remoto | Carpeta donde quedará el proyecto en la VM. |
-| Actualización del agente | `git`: consultar cambios publicados; pide repositorio, rama e intervalo (10/15/20/30/60 segundos). `local`: copiar cambios desde la VM del orquestador mediante el monitor local. Es independiente del origen del proyecto. |
-| Versiones | Node (`24.19.0`) y Pi (`latest`); para backend, PHP (`8.4`) y mínimo (`8.4.1`). |
-| Memory Gateway | `s` para habilitar memoria compartida mediante mTLS; `N` para omitirla (predeterminado). Con `s`, completar las tres opciones siguientes. |
-| ↳ URL del Memory Gateway | `https://<IP_O_DNS_DEL_GATEWAY>:9443`. El script propone `https://192.168.50.61:9443`: reemplazarla si no corresponde al servidor real. No usar `127.0.0.1` para acceder desde otra VM. |
-| ↳ Core ID | Identificador del core cuyos contratos se compartirán; propone el ID del repositorio. Ajustarlo al core real y a los permisos del Gateway. |
-| ↳ Tenant ID | Identificador de la empresa/tenant; propone `empresa-prueba`. Reemplazarlo por el tenant real autorizado en el Gateway. |
+| Dato solicitado | Para qué sirve | Qué debe indicar el usuario |
+| --- | --- | --- |
+| IP de la VM | Permite que el orquestador encuentre por red la máquina que preparará y utilizará para ejecutar las tareas. | La dirección IP o el nombre de red de la VM; por ejemplo, `192.168.50.62`. |
+| Usuario de Ubuntu | Indica con qué cuenta se abrirá la conexión remota segura (SSH) y en qué carpeta personal se instalarán las herramientas. | Un usuario que exista en la VM, tenga acceso por SSH y pueda usar `sudo` cuando la instalación lo requiera; por ejemplo, `serveradmin`. |
+| Origen del proyecto | Define desde dónde se obtendrá el código que se copiará o clonará en la VM. Esta elección afecta al proyecto, no al agente. | `local` si el repositorio ya está en la VM del orquestador; `git` si debe descargarse desde un repositorio Git remoto. |
+| Repositorio local | Permite elegir exactamente qué proyecto local se enviará a la VM. Solo se solicita cuando el origen es `local`. | Seleccionar un repositorio de la lista o escribir su ruta completa si no aparece. |
+| URL y rama del proyecto | Identifican el repositorio remoto y la versión del código que se instalará. Solo se solicitan cuando el origen es `git`. | La URL HTTPS del repositorio y la rama deseada, normalmente `main`. Para un repositorio privado se puede usar temporalmente `https://usuario:TOKEN@github.com/owner/repo.git`; el token no se guarda en la configuración. |
+| Credencial de GitHub | Autoriza la descarga cuando el repositorio es privado. Se usa durante la operación y se retira después. | Una URL HTTPS que incluya usuario y token. Si el repositorio es público o la VM ya tiene acceso, pulsar **Enter**. |
+| Stack | Señala qué parte de una aplicación atenderá esta VM y permite asignarle las reglas de trabajo correspondientes. | `backend` para servicios, API, base de datos o lógica del servidor; `frontend` para interfaz visual y código que utiliza el navegador. |
+| ID del repositorio | Da al proyecto un identificador estable dentro del orquestador para relacionar tareas, tecnología y memoria. | Un nombre corto y único, sin espacios; normalmente se acepta el nombre propuesto del repositorio. Ejemplo: `sistema-ventas`. |
+| Nombre del módulo | Identifica la parte funcional concreta que contiene el repositorio cuando un sistema está dividido en varios componentes. | El nombre del componente, sin espacios; por ejemplo, `facturacion`. Si el repositorio es un único componente, se puede aceptar el valor propuesto. |
+| Tipo de repositorio backend | Permite distinguir el núcleo compartido del sistema de un módulo que depende de él. Solo se solicita para `backend`. | `core` si contiene contratos o funciones centrales compartidas; `module` si contiene una función específica del negocio. Ante la duda, usar `module`. |
+| Alias de enrutamiento | Ayudan al orquestador a reconocer distintas formas en que una persona puede mencionar el módulo y enviarle la tarea correcta. | Nombres alternativos separados por comas; por ejemplo, `facturacion,facturas,cobros`. |
+| Agente | Define las instrucciones y especialidad que Pi utilizará al trabajar en ese proyecto. | Elegir un agente de la lista. El valor habitual es `dev-back` para backend y `dev-front` para frontend. |
+| Workspace remoto | Indica la carpeta de la VM donde quedará el código y desde dónde se ejecutarán las tareas. | Una ruta dentro de la carpeta personal del usuario de Ubuntu; por ejemplo, `/home/serveradmin/sistema-ventas`. Normalmente basta aceptar la propuesta. |
+| Forma de actualizar el agente | Decide cómo recibirá la VM los cambios realizados en las instrucciones del agente. No cambia la forma en que se obtiene el proyecto. | `git` para descargar cambios de los agentes publicados en Git; `local` para recibir cambios desde la VM del orquestador. |
+| Repositorio y rama del agente | Indican dónde están publicadas las instrucciones del agente que la VM debe mantener actualizadas. Solo se solicitan al elegir actualización por `git`. | La URL del repositorio de este orquestador y la rama donde se publican los agentes. Si los valores propuestos son correctos, pulsar **Enter**. |
+| Intervalo de actualización del agente | Define cada cuántos segundos la VM comprobará si existen instrucciones nuevas del agente. Solo se solicita al elegir actualización por `git`. | Uno de estos valores: `10`, `15`, `20`, `30` o `60`. Un intervalo menor actualiza antes, pero realiza más consultas; `30` es el valor habitual. |
+| Versión de Node.js | Instala la versión de Node.js que necesita Pi y evita diferencias entre VMs. | Una versión completa con tres números, como `24.19.0`. Normalmente se acepta la propuesta. |
+| Versión de Pi | Determina qué versión del motor que ejecuta al agente se instalará. | `latest` para instalar la versión más reciente disponible, o una versión concreta si el proyecto exige fijarla. |
+| Versión de PHP | Instala la familia de PHP con la que se ejecutará un proyecto backend. Solo se solicita para `backend`. | La versión principal y secundaria; por ejemplo, `8.4`. Debe ser compatible con el proyecto. |
+| Versión mínima de PHP | Impide continuar si la VM no dispone de una versión suficientemente reciente para el proyecto. Solo se solicita para `backend`. | La versión mínima completa exigida; por ejemplo, `8.4.1`. |
+| Habilitar Memory Gateway | Permite que el agente consulte contexto compartido, como contratos técnicos y memoria del negocio, mediante una conexión protegida con certificados mTLS. | `s` para habilitarlo o `N` para continuar sin memoria compartida. `N` es el valor predeterminado. |
+| URL del Memory Gateway | Indica en qué servidor y puerto se encuentra el servicio de memoria compartida. Solo se solicita si se habilita Memory Gateway. | Una URL como `https://192.168.50.61:9443`, usando la IP de la vm o lugar donde se encuentra el orquestador No usar `127.0.0.1` si el Gateway está en otra VM. |
+| Core ID | Selecciona el núcleo del sistema cuyos contratos y conocimientos compartidos podrá consultar este proyecto. Solo se solicita si se habilita Memory Gateway. | El identificador del core configurado y autorizado en el Gateway. Puede coincidir con el ID del repositorio si ese es realmente el core. |
+| Tenant ID | Separa la memoria de una empresa u organización de la memoria perteneciente a otras. Solo se solicita si se habilita Memory Gateway. | El identificador de la empresa autorizado en el Gateway; por ejemplo, `empresa-prueba`. No usar el ejemplo si la instalación tiene otro tenant configurado. |
 
 Con `--con-sudo-interactivo`, también se solicita la contraseña `sudo` de la VM cuando sea necesaria.
 
@@ -295,6 +333,8 @@ https://usuario:TOKEN@github.com/owner/repo.git
 ```
 
 El provisionador no usa esa URL literalmente como `origin`: separa la credencial y clona mediante un `GIT_ASKPASS` temporal para impedir que el token quede almacenado en Git. Como alternativa compatible con automatizaciones, se puede exportar temporalmente antes de ejecutar el provisionador:
+
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
 
 ```bash
 export GITHUB_TOKEN='TOKEN_CON_ACCESO_AL_REPOSITORIO'
@@ -308,6 +348,8 @@ export GITHUB_TOKEN='TOKEN_CON_ACCESO_AL_REPOSITORIO'
 3. Usar un certificado de servidor cuyo SAN incluya la IP/DNS real, actualizar las rutas `MEMORY_GATEWAY_TLS_CERT` y `MEMORY_GATEWAY_TLS_KEY` si cambian y reiniciar el Gateway. Cambiar la URL no actualiza el certificado.
 4. Verificar que la identidad cliente esté autorizada para el Core ID y Tenant ID en `.private/memory-gateway-clients.json`. Instalar o actualizar sus certificados en la VM de ejecución desde el orquestador:
 
+   **Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
+
    ```bash
    ./tools/vms/sincronizar_mtls_vm.sh <perfil>
    ```
@@ -316,12 +358,25 @@ Conservar la CA existente; si se reemplaza, actualizar también la confianza de 
 
 ### 3. Iniciar sesión en Pi dentro de la VM provisionada
 
+Primero, abrir la conexión con la VM provisionada.
+
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador; también puede ejecutarse desde cualquier otro equipo que tenga acceso SSH a la VM provisionada.
+
 ```bash
 ssh <usuario>@<ip>
+```
+
+Cuando la terminal ya muestre la sesión de la VM provisionada, iniciar Pi.
+
+**Dónde se ejecuta:** dentro de la VM provisionada.
+
+```bash
 pi
 ```
 
 Si no se reconoce `pi`, `node` o `npm`, cargar NVM en esa misma terminal de la VM y volver a abrir Pi:
+
+**Dónde se ejecuta:** dentro de la VM provisionada.
 
 ```bash
 source "$HOME/.nvm/nvm.sh"
@@ -329,6 +384,8 @@ pi
 ```
 
 Iniciar sesión en Pi con la cuenta de Codex, sin `sudo`, antes de ejecutar tareas. Una vez dentro de Pi, seguir:
+
+**Dónde se ejecuta:** dentro de Pi, abierto en la VM provisionada.
 
 ```text
 /login
@@ -341,14 +398,27 @@ Iniciar sesión en Pi con la cuenta de Codex, sin `sudo`, antes de ejecutar tare
 
 Editar el archivo de memoria de negocio del repositorio dentro de la VM provisionada, en `~/.local/share/prueba-agentes/business/<repositorio>.md`, y describir allí las reglas o lógica de negocio propias del módulo. El agente lee este archivo y lo tiene en cuenta durante el desarrollo, por lo que debe mantenerse actualizado con el conocimiento privado de ese repositorio.
 
+Primero, conectarse a la VM provisionada si todavía no se tiene una sesión abierta.
+
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador; también puede ejecutarse desde cualquier otro equipo que tenga acceso SSH a la VM provisionada.
+
 ```bash
 ssh <usuario>@<ip>
+```
+
+Después de entrar en la VM, abrir el archivo de memoria.
+
+**Dónde se ejecuta:** dentro de la VM provisionada.
+
+```bash
 nano ~/.local/share/prueba-agentes/business/<repositorio>.md
 ```
 
 ### 5. Verificar la VM desde la VM del orquestador
 
 Abrir otra terminal en la VM del orquestador, desde la raíz del repositorio:
+
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
 
 ```bash
 ./tools/vms/provisionar_vm_pi.sh <perfil> --solo-verificar
@@ -362,11 +432,15 @@ Estos comandos se ejecutan **en la máquina orquestadora**, desde la raíz de es
 
 Desde una terminal de tu equipo (omitir SSH si ya estás en el orquestador):
 
+**Dónde se ejecuta:** en el equipo del usuario desde el que se accederá al orquestador.
+
 ```bash
 ssh <usuario_orquestador>@<ip_orquestador>
 ```
 
 Dentro de la máquina orquestadora:
+
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, después de iniciar la sesión SSH.
 
 ```bash
 cd <ruta_del_repositorio>/prueba_agentes
@@ -375,12 +449,16 @@ cd <ruta_del_repositorio>/prueba_agentes
 
 Si falta configurar el acceso SSH a una VM de ejecución, ejecutar desde el orquestador y repetir la comprobación:
 
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
+
 ```bash
 ./tools/vms/configurar_ssh_vm.sh <usuario_vm>@<ip_vm>
 ./tools/vms/probar_vms.sh
 ```
 
 ### 2. Ejecutar una tarea desde el orquestador
+
+**Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio.
 
 ```bash
 ./tools/orquestacion/orquestar.sh "objetivo"
@@ -393,6 +471,8 @@ Si falta configurar el acceso SSH a una VM de ejecución, ejecutar desde el orqu
 ### Alternativa: lanzar una tarea desde un equipo remoto
 
 Cada usuario puede enviar su prompt por SSH sin abrir una sesión interactiva. La ejecución sigue ocurriendo en la máquina orquestadora:
+
+**Dónde se ejecuta:** en el equipo remoto del usuario. El comando se conecta al orquestador y ejecuta allí la tarea.
 
 ```bash
 ssh <usuario_orquestador>@<ip_orquestador> "cd '<ruta_del_repositorio>/prueba_agentes' && ./tools/orquestacion/orquestar.sh 'Prompt de cada usuario'"
