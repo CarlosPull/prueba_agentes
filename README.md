@@ -8,37 +8,43 @@ Esta infraestructura requiere **una VM para el orquestador** y **una o más VMs 
 
 ```mermaid
 flowchart TD
-    U["Prompt general"] --> C["Recolector de contexto"]
-    U --> D["División inicial en<br/>requisitos pequeños"]
+    subgraph ORQ["VM o equipo donde está instalado el orquestador"]
+        direction TD
+        U["Prompt general"] --> C["Recolector de contexto"]
+        U --> D["División inicial en<br/>requisitos pequeños"]
 
-    INV["Inventario de módulos y VMs"] --> C
-    TEC["Tecnología privada de la empresa"] --> C
-    C -- "Busca memoria company<br/>y contratos compartidos" --> GW
+        INV["Inventario de módulos y VMs"] --> C
+        TEC["Tecnología privada de la empresa"] --> C
+        C -- "Busca memoria de la empresa<br/>y contratos compartidos" --> GW
 
-    subgraph MEM["Memoria central"]
-        GW["Memory Gateway<br/>mTLS + permisos"]
-        GW --> COG["Cognee<br/>búsqueda semántica"]
-        GW --> SQL["SQLite + OpenAPI<br/>fuente autoritativa"]
-        SQL -- "indexa" --> COG
-        COG -. "fallback" .-> SQL
+        subgraph MEM["Memoria central"]
+            GW["Memory Gateway<br/>mTLS + permisos"]
+            GW --> COG["Cognee<br/>búsqueda semántica"]
+            GW --> SQL["SQLite + OpenAPI<br/>fuente autoritativa"]
+            SQL -- "indexa" --> COG
+            COG -. "respaldo" .-> SQL
+        end
+
+        GW -- "Memoria relevante" --> CTX["Contexto completo"]
+        C -- "Prompt + inventario<br/>+ tecnología" --> CTX
+        CTX --> A["Analista central"]
+        D --> A
+        A --> RQ["Asigna los requisitos<br/>a los módulos correctos"]
+        RQ --> P["Despacho paralelo<br/>a las VMs seleccionadas"]
+        P -- "Después de recibir los resultados<br/>de todas las VMs" --> R["Consolida el reporte<br/>y la evidencia final"]
     end
-
-    GW -- "Memoria relevante" --> CTX["Contexto completo"]
-    C -- "Prompt + inventario<br/>+ tecnología" --> CTX
-    CTX --> A["Analista central"]
-    D --> A
-    A --> RQ["Asigna los requisitos<br/>a los módulos correctos"]
-    RQ --> P["Despacho paralelo<br/>a las VMs seleccionadas"]
 
     subgraph VMS["Cada VM"]
-        P --> H["Pi + agente especializado"]
-        BM["Memoria de negocio<br/>local del módulo"] --> H
+        H["Pi + agente especializado"]
         H --> W["Trabaja únicamente en<br/>su repositorio autorizado"]
+        H -- "Lee" --> BM["Memoria de negocio<br/>local del módulo"]
     end
 
-    H -- "Consulta o publica contratos" --> GW
-    W --> R["Reporte y evidencia final"]
+    P --> H
+    H -- "Consulta o publica contratos" --> MEM
 ```
+
+El contenedor principal del diagrama representa el proceso que ocurre en la VM o equipo del orquestador. El bloque **Cada VM** representa las máquinas de ejecución externas a las que el orquestador envía el trabajo. El orquestador espera los resultados de todas las VMs y después consolida el reporte y la evidencia final.
 
 ## Guía de instalación de memoria en la VM del orquestador
 
@@ -229,16 +235,21 @@ se debe copiar el contenido de la llave publica SSH a GitHub.
 
 **Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio. El script se conecta a la VM de destino y realiza allí la instalación necesaria.
 
+Un **perfil es el identificador único que el orquestador utiliza para reconocer una configuración de trabajo**. Dicho de forma sencilla: es el nombre con el que se registra una VM junto con el proyecto y el agente que trabajarán en ella. El perfil reúne la dirección y el usuario de la VM, el proyecto, módulo, stack, agente, workspace, versiones y opciones de memoria. Se guarda como una entrada independiente en `config/vms.json`, por lo que pueden existir varios perfiles del mismo stack; por ejemplo, `backend`, `backend-prueba` y `frontend-ventas`.
+
+En el comando siguiente, `<perfil>` se reemplaza por ese nombre. Si el perfil todavía no existe, el provisionador abre el asistente para crearlo. Si ya existe, reutiliza su configuración guardada para provisionar o actualizar el mismo destino.
+
 ```bash
 ./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
 ```
 
 Instala automáticamente NVM, Node.js, Pi, el harness y los paquetes del sistema; configura el perfil, proyecto, agente y memoria. No instalar Node ni Pi manualmente.
 
-Al crear un perfil nuevo, el asistente solicita los siguientes datos en este orden. En esta guía, **VM** significa máquina virtual: el equipo remoto donde se instalará el proyecto y trabajará el agente. Cada dato permite identificar esa máquina, instalar el proyecto correcto y decidir qué agente atenderá sus tareas. Pulsar **Enter** acepta el valor predeterminado que aparece entre paréntesis.
+El nombre del perfil se escribe en el comando antes de iniciar el asistente. Después, al crear un perfil nuevo, el asistente solicita los demás datos en este orden. En esta guía, **VM** significa máquina virtual: el equipo remoto donde se instalará el proyecto y trabajará el agente. Pulsar **Enter** acepta el valor predeterminado que aparece entre paréntesis.
 
 | Dato solicitado | Para qué sirve | Qué debe indicar el usuario |
 | --- | --- | --- |
+| Identificador del perfil (`<perfil>`) | Es el identificador único que permite al orquestador saber qué VM, proyecto, módulo y agente debe utilizar. No es lo mismo que el stack: un perfil puede llamarse `backend-prueba`, mientras que su stack sigue siendo `backend`. | Escribir un nombre corto, descriptivo y sin espacios; por ejemplo, `backend`, `backend-prueba` o `frontend-ventas`. Este mismo nombre debe usarse cada vez que otro comando solicite `<perfil>`. Se escribe como argumento del comando, no dentro del asistente. |
 | IP de la VM | Permite que el orquestador encuentre por red la máquina que preparará y utilizará para ejecutar las tareas. | La dirección IP o el nombre de red de la VM; por ejemplo, `192.168.50.62`. |
 | Usuario de Ubuntu | Indica con qué cuenta se abrirá la conexión remota segura (SSH) y en qué carpeta personal se instalarán las herramientas. | Un usuario que exista en la VM, tenga acceso por SSH y pueda usar `sudo` cuando la instalación lo requiera; por ejemplo, `serveradmin`. |
 | Origen del proyecto | Define desde dónde se obtendrá el código que se copiará o clonará en la VM. Esta elección afecta al proyecto, no al agente. | `local` si el repositorio ya está en la VM del orquestador; `git` si debe descargarse desde un repositorio Git remoto. |
@@ -260,7 +271,7 @@ Al crear un perfil nuevo, el asistente solicita los siguientes datos en este ord
 | Versión de PHP | Instala la familia de PHP con la que se ejecutará un proyecto backend. Solo se solicita para `backend`. | La versión principal y secundaria; por ejemplo, `8.4`. Debe ser compatible con el proyecto. |
 | Versión mínima de PHP | Impide continuar si la VM no dispone de una versión suficientemente reciente para el proyecto. Solo se solicita para `backend`. | La versión mínima completa exigida; por ejemplo, `8.4.1`. |
 | Habilitar Memory Gateway | Permite que el agente consulte contexto compartido, como contratos técnicos y memoria del negocio, mediante una conexión protegida con certificados mTLS. | `s` para habilitarlo o `N` para continuar sin memoria compartida. `N` es el valor predeterminado. |
-| URL del Memory Gateway | Indica en qué servidor y puerto se encuentra el servicio de memoria compartida. Solo se solicita si se habilita Memory Gateway. | Una URL como `https://192.168.50.61:9443`, usando la IP de la vm o lugar donde se encuentra el orquestador No usar `127.0.0.1` si el Gateway está en otra VM. |
+| URL del Memory Gateway | Indica en qué servidor y puerto se encuentra el servicio de memoria compartida. Solo se solicita si se habilita Memory Gateway. | Una URL como `https://192.168.50.61:9443`, usando la IP o el nombre de red del equipo donde funciona el orquestador. No usar `127.0.0.1` desde otra VM. |
 | Core ID | Selecciona el núcleo del sistema cuyos contratos y conocimientos compartidos podrá consultar este proyecto. Solo se solicita si se habilita Memory Gateway. | El identificador del core configurado y autorizado en el Gateway. Puede coincidir con el ID del repositorio si ese es realmente el core. |
 | Tenant ID | Separa la memoria de una empresa u organización de la memoria perteneciente a otras. Solo se solicita si se habilita Memory Gateway. | El identificador de la empresa autorizado en el Gateway; por ejemplo, `empresa-prueba`. No usar el ejemplo si la instalación tiene otro tenant configurado. |
 
