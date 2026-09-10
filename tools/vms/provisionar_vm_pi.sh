@@ -30,6 +30,7 @@ fi
 URL_GITHUB_SANEADA=""
 GITHUB_USUARIO_URL=""
 GIT_AUTH_MODE="${PRUEBA_AGENTES_GIT_AUTH_MODE:-}"
+GIT_AUTH_PREPARADA=0
 
 NORMALIZAR_URL_GITHUB() {
   local url="$1"
@@ -48,11 +49,21 @@ NORMALIZAR_URL_GITHUB() {
   fi
 }
 
-CONFIGURAR_GITHUB_SSH_VM() {
+GENERAR_GITHUB_SSH_VM() {
   local clave_remota="/home/$user/.ssh/id_ed25519_github_provisionador"
-  local ruta_repositorio="${project_git_url#https://github.com/}"
-  local url_ssh="git@github.com:$ruta_repositorio"
-  local clave_publica acceso_git codigo_ssh
+  local clave_publica codigo_ssh
+
+  if ! ssh "${SSH_OPTS[@]}" "$target" "command -v ssh-keygen >/dev/null 2>&1"; then
+    if [ "$OPCION" = "--con-sudo-interactivo" ]; then
+      echo "📦 Instalando openssh-client para generar la clave en '$target'..."
+      ssh -tt "${SSH_OPTS[@]}" "$target" \
+        "sudo apt-get update && sudo apt-get install -y openssh-client"
+    else
+      echo "Error: ssh-keygen no está instalado en la VM." >&2
+      echo "Reintenta con --con-sudo-interactivo para instalar openssh-client." >&2
+      exit 20
+    fi
+  fi
 
   echo "🔑 Generando una clave SSH dedicada dentro de '$target'..."
   if clave_publica="$(ssh "${SSH_OPTS[@]}" "$target" "
@@ -115,6 +126,14 @@ CONFIGURAR_GITHUB_SSH_VM() {
     exit 1
   fi
 
+}
+
+VERIFICAR_GITHUB_SSH_REPOSITORIO() {
+  local clave_remota="/home/$user/.ssh/id_ed25519_github_provisionador"
+  local ruta_repositorio="${project_git_url#https://github.com/}"
+  local url_ssh="git@github.com:$ruta_repositorio"
+  local acceso_git
+
   echo "🔍 Verificando acceso SSH al repositorio y a la rama '$project_git_branch'..."
   if ! acceso_git="$(ssh "${SSH_OPTS[@]}" "$target" \
     "GIT_SSH_COMMAND='ssh -i $clave_remota -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new' git ls-remote --heads '$url_ssh' 'refs/heads/$project_git_branch'")"; then
@@ -127,6 +146,11 @@ CONFIGURAR_GITHUB_SSH_VM() {
     exit 1
   }
   echo "✓ Acceso SSH al repositorio verificado correctamente."
+}
+
+CONFIGURAR_GITHUB_SSH_VM() {
+  GENERAR_GITHUB_SSH_VM
+  VERIFICAR_GITHUB_SSH_REPOSITORIO
 }
 
 for comando in jq ssh rsync; do
@@ -162,6 +186,32 @@ CONFIGURAR_PERFIL_NUEVO() {
   read -r -p "Origen del proyecto [local/git] (local): " source_mode_nuevo
   source_mode_nuevo="${source_mode_nuevo:-local}"
   [ "$source_mode_nuevo" = "local" ] || [ "$source_mode_nuevo" = "git" ] || { echo "Error: origen no válido." >&2; exit 1; }
+
+  if [ "$source_mode_nuevo" = "git" ] && [ "$OPCION" != "--solo-configurar" ]; then
+    echo ""
+    echo "🔐 Método para acceder al repositorio GitHub:"
+    echo "  [1] URL HTTPS con usuario y token"
+    echo "  [2] Generar una clave SSH en la VM"
+    read -r -p "Método de autenticación [1/2] (1): " metodo_git_nuevo
+    case "${metodo_git_nuevo:-1}" in
+      1) GIT_AUTH_MODE="https" ;;
+      2) GIT_AUTH_MODE="ssh" ;;
+      *) echo "Error: selecciona 1 o 2." >&2; exit 1 ;;
+    esac
+
+    if [ "$GIT_AUTH_MODE" = "ssh" ]; then
+      user="$user_nuevo"
+      target="$user_nuevo@$ip_nuevo"
+      SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes)
+      [ ! -f "$HOME/.ssh/id_ed25519" ] || SSH_OPTS+=(-i "$HOME/.ssh/id_ed25519")
+      if ! ssh "${SSH_OPTS[@]}" "$target" "echo OK" >/dev/null 2>&1; then
+        echo "🔑 Configurando acceso SSH sin contraseña hacia '$target'..."
+        echo "ℹ️ Primero se autorizará al orquestador en la VM; puede solicitar la contraseña de Ubuntu."
+        "$ROOT/tools/vms/configurar_ssh_vm.sh" "$target"
+      fi
+      GENERAR_GITHUB_SSH_VM
+    fi
+  fi
 
   project_local_nuevo=""
   project_git_url_nuevo=""
@@ -210,18 +260,31 @@ CONFIGURAR_PERFIL_NUEVO() {
     project_git_url_nuevo="$(git -C "$project_local_nuevo" remote get-url origin 2>/dev/null || true)"
     project_git_branch_nuevo="$(git -C "$project_local_nuevo" branch --show-current 2>/dev/null || echo "main")"
   else
-    echo "La URL se ocultará porque puede contener una credencial."
-    read -r -s -p "URL Git del proyecto: " project_git_url_nuevo
-    echo ""
+    if [ "$GIT_AUTH_MODE" = "https" ] && [ "$OPCION" != "--solo-configurar" ]; then
+      read -r -s -p "URL HTTPS https://usuario:TOKEN@github.com/owner/repo.git: " project_git_url_nuevo
+      echo ""
+    else
+      read -r -p "URL Git del proyecto (sin usuario ni token): " project_git_url_nuevo
+    fi
     read -r -p "Rama Git del proyecto (main): " project_git_branch_nuevo
     project_git_branch_nuevo="${project_git_branch_nuevo:-main}"
     [ -n "$project_git_url_nuevo" ] || { echo "Error: URL Git obligatoria." >&2; exit 1; }
     NORMALIZAR_URL_GITHUB "$project_git_url_nuevo" || exit 1
-    project_git_url_nuevo="$URL_GITHUB_SANEADA"
-    if [ -n "$GITHUB_USUARIO_URL" ]; then
-      echo "✓ Credencial HTTPS recibida; la URL se guardará sin usuario ni token."
+    if [ "$GIT_AUTH_MODE" = "ssh" ] && [ -n "$GITHUB_USUARIO_URL" ]; then
+      unset GITHUB_TOKEN
+      echo "Error: con el método SSH introduce la URL normal https://github.com/owner/repo.git." >&2
+      exit 1
     fi
+    project_git_url_nuevo="$URL_GITHUB_SANEADA"
     default_repository="$(basename "${project_git_url_nuevo%.git}")"
+    if [ "$GIT_AUTH_MODE" = "ssh" ]; then
+      project_git_url="$project_git_url_nuevo"
+      project_git_branch="$project_git_branch_nuevo"
+      VERIFICAR_GITHUB_SSH_REPOSITORIO
+    elif [ "$GIT_AUTH_MODE" = "https" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
+      echo "ℹ️ La URL no contiene credenciales; se intentará como repositorio público."
+    fi
+    [ -z "$GIT_AUTH_MODE" ] || GIT_AUTH_PREPARADA=1
   fi
 
 
@@ -605,7 +668,7 @@ fi
 
 # Para repositorios privados se permite una URL HTTPS autenticada o una clave
 # SSH dedicada generada dentro de la VM de ejecución.
-if [ "$source_mode" = "git" ] && [ "$OPCION" != "--solo-verificar" ]; then
+if [ "$source_mode" = "git" ] && [ "$OPCION" != "--solo-verificar" ] && [ "$GIT_AUTH_PREPARADA" -ne 1 ]; then
   NORMALIZAR_URL_GITHUB "$project_git_url" || exit 1
   project_git_url="$URL_GITHUB_SANEADA"
   if [ -t 0 ]; then
@@ -667,7 +730,15 @@ SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o BatchMode=yes)
 
 if ! ssh "${SSH_OPTS[@]}" "$target" "echo OK" >/dev/null 2>&1; then
   echo "🔑 Configurando acceso SSH sin contraseña hacia '$target'..."
+  echo "ℹ️ Primero se autorizará al orquestador en la VM; puede solicitar la contraseña de Ubuntu."
   "$ROOT/tools/vms/configurar_ssh_vm.sh" "$target"
+fi
+
+# En perfiles existentes la URL ya está guardada, pero la clave SSH igualmente
+# debe prepararse y verificarse antes de instalar el resto del sistema.
+if [ "$source_mode" = "git" ] && [ "$GIT_AUTH_MODE" = "ssh" ] && [ "$GIT_AUTH_PREPARADA" -ne 1 ]; then
+  CONFIGURAR_GITHUB_SSH_VM
+  GIT_AUTH_PREPARADA=1
 fi
 
 if [ "$OPCION" = "--con-sudo-interactivo" ]; then
@@ -699,10 +770,6 @@ if [ "$OPCION" = "--con-sudo-interactivo" ]; then
     ssh -tt "${SSH_OPTS[@]}" "$target" \
       "export LANG=C.UTF-8 LC_ALL=C.UTF-8; sudo apt-get update && sudo apt-get install -y ${paquetes[*]} && sudo systemctl enable --now cron && $configurar_apparmor"
   fi
-fi
-
-if [ "$source_mode" = "git" ] && [ "$GIT_AUTH_MODE" = "ssh" ]; then
-  CONFIGURAR_GITHUB_SSH_VM
 fi
 
 remote_bootstrap="/home/$user/.local/lib/prueba-agentes/provisionar_vm_pi.sh"

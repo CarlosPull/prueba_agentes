@@ -25,9 +25,19 @@ grep -F 'URL autenticada https://usuario:TOKEN@github.com/owner/repo.git' "$LOCA
 grep -F '[2] Generar una clave SSH en la VM' "$LOCAL" >/dev/null
 grep -F 'id_ed25519_github_provisionador' "$LOCAL" >/dev/null
 grep -F 'git ls-remote --heads' "$LOCAL" >/dev/null
-grep -F 'La clave privada nunca sale de la VM.' "$ROOT/README.md" >/dev/null
-grep -F 'la URL se guardará sin usuario ni token.' "$LOCAL" >/dev/null
+grep -F 'nunca se copia la clave privada SSH del orquestador' "$ROOT/README.md" >/dev/null
+grep -F 'URL Git del proyecto (sin usuario ni token)' "$LOCAL" >/dev/null
 grep -F 'no se guardará en la configuración ni en origin.' "$LOCAL" >/dev/null
+grep -F 'puede solicitar la contraseña de Ubuntu' "$LOCAL" >/dev/null
+grep -F 'todavía no autentica con GitHub' "$CONFIGURAR_SSH" >/dev/null
+grep -F 'ConnectTimeout=10' "$CONFIGURAR_SSH" >/dev/null
+linea_metodo_git="$(grep -n -m1 'Método para acceder al repositorio GitHub' "$LOCAL" | cut -d: -f1)"
+linea_generar_ssh="$(grep -n -m1 '^      GENERAR_GITHUB_SSH_VM$' "$LOCAL" | cut -d: -f1)"
+linea_url_git="$(grep -n -m1 'read -r -p "URL Git del proyecto (sin usuario ni token)' "$LOCAL" | cut -d: -f1)"
+if [ "$linea_metodo_git" -ge "$linea_generar_ssh" ] || [ "$linea_generar_ssh" -ge "$linea_url_git" ]; then
+  echo "FALLO: el método y la clave SSH deben prepararse antes de solicitar la URL Git." >&2
+  exit 1
+fi
 if grep -F 'git@github.com' "$CONFIGURAR_SSH" >/dev/null; then
   echo "FALLO: configurar_ssh_vm.sh todavía mezcla el acceso a la VM con la autenticación de GitHub." >&2
   exit 1
@@ -123,12 +133,11 @@ jq -e '.repositories."vue-dev"
     and (.technologies | index("TypeScript ^5.8.0") != null)
     and (.technologies | index("Vite ^7.0.0") != null)' "$TEMP_DIR/tecnologias.json" >/dev/null
 
-# Una URL HTTPS autenticada se acepta, pero su usuario y token nunca se
-# persisten en la configuración ni se imprimen en la salida del asistente.
-token_prueba="github_pat_TOKEN_FICTICIO_123"
+# La configuración inicial guarda únicamente la URL normal; la credencial se
+# solicita después, al ejecutar el aprovisionamiento con el método HTTPS.
 respuestas_git_privado=(
   "192.168.50.233" "carlos4"
-  "git" "https://Alguien-Pull:${token_prueba}@github.com/Ivan-Pull/frontend-base-angular.git"
+  "git" "https://github.com/Ivan-Pull/frontend-base-angular.git"
   "" "frontend" "" "" "" "" "" "local" "" "" ""
 )
 salida_git_privado="$(printf '%s\n' "${respuestas_git_privado[@]}" \
@@ -138,10 +147,6 @@ salida_git_privado="$(printf '%s\n' "${respuestas_git_privado[@]}" \
     "$LOCAL" frontend-git-privado --solo-configurar)"
 jq -e '."frontend-git-privado".project_git_url == "https://github.com/Ivan-Pull/frontend-base-angular.git"' \
   "$TEMP_DIR/vms.json" >/dev/null
-if grep -F "$token_prueba" "$TEMP_DIR/vms.json" >/dev/null || grep -F "$token_prueba" <<< "$salida_git_privado" >/dev/null; then
-  echo "FALLO: el token incluido en la URL autenticada quedó expuesto." >&2
-  exit 1
-fi
 
 jq -e 'has("backend-pi-automatico") | not' "$ROOT/config/vms.json" >/dev/null
 

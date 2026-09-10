@@ -32,14 +32,23 @@ if [ ! -f "$KEY_FILE" ]; then
 fi
 
 echo "🚀 Configurando la conexión SSH hacia $TARGET..."
+echo "ℹ️ Este paso conecta el orquestador con la VM; todavía no autentica con GitHub."
+echo "🔐 Si SSH solicita una contraseña, introduce la contraseña del usuario Ubuntu de la VM."
+echo "   La contraseña no mostrará caracteres mientras la escribes; pulsa ENTER al terminar."
 
 
 # 2. Copiar la clave pública hacia la VM remota
 if command -v ssh-copy-id >/dev/null 2>&1; then
-  ssh-copy-id -i "$PUB_KEY_FILE" -o StrictHostKeyChecking=no "$TARGET"
+  if ! ssh-copy-id -i "$PUB_KEY_FILE" \
+    -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ConnectionAttempts=1 "$TARGET"; then
+    echo "❌ No se pudo instalar la clave del orquestador en la VM." >&2
+    echo "Verifica la IP, que SSH esté activo y que el usuario permita contraseña o acceso por consola." >&2
+    exit 1
+  fi
 else
   PUB_KEY=$(cat "$PUB_KEY_FILE")
-  ssh -o StrictHostKeyChecking=no "$TARGET" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$PUB_KEY' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+  ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ConnectionAttempts=1 "$TARGET" \
+    "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$PUB_KEY' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 fi
 
 # 3. Probar la conexión sin contraseña

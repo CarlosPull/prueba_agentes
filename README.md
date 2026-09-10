@@ -231,6 +231,8 @@ Habilitar SSH en la VM y disponer de acceso al repositorio Git. Desde la VM del 
 
 Este comando configura únicamente la conexión desde el orquestador hacia la VM. La autenticación de la VM contra GitHub se configura después dentro del provisionador, mediante URL con token o una clave SSH dedicada.
 
+Durante este paso, `ssh-copy-id` puede solicitar la contraseña del usuario Ubuntu de la VM. No es la contraseña ni el token de GitHub. Al escribirla, la terminal no muestra caracteres; introducirla y pulsar **Enter**. Si la VM no permite autenticación SSH por contraseña, la clave pública del orquestador debe agregarse a `~/.ssh/authorized_keys` utilizando la consola de la VM o un mecanismo administrativo equivalente.
+
 ### 2. Ejecutar el provisionador desde la VM del orquestador
 
 **Dónde se ejecuta:** en la VM o equipo donde está instalado el orquestador, desde la raíz del repositorio. El script se conecta a la VM de destino y realiza allí la instalación necesaria.
@@ -254,8 +256,10 @@ El nombre del perfil se escribe en el comando antes de iniciar el asistente. Des
 | Usuario de Ubuntu | Indica con qué cuenta se abrirá la conexión remota segura (SSH) y en qué carpeta personal se instalarán las herramientas. | Un usuario que exista en la VM, tenga acceso por SSH y pueda usar `sudo` cuando la instalación lo requiera; por ejemplo, `serveradmin`. |
 | Origen del proyecto | Define desde dónde se obtendrá el código que se copiará o clonará en la VM. Esta elección afecta al proyecto, no al agente. | `local` si el repositorio ya está en la VM del orquestador; `git` si debe descargarse desde un repositorio Git remoto. |
 | Repositorio local | Permite elegir exactamente qué proyecto local se enviará a la VM. Solo se solicita cuando el origen es `local`. | Seleccionar un repositorio de la lista o escribir su ruta completa si no aparece. |
-| URL y rama del proyecto | Identifican el repositorio remoto y la versión del código que se instalará. Solo se solicitan cuando el origen es `git`. | La URL HTTPS del repositorio y la rama deseada, normalmente `main`. Para un repositorio privado se puede usar temporalmente `https://usuario:TOKEN@github.com/owner/repo.git`; el token no se guarda en la configuración. |
-| Autenticación de GitHub | Autoriza la descarga cuando el repositorio es privado. El asistente ofrece dos métodos. | Elegir `1` para una URL HTTPS con usuario y token, o `2` para generar una clave SSH dedicada dentro de la VM. |
+| Método de autenticación de GitHub | Se solicita inmediatamente después de elegir el origen `git`, antes de pedir la URL del repositorio. Los métodos son alternativos: se debe escoger solamente uno. | Elegir **opción `1`: URL HTTPS con token**, o **opción `2`: clave SSH generada en la VM**. No es necesario configurar ambos métodos. Para un repositorio público se puede elegir `1` y utilizar una URL sin credenciales. |
+| Opción 1 — URL HTTPS con token | Clona el repositorio privado utilizando temporalmente un usuario y un token de GitHub. | Pegar `https://usuario:TOKEN@github.com/owner/repo.git` cuando el provisionador lo solicite. La entrada permanece oculta. El token debe pertenecer a una cuenta con acceso al repositorio. El provisionador extrae la credencial, clona mediante `GIT_ASKPASS` y guarda únicamente `https://github.com/owner/repo.git`, sin usuario ni token. |
+| Opción 2 — Clave SSH de GitHub | Clona el repositorio privado sin utilizar un token. La clave se genera dentro de la VM antes de solicitar la URL del repositorio. | Copiar la clave pública que muestra el provisionador y agregarla en `https://github.com/settings/ssh/new` desde una cuenta autorizada, o como **Deploy key** de solo lectura. Volver a la terminal y pulsar **Enter**. Después se solicitarán la URL y la rama para comprobar el acceso. La clave privada permanece dentro de la VM. |
+| URL y rama del proyecto | Identifican el repositorio remoto y la versión del código que se instalará. Se solicitan de acuerdo con el método seleccionado. | Con la opción `1`, la URL ya incluye temporalmente usuario y token. Con la opción `2`, escribir la URL HTTPS normal y visible, por ejemplo `https://github.com/owner/repo.git`, sin credenciales. Después indicar la rama, normalmente `main`. |
 | Stack | Señala qué parte de una aplicación atenderá esta VM y permite asignarle las reglas de trabajo correspondientes. | `backend` para servicios, API, base de datos o lógica del servidor; `frontend` para interfaz visual y código que utiliza el navegador. |
 | ID del repositorio | Da al proyecto un identificador estable dentro del orquestador para relacionar tareas, tecnología y memoria. | Un nombre corto y único, sin espacios; normalmente se acepta el nombre propuesto del repositorio. Ejemplo: `sistema-ventas`. |
 | Nombre del módulo | Identifica la parte funcional concreta que contiene el repositorio cuando un sistema está dividido en varios componentes. | El nombre del componente, sin espacios; por ejemplo, `facturacion`. Si el repositorio es un único componente, se puede aceptar el valor propuesto. |
@@ -277,20 +281,54 @@ El nombre del perfil se escribe en el comando antes de iniciar el asistente. Des
 
 Con `--con-sudo-interactivo`, también se solicita la contraseña `sudo` de la VM cuando sea necesaria.
 
-Para un repositorio privado, el token incluido en la URL debe pertenecer a una cuenta que ya tenga acceso y debe incluir permiso de lectura de contenido. Por ejemplo:
+#### Clonación de repositorios privados
+
+Antes de utilizar cualquiera de los métodos, la cuenta de GitHub correspondiente debe tener acceso al repositorio como propietaria, integrante de la organización o colaboradora. Cuando el origen del proyecto es `git`, el provisionador muestra:
+
+```text
+[1] URL HTTPS con usuario y token
+[2] Generar una clave SSH en la VM
+Método de autenticación [1/2] (1):
+```
+
+##### Método 1: URL HTTPS con token
+
+Elegir `1` e introducir la URL autenticada cuando el asistente la solicite. La entrada permanece oculta:
 
 ```text
 https://usuario:TOKEN@github.com/owner/repo.git
 ```
 
-El provisionador no usa esa URL literalmente como `origin`: separa la credencial y clona mediante un `GIT_ASKPASS` temporal para impedir que el token quede almacenado en Git. Como alternativa compatible con automatizaciones, se puede exportar temporalmente antes de ejecutar el provisionador:
+Que el cursor no muestre caracteres en este segundo campo es normal y evita exponer el token. La primera solicitud, `URL Git del proyecto (sin usuario ni token)`, sí muestra el texto mientras se escribe.
+
+El token debe pertenecer a una cuenta con acceso al repositorio y permitir la lectura de su contenido. El provisionador separa la credencial, usa un `GIT_ASKPASS` temporal y guarda como `origin` únicamente la URL saneada:
+
+```text
+https://github.com/owner/repo.git
+```
+
+El token no se guarda en `config/vms.json`, en el remoto Git ni en archivos permanentes de la VM. Para una ejecución no interactiva también se puede proporcionar temporalmente mediante el entorno:
 
 ```bash
 export GITHUB_TOKEN='TOKEN_CON_ACCESO_AL_REPOSITORIO'
 ./tools/vms/provisionar_vm_pi.sh <perfil> --con-sudo-interactivo
 ```
 
-Si se elige la opción SSH, el provisionador genera una clave ED25519 dedicada dentro de la VM, muestra únicamente su parte pública y se detiene. Hay que copiarla en `https://github.com/settings/ssh/new` desde una cuenta con acceso al repositorio, o agregarla como Deploy key de solo lectura. Al pulsar **Enter**, el provisionador verifica el repositorio y la rama antes de continuar. La clave privada nunca sale de la VM.
+##### Método 2: clave SSH dedicada
+
+Elegir `2`. El provisionador realiza automáticamente los siguientes pasos:
+
+1. Instala `openssh-client` si la ejecución utiliza `--con-sudo-interactivo` y hace falta el paquete.
+2. Genera una clave ED25519 dedicada dentro de la VM de ejecución, antes de solicitar la URL del repositorio.
+3. Muestra únicamente la clave pública y conserva la clave privada dentro de la VM.
+4. Se detiene para que la clave pública se agregue en `https://github.com/settings/ssh/new` desde una cuenta autorizada. Como alternativa, un administrador del repositorio puede agregarla como **Deploy key** de solo lectura.
+5. Después de pulsar **Enter**, solicita la URL normal del repositorio y la rama que se desea clonar.
+6. Comprueba mediante SSH que GitHub permite consultar ese repositorio y que la rama configurada existe.
+7. Continúa con el resto del provisionamiento únicamente cuando la comprobación es correcta.
+
+La clave se guarda en la VM como `~/.ssh/id_ed25519_github_provisionador`; nunca se copia la clave privada SSH del orquestador. En ejecuciones posteriores, el provisionador reutiliza la clave dedicada existente.
+
+Para un repositorio público se puede elegir el método `1` y pulsar **Enter** cuando solicite la URL autenticada; la clonación continuará sin credenciales.
 
 
 **Si la IP del Gateway es diferente o cambia:**
