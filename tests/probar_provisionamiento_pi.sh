@@ -148,6 +148,19 @@ salida_git_privado="$(printf '%s\n' "${respuestas_git_privado[@]}" \
 jq -e '."frontend-git-privado".project_git_url == "https://github.com/Ivan-Pull/frontend-base-angular.git"' \
   "$TEMP_DIR/vms.json" >/dev/null
 
+respuestas_git_ssh=(
+  "192.168.50.234" "carlos5"
+  "git" "git@github.com:Luis-Pull/back-empty.git"
+  "" "backend" "" "" "" "" "" "" "local" "" "" "" "" ""
+)
+salida_git_ssh="$(printf '%s\n' "${respuestas_git_ssh[@]}" \
+  | PRUEBA_AGENTES_VMS_CONF="$TEMP_DIR/vms.json" \
+    PRUEBA_AGENTES_REPOSITORIES_ROOT="$TEMP_DIR/repos" \
+    PRUEBA_AGENTES_PRIVATE_TECH_MEMORY="$TEMP_DIR/tecnologias.json" \
+    "$LOCAL" backend-git-ssh --solo-configurar)"
+jq -e '."backend-git-ssh".project_git_url == "https://github.com/Luis-Pull/back-empty.git"' \
+  "$TEMP_DIR/vms.json" >/dev/null
+
 jq -e 'has("backend-pi-automatico") | not' "$ROOT/config/vms.json" >/dev/null
 
 echo "OK: configuración automática, Pi y perfil AppArmor de Bubblewrap verificados sin usar SSH."

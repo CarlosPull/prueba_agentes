@@ -37,14 +37,22 @@ NORMALIZAR_URL_GITHUB() {
   URL_GITHUB_SANEADA=""
   GITHUB_USUARIO_URL=""
 
-  if [[ "$url" =~ ^https://([A-Za-z0-9-]+):([^@/]+)@github\.com/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+\.git)$ ]]; then
+  if [[ "$url" =~ ^https://([A-Za-z0-9-]+):([^@/]+)@github\.com/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)$ ]]; then
+    local owner="${BASH_REMATCH[3]}"
+    local repo="${BASH_REMATCH[4]%.git}"
     GITHUB_USUARIO_URL="${BASH_REMATCH[1]}"
     GITHUB_TOKEN="${BASH_REMATCH[2]}"
-    URL_GITHUB_SANEADA="https://github.com/${BASH_REMATCH[3]}/${BASH_REMATCH[4]}"
-  elif [[ "$url" =~ ^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.git$ ]]; then
-    URL_GITHUB_SANEADA="$url"
+    URL_GITHUB_SANEADA="https://github.com/${owner}/${repo}.git"
+  elif [[ "$url" =~ ^https://github\.com/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)$ ]]; then
+    local owner="${BASH_REMATCH[1]}"
+    local repo="${BASH_REMATCH[2]%.git}"
+    URL_GITHUB_SANEADA="https://github.com/${owner}/${repo}.git"
+  elif [[ "$url" =~ ^git@github\.com:([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)$ ]]; then
+    local owner="${BASH_REMATCH[1]}"
+    local repo="${BASH_REMATCH[2]%.git}"
+    URL_GITHUB_SANEADA="https://github.com/${owner}/${repo}.git"
   else
-    echo "Error: URL GitHub no válida. Usa https://github.com/owner/repo.git o https://usuario:TOKEN@github.com/owner/repo.git." >&2
+    echo "Error: URL GitHub no válida. Usa git@github.com:owner/repo.git, https://github.com/owner/repo.git o https://usuario:TOKEN@github.com/owner/repo.git." >&2
     return 1
   fi
 }
@@ -272,7 +280,7 @@ CONFIGURAR_PERFIL_NUEVO() {
     NORMALIZAR_URL_GITHUB "$project_git_url_nuevo" || exit 1
     if [ "$GIT_AUTH_MODE" = "ssh" ] && [ -n "$GITHUB_USUARIO_URL" ]; then
       unset GITHUB_TOKEN
-      echo "Error: con el método SSH introduce la URL normal https://github.com/owner/repo.git." >&2
+      echo "Error: con el método SSH no incluyas usuario ni token (usa git@github.com:owner/repo.git o https://github.com/owner/repo.git)." >&2
       exit 1
     fi
     project_git_url_nuevo="$URL_GITHUB_SANEADA"
